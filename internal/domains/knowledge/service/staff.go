@@ -181,6 +181,11 @@ func authorizeReviewDue(p auth.Principal) (kind string, err error) {
 // one) as a draft. Psychologist authors self-help; lawyer authors rights.
 // Idempotent per author and Idempotency-Key.
 func (s *Service) CreateDraft(ctx context.Context, p auth.Principal, key uuid.UUID, topicID uuid.UUID, articleID *uuid.UUID, lang string, content model.Content) (model.Version, error) {
+	// Deny before the topic lookup (docs/solved-problems.md); the topic's
+	// kind decides the exact role below.
+	if _, err := authorize(p, staffReadRoles); err != nil {
+		return model.Version{}, err
+	}
 	if key == uuid.Nil {
 		return model.Version{}, fmt.Errorf("%w: idempotency key", model.ErrInvalidInput)
 	}

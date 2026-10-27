@@ -185,6 +185,7 @@ func TestDenyByDefault(t *testing.T) {
 		{http.MethodPost, "/staff/knowledge/topics", `{"kind":"rights","code":"law","titles":{"ru":"Право"}}`},
 		{http.MethodGet, "/staff/knowledge/articles", ""},
 		{http.MethodGet, "/staff/knowledge/review-due", ""},
+		{http.MethodPost, "/staff/knowledge/articles", draftBody(uuid.New())},
 		// Unknown versions: deny comes before the lookup, so no 404 leaks existence.
 		{http.MethodPost, "/staff/knowledge/versions/" + uuid.NewString() + "/publish", ""},
 		{http.MethodPost, "/staff/knowledge/versions/" + uuid.NewString() + "/submit", ""},
