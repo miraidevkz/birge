@@ -124,9 +124,11 @@ type Lang string
 
 // Member defines model for Member.
 type Member struct {
-	Children     []Child             `json:"children"`
-	CityId       *openapi_types.UUID `json:"cityId,omitempty"`
-	DisplayName  string              `json:"displayName"`
+	Children []Child             `json:"children"`
+	CityId   *openapi_types.UUID `json:"cityId,omitempty"`
+
+	// DisplayName Absent until the member sets it during onboarding.
+	DisplayName  *string             `json:"displayName,omitempty"`
 	DistrictId   *openapi_types.UUID `json:"districtId,omitempty"`
 	Id           openapi_types.UUID  `json:"id"`
 	Lang         Lang                `json:"lang"`

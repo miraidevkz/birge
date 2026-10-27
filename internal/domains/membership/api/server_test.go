@@ -150,7 +150,7 @@ func TestOperations(t *testing.T) {
 
 	s.json(call{method: http.MethodPatch, path: "/me", identity: me, key: true,
 		body: `{"displayName":"` + testName + `","lang":"ru","districtId":"` + districtID.String() + `"}`}, 200, &m)
-	if m.DisplayName != testName || m.Lang != api.Ru || m.CityId == nil || *m.CityId != cityID || m.DistrictId == nil {
+	if m.DisplayName == nil || *m.DisplayName != testName || m.Lang != api.Ru || m.CityId == nil || *m.CityId != cityID || m.DistrictId == nil {
 		t.Errorf("updated member = %+v", m)
 	}
 

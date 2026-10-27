@@ -419,10 +419,14 @@ components:
     Member:
       type: object
       additionalProperties: false
-      required: [id, displayName, lang, verification, roles, children]
+      required: [id, lang, verification, roles, children]
       properties:
         id: {type: string, format: uuid}
-        displayName: {type: string, minLength: 1, maxLength: 40}
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: Absent until the member sets it during onboarding.
         lang: {$ref: '#/components/schemas/Lang'}
         cityId: {type: string, format: uuid}
         districtId: {type: string, format: uuid}

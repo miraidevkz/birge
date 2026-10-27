@@ -173,8 +173,12 @@ func member(m model.Member) Member {
 	for _, c := range m.Children {
 		children = append(children, child(c))
 	}
+	var name *string
+	if m.DisplayName != "" {
+		name = &m.DisplayName
+	}
 	return Member{
-		Id: m.ID, DisplayName: m.DisplayName, Lang: Lang(m.Lang), CityId: m.CityID, DistrictId: m.DistrictID,
+		Id: m.ID, DisplayName: name, Lang: Lang(m.Lang), CityId: m.CityID, DistrictId: m.DistrictID,
 		Verification: MemberVerification(m.Verification), Roles: roles, Children: children,
 	}
 }
