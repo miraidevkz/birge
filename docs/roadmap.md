@@ -58,3 +58,7 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [ ] Acceptance checklist (`docs/requirements/mvp.ru.md` § 10), ASVS review, load test (API, chat gateway)
 - [ ] Restore drill, key-recovery drill
 - [ ] Store builds (phased release), pilot
+
+## After the MVP
+
+- [ ] Documentation site built from the Markdown in `docs/` with mdBook (MPL-2.0), translated into kk, ru and en with mdbook-i18n-helpers (Apache-2.0, gettext `.po` files, so the same Weblate workflow as the app strings)
