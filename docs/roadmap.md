@@ -59,6 +59,14 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [ ] Restore drill, key-recovery drill
 - [ ] Store builds (phased release), pilot
 
+## Follow-ups from wave 3
+
+- [ ] Wire `emergency` (settings, MemberInfo/Blocks/Acquaintances adapters, notify trusted-contact resolution through `TrustedContactTarget`/`ContactPhone`, district push on `SosShared`)
+- [ ] Platform audit API (safety and emergency insert into `platform.audit_log` with raw SQL for now)
+- [ ] Endpoints for trusted contacts and moderators to read an SOS; list and decline invitations; rate limit invitation notifications
+- [ ] One-time links for external contacts to view a sent emergency plan
+- [ ] Locale keys and SMS texts for every notification template in use
+
 ## After the MVP
 
 - [ ] Documentation site built from the Markdown in `docs/` with mdBook (MPL-2.0), translated into kk, ru and en with mdbook-i18n-helpers (Apache-2.0, gettext `.po` files, so the same Weblate workflow as the app strings)
