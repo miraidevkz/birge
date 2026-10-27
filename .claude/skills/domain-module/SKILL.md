@@ -24,6 +24,7 @@ internal/domains/<context>/
 - Import only your own context, `internal/platform/...`, and other contexts' exported service interfaces. depguard fails the build otherwise.
 - Put authorization checks in `service`, not only in handlers.
 - Writing data and publishing an event happen in one transaction through the platform outbox, never "commit, then publish".
+- Delays and schedules use platform timers created in the same transaction (ADR-0020); never `time.AfterFunc`, goroutine sleeps or cron.
 - Consumers are idempotent: deduplicate by event `id`; repeated delivery must not repeat side effects (no second SMS, no second escalation).
 - Encrypted fields go through the platform crypto package with the user's data key. Never decrypt into logs or events.
 - Any query that shows members to each other (feeds, matches, rooms, SOS responders) applies the membership block filter (ADR-0019).

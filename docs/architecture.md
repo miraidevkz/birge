@@ -69,7 +69,7 @@ Rules:
 cmd/birge/            # main: api, worker, migrate subcommands
 internal/
   domains/<context>/  # one directory per bounded context
-  platform/           # db, crypto, events/outbox, config, i18n keys, telemetry
+  platform/           # db, crypto, events/outbox, timers, config, i18n keys, telemetry
 contracts/
   openapi/            # HTTP API (source of truth; server and TS client are generated)
   events/             # JSON Schemas for domain events
@@ -108,6 +108,8 @@ docs/                 # architecture, ADRs, requirements, threat model
 | AI evaluation | own Go runner over the real pipeline; deterministic sets per PR, LLM sets on AI changes, nightly, release | [0017](adr/0017-ai-evaluation.md) |
 | Client compatibility | additive `/v1`, snapshots of released contracts, 6 months / 3 versions, signed self-hosted OTA | [0018](adr/0018-client-compatibility.md) |
 | Member safety | mutual-invisibility blocks across contexts, item-only photos, legal hold for illegal content | [0019](adr/0019-user-safety-and-media-policy.md) |
+| Timers | `timers` table, SKIP LOCKED workers, created in the domain transaction | [0020](adr/0020-scheduler.md) |
+| Observability | OpenTelemetry → Prometheus, Loki, Tempo, Grafana; GlitchTip; alerts via `notify` | [0021](adr/0021-observability.md) |
 | Object storage | S3 API only; Garage for dev/MVP, local S3-compatible provider in production | [0015](adr/0015-object-storage.md) |
 
 ## Replication to other countries
