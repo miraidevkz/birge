@@ -9,7 +9,8 @@
 //   - OpenEscalation: idempotent per member, and the escalation, its
 //     safety.EscalationOpened event, the critical staff alert and the backup
 //     timer are committed in one transaction or not at all;
-//   - ResolveStaffRole: the external recipients notify sends critical SMS to.
+//   - ResolveStaffRole: the external recipients notify sends critical SMS to;
+//   - ShiftPhone: the on-duty phone for a staff shift (notify PhoneFor).
 //
 // Authorization is checked here, not only in the HTTP layer. Logs carry IDs
 // and event names only: never message text, names, phones or notes.
@@ -277,6 +278,34 @@ func (s *Service) ResolveStaffRole(ctx context.Context, role string) ([]External
 		return nil, fmt.Errorf("%w: %s", model.ErrNoDutyCoverage, role)
 	}
 	return out, nil
+}
+
+// ShiftPhone returns the E.164 on-duty phone for a duty shift, unsealed under
+// the staff member's data key. It returns model.ErrNotFound when the shift is
+// unknown or cancelled. The phone is never logged.
+func (s *Service) ShiftPhone(ctx context.Context, shiftID uuid.UUID) (string, error) {
+	if shiftID == uuid.Nil {
+		return "", model.ErrNotFound
+	}
+	if s.Sealer == nil {
+		return "", errors.New("safety: sealer not configured")
+	}
+	var shift model.DutyShift
+	if err := s.Store.InTx(ctx, func(tx port.Tx) error {
+		var err error
+		shift, err = tx.GetDutyShift(ctx, shiftID)
+		return err
+	}); err != nil {
+		return "", err
+	}
+	if shift.CancelledAt != nil {
+		return "", model.ErrNotFound
+	}
+	phone, err := s.Sealer.Open(ctx, shift.StaffID, shift.Phone, crypto.AssociatedData(model.FieldShiftPhone, shift.ID))
+	if err != nil {
+		return "", fmt.Errorf("open duty phone: %w", err)
+	}
+	return string(phone), nil
 }
 
 // HandleEscalationBackup runs the safety.EscalationBackup timer inside the

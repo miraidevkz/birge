@@ -25,6 +25,10 @@ import (
 	"birge/internal/domains/notify/sms/guard"
 	privacyadapter "birge/internal/domains/privacy/adapter"
 	privacyservice "birge/internal/domains/privacy/service"
+	safetyadapter "birge/internal/domains/safety/adapter"
+	safetyservice "birge/internal/domains/safety/service"
+	wellbeingadapter "birge/internal/domains/wellbeing/adapter"
+	wellbeingservice "birge/internal/domains/wellbeing/service"
 	"birge/internal/platform/clock"
 	"birge/internal/platform/crypto"
 	platformdb "birge/internal/platform/db"
@@ -136,15 +140,18 @@ func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
 
 // RunWorker runs the background loops until ctx is cancelled: the outbox
 // relay to JetStream, the notify DeliveryRequested consumer and the timers
-// worker with the notify and privacy handlers, plus /healthz and /readyz
-// (database and NATS) on the HTTP address. When one loop fails, the others
-// are stopped and the error is returned, so the orchestrator restarts the
-// process instead of running it half-working.
+// worker with the notify, privacy, safety and wellbeing handlers, plus
+// /healthz and /readyz (database and NATS) on the HTTP address. When one
+// loop fails, the others are stopped and the error is returned, so the
+// orchestrator restarts the process instead of running it half-working.
 func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	if cfg.DeliveryMode != DeliveryModeDev {
 		// Load refuses this already; checked again because silently
 		// dropping notifications is the failure this guards against.
 		return errors.New("worker: no push or SMS provider configured")
+	}
+	if cfg.Lexicon == nil {
+		return errors.New("worker: crisis lexicon is required")
 	}
 	pool, err := platformdb.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -174,19 +181,34 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		return err
 	}
 	members := membershipservice.New(&membershipadapter.Postgres{Pool: pool}, DisplayNameEncryptor{Sealer: env}, clk)
+	safety := &safetyservice.Service{
+		Store:     &safetyadapter.PostgresStore{Pool: pool},
+		Sealer:    env,
+		Directory: &MemberDirectory{Members: members, Phones: identities},
+		Lexicon:   cfg.Lexicon,
+		Clock:     clk,
+		Logger:    logger,
+		Settings: safetyservice.Settings{
+			BackupAfter:  cfg.EscalationBackupAfter,
+			CrisisPhones: safetyCrisisPhones(cfg.CrisisPhones),
+			StaffLang:    cfg.StaffSMSLang,
+		},
+	}
 	if cfg.DeliveryMode == DeliveryModeDev && len(cfg.SMSTexts) == 0 {
 		logger.Warn("BIRGE_SMS_TEXTS is empty: every SMS will be skipped (no text)")
 	}
 	logger.Warn("log-only delivery: push and SMS are logged, not sent", "mode", cfg.DeliveryMode)
 	notify := &notifyservice.Service{
-		Store:      &notifyadapter.PostgresStore{Pool: pool},
-		Recipients: &Recipients{Members: members, Phones: identities},
-		Push:       LogPushSender{Logger: logger},
-		SMS:        LogSMSSender{Logger: logger},
-		Guard:      guard.New(cfg.SMSGuard),
-		Clock:      clk,
-		Logger:     logger,
-		Config:     notifyservice.Config{CriticalSMSAfter: cfg.CriticalSMSAfter, SMSTexts: cfg.SMSTexts},
+		Store: &notifyadapter.PostgresStore{Pool: pool},
+		Recipients: &Recipients{
+			Members: members, Phones: identities, Staff: safety, StaffLang: cfg.StaffSMSLang,
+		},
+		Push:   LogPushSender{Logger: logger},
+		SMS:    LogSMSSender{Logger: logger},
+		Guard:  guard.New(cfg.SMSGuard),
+		Clock:  clk,
+		Logger: logger,
+		Config: notifyservice.Config{CriticalSMSAfter: cfg.CriticalSMSAfter, SMSTexts: cfg.SMSTexts},
 	}
 	privacy := &privacyservice.Service{
 		Store:    &privacyadapter.PostgresStore{Pool: pool},
@@ -195,9 +217,19 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		Logger:   logger,
 		Settings: privacyservice.Settings{CurrentVersions: cfg.ConsentVersions, DeletionDueAfter: cfg.DeletionDelay},
 	}
+	wellbeing := &wellbeingservice.Service{
+		Store:    &wellbeingadapter.PostgresStore{Pool: pool},
+		Sealer:   env,
+		Crisis:   &CrisisOpener{Safety: safety},
+		Clock:    clk,
+		Logger:   logger,
+		Settings: cfg.Wellbeing,
+	}
 	handlers, err := mergeHandlers(
 		(&notifyadapter.TimerHandlers{Service: notify}).Handlers(),
 		(&privacyadapter.TimerHandlers{Service: privacy}).Handlers(),
+		(&safetyadapter.TimerHandlers{Service: safety}).Handlers(),
+		(&wellbeingadapter.TimerHandlers{Service: wellbeing}).Handlers(),
 	)
 	if err != nil {
 		return err

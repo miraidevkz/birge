@@ -620,6 +620,37 @@ func TestDutyRosterAndResolveStaffRole(t *testing.T) {
 	}
 }
 
+func TestShiftPhone(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	admin := staff(model.RoleAdmin)
+	shift := validShift(e)
+	if _, err := e.svc.AddDutyShift(ctx, admin, shift); err != nil {
+		t.Fatal(err)
+	}
+	phone, err := e.svc.ShiftPhone(ctx, shift.ID)
+	if err != nil || phone != fakeDutyPhone {
+		t.Fatalf("ShiftPhone = %q, %v; want %q", phone, err, fakeDutyPhone)
+	}
+	if _, err := e.svc.ShiftPhone(ctx, uuid.New()); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("unknown shift: %v", err)
+	}
+	if _, err := e.svc.ShiftPhone(ctx, uuid.Nil); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("nil shift: %v", err)
+	}
+	future := validShift(e)
+	future.StartsAt, future.EndsAt = e.clock.Now().Add(time.Hour), e.clock.Now().Add(9*time.Hour)
+	if _, err := e.svc.AddDutyShift(ctx, admin, future); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.CancelDutyShift(ctx, admin, future.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.ShiftPhone(ctx, future.ID); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("cancelled shift: %v", err)
+	}
+}
+
 func TestResolveStaffRoleSkipsUnreadablePhone(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)

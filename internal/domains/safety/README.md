@@ -50,19 +50,20 @@ Operations of tag `safety` in `contracts/openapi/birge.yaml`. No principal → 4
 | `Service.Detect(text, lang) CrisisResult` | Level-1 lexicon, pure and local; checks every loaded language, `lang` first. Never logs the text. Returns `{Crisis, Category, Lang}`. |
 | `Service.OpenEscalation(ctx, memberID, source) (id, alreadyOpen, err)` | Idempotent per member while open or taken; safe under concurrent calls (partial unique index). Insert, `EscalationOpened`, critical alert and backup timer commit together. The district lookup is best-effort (2 s) and never blocks opening. No authorization: callers pass their own member's id. |
 | `Service.ResolveStaffRole(ctx, role) ([]ExternalRecipient, error)` | For notify's recipient resolution of `staff_role`: shifts covering now (`psychologist` primary, `psychologist_backup` backup, `moderator`), each `{Ref: shift id, PhoneE164, Lang}`. `ErrNoDutyCoverage` (and an Error log `NoDutyCoverage`, role only) when none; a shift whose phone does not open is skipped and logged by shift id. |
+| `Service.ShiftPhone(ctx, shiftID) (string, error)` | For notify's `PhoneFor(kind=staff)`: unseals the on-duty phone; `ErrNotFound` for a cancelled or unknown shift. Never logged. |
 | `Service.CrisisPhones()` | The configured crisis lines. |
 
-Ports used by this context (wired later): `Sealer` (platform crypto), `MemberDirectory` (membership), `Store`/`Auditor` (PostgreSQL adapter).
+Ports used by this context (wired in `internal/wiring`): `Sealer` (platform envelope), `MemberDirectory` (membership + Kratos phone), `Store`/`Auditor` (PostgreSQL adapter).
 
 ## Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `service.Settings.BackupAfter` | 15m | Delay before the backup shift is alerted |
-| `service.Settings.CrisisPhones` | empty | Crisis lines returned to the member (`BIRGE_CRISIS_PHONES` in `platform/config`) |
-| `service.Settings.StaffLang` | `ru` | Language of SMS alerts to on-duty phones |
-| `Service.Lexicon` | required | `crisis.LoadDir(<path>)`; the production lexicon lives outside the repository |
-| TODO(verify): env names for wiring | | `cmd/birge` does not load these yet (lexicon path, backup delay) |
+| `service.Settings.BackupAfter` | 15m | Delay before the backup shift is alerted (`BIRGE_ESCALATION_BACKUP_AFTER`) |
+| `service.Settings.CrisisPhones` | empty | Crisis lines returned to the member (`BIRGE_CRISIS_PHONES`) |
+| `service.Settings.StaffLang` | `ru` | Language of SMS alerts to on-duty phones (`BIRGE_STAFF_SMS_LANG`) |
+| `Service.Lexicon` | required | `crisis.LoadDir(BIRGE_CRISIS_LEXICON_DIR)`; startup refuses an empty or unloadable lexicon |
+| see `docs/development.md` § Configuration | | all variables, defaults and which subcommand reads them |
 
 ### Lexicon format
 

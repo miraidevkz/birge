@@ -120,9 +120,10 @@ func newE2E(t *testing.T) *e2e {
 
 	identity := uuid.New()
 	kratos := fakeKratos(t, identity)
-	env := validEnv()
+	env := validEnv(t)
 	env["DATABASE_URL"] = url
 	env["KRATOS_PUBLIC_URL"] = kratos.URL
+	env["KRATOS_ADMIN_URL"] = kratos.URL
 	env["BIRGE_MIN_APP_VERSION"] = "1.0.0"
 	files := validFiles(t)
 	cfg, err := load(env, files, CommandAPI)
@@ -133,7 +134,6 @@ func newE2E(t *testing.T) *e2e {
 	if err != nil {
 		t.Fatal(err)
 	}
-	env["KRATOS_ADMIN_URL"] = kratos.URL
 	return &e2e{t: t, pool: pool, envelope: envelope, cfg: cfg, logs: &syncBuffer{}, identity: identity, env: env, files: files}
 }
 
@@ -248,6 +248,12 @@ func TestAPIEndToEnd(t *testing.T) {
 	}
 	if !strings.Contains(logs, `"route":"PATCH /v1/me"`) {
 		t.Errorf("request log lacks the route pattern: %s", logs)
+	}
+
+	// Staff authentication is not built yet: a member session must not reach
+	// the escalation queue (session never sets Staff=true → 403).
+	if rec := do(t, h, http.MethodGet, "/v1/staff/escalations", e2eToken, ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("GET /v1/staff/escalations with member token: %d %s, want 403", rec.Code, rec.Body)
 	}
 }
 

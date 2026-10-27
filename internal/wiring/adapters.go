@@ -19,6 +19,10 @@ import (
 	notifymodel "birge/internal/domains/notify/model"
 	notifyport "birge/internal/domains/notify/port"
 	privacyport "birge/internal/domains/privacy/port"
+	safetymodel "birge/internal/domains/safety/model"
+	safetyport "birge/internal/domains/safety/port"
+	safetyservice "birge/internal/domains/safety/service"
+	wellbeingport "birge/internal/domains/wellbeing/port"
 	"birge/internal/platform/crypto"
 )
 
@@ -51,6 +55,13 @@ func (e DisplayNameEncryptor) Open(ctx context.Context, memberID uuid.UUID, seal
 // The envelope's Shred has exactly the privacy KeyShredder signature.
 var _ privacyport.KeyShredder = (*crypto.Envelope)(nil)
 
+// Envelope is also the Sealer for safety (notes, duty phones) and wellbeing
+// (check-in answers): each call already carries AssociatedData for its column.
+var (
+	_ safetyport.Sealer    = (*crypto.Envelope)(nil)
+	_ wellbeingport.Sealer = (*crypto.Envelope)(nil)
+)
+
 // MemberLookup is the part of the membership service the notify recipients need.
 type MemberLookup interface {
 	Member(ctx context.Context, id uuid.UUID) (membershipmodel.Member, error)
@@ -61,59 +72,184 @@ type PhoneLookup interface {
 	Phone(ctx context.Context, identityID uuid.UUID) (string, error)
 }
 
-// Recipients implements the notify Recipients port for members. Trusted
-// contacts (emergency) and staff roles (safety) are not wired yet and are
-// reported as model.ErrRecipientUnresolved.
+// StaffDirectory is the part of safety notify needs for staff_role recipients.
+type StaffDirectory interface {
+	ResolveStaffRole(ctx context.Context, role string) ([]safetyservice.ExternalRecipient, error)
+	ShiftPhone(ctx context.Context, shiftID uuid.UUID) (string, error)
+}
+
+// Recipients implements the notify Recipients port. Members resolve via
+// membership; staff_role via safety; trusted contacts (emergency) stay
+// unresolved until that context is wired.
 //
-// Resolve uses membership only (kind, ref, language) so a Kratos outage
-// cannot block consuming DeliveryRequested. PhoneFor calls the identity
-// provider at SMS send time, outside any database transaction; a failure
-// is an error so the timer retries. An identity without a phone returns
-// "" (SMS is skipped). Phones are never stored or logged.
+// Resolve uses membership / safety only (kind, ref, language) so a Kratos
+// outage cannot block consuming DeliveryRequested. PhoneFor calls Kratos
+// (members) or safety.ShiftPhone (staff) at SMS send time, outside any
+// database transaction. Phones are never stored or logged.
 type Recipients struct {
-	Members MemberLookup
-	Phones  PhoneLookup
+	Members   MemberLookup
+	Phones    PhoneLookup
+	Staff     StaffDirectory
+	StaffLang string // language for StaffShiftID re-resolve (BIRGE_STAFF_SMS_LANG)
 }
 
 var _ notifyport.Recipients = (*Recipients)(nil)
 
 // Resolve resolves a recipient form to kind, ref and language. It does not
-// look up phones.
+// look up phones from the identity provider.
 func (rc *Recipients) Resolve(ctx context.Context, r notifymodel.Recipient) ([]notifymodel.ResolvedRecipient, error) {
-	if r.MemberID == nil {
+	switch {
+	case r.MemberID != nil:
+		m, err := rc.Members.Member(ctx, *r.MemberID)
+		if errors.Is(err, membershipmodel.ErrMemberNotFound) {
+			return nil, notifymodel.ErrRecipientUnresolved
+		}
+		if err != nil {
+			return nil, fmt.Errorf("recipients: member %s: %w", *r.MemberID, err)
+		}
+		return []notifymodel.ResolvedRecipient{{
+			Kind: notifymodel.RecipientKindMember, Ref: m.ID, Language: string(m.Lang),
+		}}, nil
+	case r.StaffRole != "":
+		if rc.Staff == nil {
+			return nil, notifymodel.ErrRecipientUnresolved
+		}
+		shifts, err := rc.Staff.ResolveStaffRole(ctx, r.StaffRole)
+		if errors.Is(err, safetymodel.ErrNoDutyCoverage) {
+			return nil, notifymodel.ErrRecipientUnresolved
+		}
+		if err != nil {
+			return nil, fmt.Errorf("recipients: staff role: %w", err)
+		}
+		out := make([]notifymodel.ResolvedRecipient, 0, len(shifts))
+		for _, s := range shifts {
+			lang := s.Lang
+			if lang == "" {
+				lang = rc.staffLang()
+			}
+			out = append(out, notifymodel.ResolvedRecipient{
+				Kind: notifymodel.RecipientKindStaff, Ref: s.Ref, Language: lang,
+			})
+		}
+		if len(out) == 0 {
+			return nil, notifymodel.ErrRecipientUnresolved
+		}
+		return out, nil
+	case r.StaffShiftID != nil:
+		// Re-resolve language at SMS send time; phone comes from PhoneFor.
+		if *r.StaffShiftID == uuid.Nil {
+			return nil, notifymodel.ErrRecipientUnresolved
+		}
+		return []notifymodel.ResolvedRecipient{{
+			Kind: notifymodel.RecipientKindStaff, Ref: *r.StaffShiftID, Language: rc.staffLang(),
+		}}, nil
+	default:
+		// trusted_contact (emergency) is not wired yet.
 		return nil, notifymodel.ErrRecipientUnresolved
 	}
-	m, err := rc.Members.Member(ctx, *r.MemberID)
-	if errors.Is(err, membershipmodel.ErrMemberNotFound) {
-		return nil, notifymodel.ErrRecipientUnresolved
-	}
-	if err != nil {
-		return nil, fmt.Errorf("recipients: member %s: %w", *r.MemberID, err)
-	}
-	return []notifymodel.ResolvedRecipient{{
-		Kind: notifymodel.RecipientKindMember, Ref: m.ID, Language: string(m.Lang),
-	}}, nil
 }
 
-// PhoneFor returns the member's phone from the identity provider, or "" when
-// the identity has none. kind/ref other than member are unresolved until
-// emergency/safety are wired.
+func (rc *Recipients) staffLang() string {
+	if rc.StaffLang != "" {
+		return rc.StaffLang
+	}
+	return defaultStaffSMSLang
+}
+
+// PhoneFor returns the E.164 phone for a stored recipient. kind/ref other than
+// member or staff are unresolved until emergency is wired.
 func (rc *Recipients) PhoneFor(ctx context.Context, kind string, ref uuid.UUID) (string, error) {
-	if kind != notifymodel.RecipientKindMember || ref == uuid.Nil {
+	switch kind {
+	case notifymodel.RecipientKindMember:
+		if ref == uuid.Nil {
+			return "", notifymodel.ErrRecipientUnresolved
+		}
+		m, err := rc.Members.Member(ctx, ref)
+		if errors.Is(err, membershipmodel.ErrMemberNotFound) {
+			return "", notifymodel.ErrRecipientUnresolved
+		}
+		if err != nil {
+			return "", fmt.Errorf("recipients: member %s: %w", ref, err)
+		}
+		phone, err := rc.Phones.Phone(ctx, m.IdentityID)
+		if err != nil {
+			return "", fmt.Errorf("recipients: member %s: %w", m.ID, err)
+		}
+		return phone, nil
+	case notifymodel.RecipientKindStaff:
+		if rc.Staff == nil || ref == uuid.Nil {
+			return "", notifymodel.ErrRecipientUnresolved
+		}
+		phone, err := rc.Staff.ShiftPhone(ctx, ref)
+		if errors.Is(err, safetymodel.ErrNotFound) {
+			// Cancelled or unknown shift: skip the SMS rather than retry forever.
+			return "", nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("recipients: staff shift %s: %w", ref, err)
+		}
+		return phone, nil
+	default:
 		return "", notifymodel.ErrRecipientUnresolved
 	}
-	m, err := rc.Members.Member(ctx, ref)
+}
+
+// MemberDirectory implements safety's MemberDirectory from membership and Kratos.
+// Contact results are never logged.
+type MemberDirectory struct {
+	Members MemberLookup
+	Phones  PhoneLookup
+}
+
+var _ safetyport.MemberDirectory = (*MemberDirectory)(nil)
+
+// Contact returns the member's display name, language and phone.
+func (d *MemberDirectory) Contact(ctx context.Context, memberID uuid.UUID) (safetymodel.Contact, error) {
+	m, err := d.Members.Member(ctx, memberID)
 	if errors.Is(err, membershipmodel.ErrMemberNotFound) {
-		return "", notifymodel.ErrRecipientUnresolved
+		return safetymodel.Contact{}, safetymodel.ErrNotFound
 	}
 	if err != nil {
-		return "", fmt.Errorf("recipients: member %s: %w", ref, err)
+		return safetymodel.Contact{}, fmt.Errorf("member directory: %w", err)
 	}
-	phone, err := rc.Phones.Phone(ctx, m.IdentityID)
+	phone, err := d.Phones.Phone(ctx, m.IdentityID)
 	if err != nil {
-		return "", fmt.Errorf("recipients: member %s: %w", m.ID, err)
+		return safetymodel.Contact{}, fmt.Errorf("member directory: %w", err)
 	}
-	return phone, nil
+	return safetymodel.Contact{
+		DisplayName: m.DisplayName,
+		Lang:        string(m.Lang),
+		Phone:       phone,
+	}, nil
+}
+
+// District returns the member's district, or nil when unset.
+func (d *MemberDirectory) District(ctx context.Context, memberID uuid.UUID) (*uuid.UUID, error) {
+	m, err := d.Members.Member(ctx, memberID)
+	if errors.Is(err, membershipmodel.ErrMemberNotFound) {
+		return nil, safetymodel.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("member directory: %w", err)
+	}
+	return m.DistrictID, nil
+}
+
+// CrisisOpener adapts safety.OpenEscalation to the wellbeing CrisisOpener port
+// (which does not need the alreadyOpen flag).
+type CrisisOpener struct {
+	Safety *safetyservice.Service
+}
+
+var _ wellbeingport.CrisisOpener = (*CrisisOpener)(nil)
+
+// OpenEscalation opens a human escalation for the member (source typically "checkin").
+func (o *CrisisOpener) OpenEscalation(ctx context.Context, memberID uuid.UUID, source string) (uuid.UUID, error) {
+	if o == nil || o.Safety == nil {
+		return uuid.Nil, errors.New("wiring: crisis opener not configured")
+	}
+	id, _, err := o.Safety.OpenEscalation(ctx, memberID, source)
+	return id, err
 }
 
 const (

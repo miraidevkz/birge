@@ -21,6 +21,12 @@ import (
 	privacyadapter "birge/internal/domains/privacy/adapter"
 	privacyapi "birge/internal/domains/privacy/api"
 	privacyservice "birge/internal/domains/privacy/service"
+	safetyadapter "birge/internal/domains/safety/adapter"
+	safetyapi "birge/internal/domains/safety/api"
+	safetyservice "birge/internal/domains/safety/service"
+	wellbeingadapter "birge/internal/domains/wellbeing/adapter"
+	wellbeingapi "birge/internal/domains/wellbeing/api"
+	wellbeingservice "birge/internal/domains/wellbeing/service"
 	"birge/internal/platform/apivalidate"
 	"birge/internal/platform/auth"
 	"birge/internal/platform/clock"
@@ -57,12 +63,18 @@ type APIDeps struct {
 //  2. /auth/: the member sign-in gateway in front of Kratos (it has its own
 //     per-IP, per-number and global limits and the proof of work);
 //  3. /v1/: per-IP rate limit → session middleware (anonymous operations
-//     pass) → request validation (not built yet) → the generated handlers of
-//     meta, membership, privacy and notify on one mux;
+//     pass) → request validation → the generated handlers of meta,
+//     membership, privacy, notify, safety and wellbeing on one mux;
 //  4. /healthz (process alive) and /readyz (database reachable).
+//
+// Staff authentication is not built yet: the session middleware never sets
+// Staff=true, so staff endpoints stay unreachable (member sessions get 403).
 func NewAPIHandler(d APIDeps) (http.Handler, error) {
 	if d.Pool == nil || d.Envelope == nil || d.Logger == nil {
 		return nil, errors.New("wiring: API needs a pool, an envelope and a logger")
+	}
+	if d.Config.Lexicon == nil {
+		return nil, errors.New("wiring: crisis lexicon is required")
 	}
 	if d.Clock == nil {
 		d.Clock = clock.System{}
@@ -106,6 +118,10 @@ func NewAPIHandler(d APIDeps) (http.Handler, error) {
 		return nil, fmt.Errorf("wiring: API rate limit: %w", err)
 	}
 
+	identities, err := NewKratosIdentities(cfg.KratosAdminURL, "phone", kratosClient)
+	if err != nil {
+		return nil, fmt.Errorf("wiring: %w", err)
+	}
 	members := membershipservice.New(&membershipadapter.Postgres{Pool: d.Pool}, DisplayNameEncryptor{Sealer: d.Envelope}, d.Clock)
 	privacy := &privacyservice.Service{
 		Store:    &privacyadapter.PostgresStore{Pool: d.Pool},
@@ -122,9 +138,30 @@ func NewAPIHandler(d APIDeps) (http.Handler, error) {
 		Logger: d.Logger,
 		Config: notifyservice.Config{CriticalSMSAfter: cfg.CriticalSMSAfter, SMSTexts: cfg.SMSTexts},
 	}
+	safety := &safetyservice.Service{
+		Store:     &safetyadapter.PostgresStore{Pool: d.Pool},
+		Sealer:    d.Envelope,
+		Directory: &MemberDirectory{Members: members, Phones: identities},
+		Lexicon:   cfg.Lexicon,
+		Clock:     d.Clock,
+		Logger:    d.Logger,
+		Settings: safetyservice.Settings{
+			BackupAfter:  cfg.EscalationBackupAfter,
+			CrisisPhones: safetyCrisisPhones(cfg.CrisisPhones),
+			StaffLang:    cfg.StaffSMSLang,
+		},
+	}
+	wellbeing := &wellbeingservice.Service{
+		Store:    &wellbeingadapter.PostgresStore{Pool: d.Pool},
+		Sealer:   d.Envelope,
+		Crisis:   &CrisisOpener{Safety: safety},
+		Clock:    d.Clock,
+		Logger:   d.Logger,
+		Settings: cfg.Wellbeing,
+	}
 
 	api := http.NewServeMux()
-	mountAPI(api, cfg, members, privacy, notify, d.Logger)
+	mountAPI(api, cfg, members, privacy, notify, safety, wellbeing, d.Logger)
 
 	// Validation runs after the session (anonymous callers cannot probe the
 	// validator) and before the generated handlers, which do not enforce the
@@ -146,7 +183,8 @@ func NewAPIHandler(d APIDeps) (http.Handler, error) {
 // mountAPI registers the generated /v1 handlers of every API area on mux,
 // with the shared problem+json error handlers.
 func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service,
-	privacy *privacyservice.Service, notify *notifyservice.Service, logger *slog.Logger,
+	privacy *privacyservice.Service, notify *notifyservice.Service,
+	safety *safetyservice.Service, wellbeing *wellbeingservice.Service, logger *slog.Logger,
 ) {
 	const base = "/v1"
 	phones := make([]meta.CrisisPhone, 0, len(cfg.CrisisPhones))
@@ -188,13 +226,31 @@ func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service
 			Middlewares: []notifyapi.MiddlewareFunc{toMember},
 		},
 	)
+	safetyapi.HandlerWithOptions(
+		safetyapi.NewStrictHandlerWithOptions(&safetyapi.Server{Service: safety}, nil, safetyapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
+		}),
+		safetyapi.StdHTTPServerOptions{
+			BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler,
+			Middlewares: []safetyapi.MiddlewareFunc{toMember},
+		},
+	)
+	wellbeingapi.HandlerWithOptions(
+		wellbeingapi.NewStrictHandlerWithOptions(&wellbeingapi.Server{Service: wellbeing}, nil, wellbeingapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
+		}),
+		wellbeingapi.StdHTTPServerOptions{
+			BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler,
+			Middlewares: []wellbeingapi.MiddlewareFunc{toMember},
+		},
+	)
 }
 
 // memberPrincipal resolves the signed-in member (creating it on first use,
 // ADR-0008 addendum) and sets auth.Principal.MemberID for the handlers of
-// contexts that key their data by member ID (privacy, notify). The identity
-// ID stays untouched. Anonymous and staff requests pass unchanged; the
-// handlers refuse a principal without a MemberID.
+// contexts that key their data by member ID (privacy, notify, safety,
+// wellbeing). The identity ID stays untouched. Anonymous and staff requests
+// pass unchanged; the handlers refuse a principal without a MemberID.
 func memberPrincipal(members *membershipservice.Service, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

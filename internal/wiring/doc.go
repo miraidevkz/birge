@@ -12,19 +12,26 @@
 //     never from the environment itself. docs/development.md § Configuration
 //     lists the variables.
 //   - The API stack (NewAPIHandler): request log → /auth/ gateway → /v1 rate
-//     limit → session → request validation hook → generated handlers.
+//     limit → session → request validation → generated handlers (meta,
+//     membership, privacy, notify, safety, wellbeing).
 //   - The worker (RunWorker): outbox relay to JetStream, the notify
-//     DeliveryRequested consumer and the timers worker (ADR-0007, ADR-0020),
+//     DeliveryRequested consumer and the timers worker with notify, privacy,
+//     safety.EscalationBackup and wellbeing.Reminder (ADR-0007, ADR-0020),
 //     stopped together on shutdown or on the first failure.
 //   - Migrate: the migrations embedded in the binary (package birge/db),
 //     applied with goose under a PostgreSQL session lock, then db/roles.sql
 //     when asked (ADR-0006).
 //   - Adapters between contexts and platform: the membership Encryptor on the
-//     platform envelope, the notify Recipients (membership for Resolve;
-//     Kratos admin only in PhoneFor at SMS send time), and the log-only
-//     push and SMS senders.
+//     platform envelope, safety/wellbeing Sealer (same envelope with
+//     per-column associated data), safety MemberDirectory (membership +
+//     Kratos phone), wellbeing CrisisOpener → safety.OpenEscalation, the
+//     notify Recipients (membership and safety.ResolveStaffRole /
+//     ShiftPhone; trusted contacts unresolved until emergency), and the
+//     log-only push and SMS senders.
 //   - EVENTS stream retention (BIRGE_EVENTS_MAX_AGE / BIRGE_EVENTS_MAX_BYTES)
 //     applied in EnsureStream on worker start.
+//   - Crisis lexicon (BIRGE_CRISIS_LEXICON_DIR): loaded at startup for api and
+//     worker; an empty or unloadable lexicon refuses to start (ADR-0023).
 //
 // Invariants:
 //

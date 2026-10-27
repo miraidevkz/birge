@@ -1,0 +1,109 @@
+{
+  "_comment": "EXAMPLE only — not for production. Thresholds are placeholders for the psychologist to set; texts live in locale files (kk/ru) under the text_key / feedback_key values.",
+  "version": "example-v1",
+  "questions": [
+    {
+      "id": "phq_1",
+      "instrument": "phq4",
+      "text_key": "wellbeing.phq4.q1",
+      "options": [
+        {"value": 0, "text_key": "wellbeing.phq4.opt.0"},
+        {"value": 1, "text_key": "wellbeing.phq4.opt.1"},
+        {"value": 2, "text_key": "wellbeing.phq4.opt.2"},
+        {"value": 3, "text_key": "wellbeing.phq4.opt.3"}
+      ]
+    },
+    {
+      "id": "phq_2",
+      "instrument": "phq4",
+      "text_key": "wellbeing.phq4.q2",
+      "options": [
+        {"value": 0, "text_key": "wellbeing.phq4.opt.0"},
+        {"value": 1, "text_key": "wellbeing.phq4.opt.1"},
+        {"value": 2, "text_key": "wellbeing.phq4.opt.2"},
+        {"value": 3, "text_key": "wellbeing.phq4.opt.3"}
+      ]
+    },
+    {
+      "id": "phq_3",
+      "instrument": "phq4",
+      "text_key": "wellbeing.phq4.q3",
+      "options": [
+        {"value": 0, "text_key": "wellbeing.phq4.opt.0"},
+        {"value": 1, "text_key": "wellbeing.phq4.opt.1"},
+        {"value": 2, "text_key": "wellbeing.phq4.opt.2"},
+        {"value": 3, "text_key": "wellbeing.phq4.opt.3"}
+      ]
+    },
+    {
+      "id": "phq_4",
+      "instrument": "phq4",
+      "text_key": "wellbeing.phq4.q4",
+      "options": [
+        {"value": 0, "text_key": "wellbeing.phq4.opt.0"},
+        {"value": 1, "text_key": "wellbeing.phq4.opt.1"},
+        {"value": 2, "text_key": "wellbeing.phq4.opt.2"},
+        {"value": 3, "text_key": "wellbeing.phq4.opt.3"}
+      ]
+    },
+    {
+      "id": "pss_1",
+      "instrument": "pss4",
+      "text_key": "wellbeing.pss4.q1",
+      "options": [
+        {"value": 0, "text_key": "wellbeing.pss4.opt.0"},
+        {"value": 1, "text_key": "wellbeing.pss4.opt.1"},
+        {"value": 2, "text_key": "wellbeing.pss4.opt.2"},
+        {"value": 3, "text_key": "wellbeing.pss4.opt.3"},
+        {"value": 4, "text_key": "wellbeing.pss4.opt.4"}
+      ]
+    },
+    {
+      "id": "pss_2",
+      "instrument": "pss4",
+      "text_key": "wellbeing.pss4.q2",
+      "options": [
+        {"value": 0, "text_key": "wellbeing.pss4.opt.0"},
+        {"value": 1, "text_key": "wellbeing.pss4.opt.1"},
+        {"value": 2, "text_key": "wellbeing.pss4.opt.2"},
+        {"value": 3, "text_key": "wellbeing.pss4.opt.3"},
+        {"value": 4, "text_key": "wellbeing.pss4.opt.4"}
+      ]
+    },
+    {
+      "id": "pss_3",
+      "instrument": "pss4",
+      "text_key": "wellbeing.pss4.q3",
+      "options": [
+        {"value": 0, "text_key": "wellbeing.pss4.opt.0"},
+        {"value": 1, "text_key": "wellbeing.pss4.opt.1"},
+        {"value": 2, "text_key": "wellbeing.pss4.opt.2"},
+        {"value": 3, "text_key": "wellbeing.pss4.opt.3"},
+        {"value": 4, "text_key": "wellbeing.pss4.opt.4"}
+      ]
+    },
+    {
+      "id": "pss_4",
+      "instrument": "pss4",
+      "text_key": "wellbeing.pss4.q4",
+      "options": [
+        {"value": 0, "text_key": "wellbeing.pss4.opt.0"},
+        {"value": 1, "text_key": "wellbeing.pss4.opt.1"},
+        {"value": 2, "text_key": "wellbeing.pss4.opt.2"},
+        {"value": 3, "text_key": "wellbeing.pss4.opt.3"},
+        {"value": 4, "text_key": "wellbeing.pss4.opt.4"}
+      ]
+    }
+  ],
+  "reverse_score_question_ids": ["pss_2", "pss_3"],
+  "crisis_item_question_id": "phq_4",
+  "thresholds": {
+    "phq4": {"elevated_at": 999, "crisis_at": 999},
+    "pss4": {"elevated_at": 999, "crisis_at": 999}
+  },
+  "feedback_by_flag": {
+    "none": {"feedback_key": "wellbeing.feedback.none", "suggestion": "practice"},
+    "elevated": {"feedback_key": "wellbeing.feedback.elevated", "suggestion": "psychologist"},
+    "crisis": {"feedback_key": "wellbeing.feedback.crisis", "suggestion": "none"}
+  }
+}

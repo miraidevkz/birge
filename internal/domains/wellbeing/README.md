@@ -40,20 +40,20 @@ Operations of tag `wellbeing` in `contracts/openapi/birge.yaml`:
 
 none (safety implements `CrisisOpener`; notify consumes DeliveryRequested).
 
-Ports used by this context (wired later): `Sealer`, `CrisisOpener`.
+Ports used by this context (wired in `internal/wiring`): `Sealer` (platform envelope, AD `wellbeing.checkins.answers\|<id>`), `CrisisOpener` → `safety.OpenEscalation`.
 
 ## Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `service.Settings.Questionnaire` | required | Current version and questions (ids, instrument, text keys, options) |
+| `service.Settings.Questionnaire` | required | Current version and questions (ids, instrument, text keys, options) from `BIRGE_QUESTIONNAIRE_FILE` |
 | `service.Settings.ReverseScoreQuestionIDs` | empty | Question ids scored as maxOption−value (PSS reverse items) |
 | `service.Settings.CrisisItemQuestionID` | empty | Max answer on this item forces `flag=crisis` |
 | `service.Settings.Thresholds` | required | Per-instrument `ElevatedAt` / `CrisisAt` |
 | `service.Settings.FeedbackByFlag` | required | Non-diagnostic feedback key + suggestion per flag |
-| `service.Settings.TimeZone` | `Asia/Almaty` | Deployment IANA zone for reminders (UTC+5 since March 2024; **hosts must ship current tzdata**) |
-| `service.Settings.PracticesBaseURL` | required | In-jurisdiction object-storage base for practice URLs |
-| `service.Settings.CrisisPhones` | empty | Returned on every crisis result |
+| `service.Settings.TimeZone` | `Asia/Almaty` | Deployment IANA zone for reminders (`BIRGE_TIME_ZONE`; UTC+5 since March 2024; **hosts must ship current tzdata**) |
+| `service.Settings.PracticesBaseURL` | required | In-jurisdiction object-storage base for practice URLs (`BIRGE_PRACTICES_BASE_URL`) |
+| `service.Settings.CrisisPhones` | empty | Returned on every crisis result (`BIRGE_CRISIS_PHONES`) |
 | see `docs/development.md` § Configuration | | all variables, defaults and which subcommand reads them |
 
 ## Invariants

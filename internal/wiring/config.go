@@ -15,6 +15,10 @@ import (
 	"birge/internal/domains/membership/authgw"
 	"birge/internal/domains/notify/sms/guard"
 	privacymodel "birge/internal/domains/privacy/model"
+	"birge/internal/domains/safety/crisis"
+	safetymodel "birge/internal/domains/safety/model"
+	wellbeingmodel "birge/internal/domains/wellbeing/model"
+	wellbeingservice "birge/internal/domains/wellbeing/service"
 	"birge/internal/platform/config"
 	"birge/internal/platform/crypto"
 	"birge/internal/platform/ratelimit"
@@ -45,6 +49,11 @@ const (
 	defaultEventsMaxAge   = 720 * time.Hour
 	defaultEventsMaxBytes = int64(1 << 30)
 	maxEventsMaxAge       = 8760 * time.Hour // 1 year
+	// Escalation backup: requirements § 5; allow shorter values in tests.
+	defaultEscalationBackup = 15 * time.Minute
+	maxEscalationBackup     = time.Hour
+	defaultStaffSMSLang     = "ru"
+	defaultTimeZone         = "Asia/Almaty"
 )
 
 // Config is everything a subcommand needs, read from the environment by Load.
@@ -92,6 +101,18 @@ type Config struct {
 	// (CreateOrUpdateStream on worker start).
 	EventsMaxAge   time.Duration
 	EventsMaxBytes int64
+
+	// Safety (ADR-0023): lexicon is loaded at startup; empty or unloadable refuses to start.
+	CrisisLexiconDir      string
+	Lexicon               *crisis.Lexicon
+	EscalationBackupAfter time.Duration
+	StaffSMSLang          string
+
+	// Wellbeing: questionnaire file is required for the API; time zone for reminders.
+	Wellbeing         wellbeingservice.Settings
+	QuestionnaireFile string
+	TimeZone          string
+	PracticesBaseURL  string
 }
 
 // String redacts the configuration so that an accidental %v cannot print secrets.
@@ -127,6 +148,14 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 	cfg.DeletionDelay = l.duration("BIRGE_DELETION_DELAY", 24*time.Hour, maxDeletionDelay)
 	cfg.CriticalSMSAfter = l.duration("NOTIFY_CRITICAL_SMS_AFTER", 60*time.Second, maxCriticalSMSAfter)
 	cfg.TrustedProxyHeader = l.headerName("BIRGE_TRUSTED_PROXY_HEADER")
+	cfg.CrisisLexiconDir = l.required("BIRGE_CRISIS_LEXICON_DIR")
+	cfg.Lexicon = l.lexicon("BIRGE_CRISIS_LEXICON_DIR", cfg.CrisisLexiconDir)
+	cfg.EscalationBackupAfter = l.duration("BIRGE_ESCALATION_BACKUP_AFTER", defaultEscalationBackup, maxEscalationBackup)
+	cfg.StaffSMSLang = l.lang("BIRGE_STAFF_SMS_LANG", defaultStaffSMSLang)
+	cfg.TimeZone = l.timeZone("BIRGE_TIME_ZONE", defaultTimeZone)
+	// Kratos admin is needed on the API for staff contact reveal (MemberDirectory)
+	// and on the worker for member SMS PhoneFor.
+	cfg.KratosAdminURL = l.httpURL("KRATOS_ADMIN_URL", true)
 
 	if api {
 		cfg.KratosPublicURL = l.httpURL("KRATOS_PUBLIC_URL", true)
@@ -141,10 +170,15 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		cfg.AuthGlobal = authgw.Rate(l.rate("BIRGE_AUTH_RATE_GLOBAL", "20/1s"))
 		cfg.APIPerIP = l.rate("BIRGE_API_RATE_PER_IP", "300/100ms")
 		cfg.ConsentVersions = l.consentVersions("BIRGE_CONSENT_VERSIONS")
+		cfg.QuestionnaireFile = l.required("BIRGE_QUESTIONNAIRE_FILE")
+		cfg.Wellbeing = l.questionnaire("BIRGE_QUESTIONNAIRE_FILE", cfg.QuestionnaireFile)
+		cfg.PracticesBaseURL = l.httpURL("BIRGE_PRACTICES_BASE_URL", true)
+		cfg.Wellbeing.PracticesBaseURL = cfg.PracticesBaseURL
+		cfg.Wellbeing.TimeZone = cfg.TimeZone
+		cfg.Wellbeing.CrisisPhones = wellbeingCrisisPhones(cfg.CrisisPhones)
 	}
 	if worker {
 		cfg.NATSURL = l.natsURL("NATS_URL")
-		cfg.KratosAdminURL = l.httpURL("KRATOS_ADMIN_URL", true)
 		cfg.SMSGuard = guard.Config{
 			AllowedPrefixes: cfg.SMSPrefixes,
 			PerNumberLimit:  l.positiveInt("BIRGE_SMS_PER_NUMBER_LIMIT", 5),
@@ -156,6 +190,9 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		cfg.SMSTexts = l.smsTexts("BIRGE_SMS_TEXTS")
 		cfg.EventsMaxAge = l.duration("BIRGE_EVENTS_MAX_AGE", defaultEventsMaxAge, maxEventsMaxAge)
 		cfg.EventsMaxBytes = l.positiveInt64("BIRGE_EVENTS_MAX_BYTES", defaultEventsMaxBytes)
+		// Reminder scheduling needs the deployment zone; questionnaire is API-only.
+		cfg.Wellbeing.TimeZone = cfg.TimeZone
+		cfg.Wellbeing.CrisisPhones = wellbeingCrisisPhones(cfg.CrisisPhones)
 		// No real push or SMS provider exists yet. Dropping notifications
 		// silently is worse than not starting, so only the explicit
 		// development mode may run with the log-only senders.
@@ -435,6 +472,163 @@ func (l *loader) smsTexts(name string) map[string]map[string]string {
 	if err := json.Unmarshal([]byte(v), &out); err != nil {
 		l.fail(name + `: must be a JSON object {"<template>": {"<lang>": "<text>"}}`)
 		return nil
+	}
+	return out
+}
+
+func (l *loader) lexicon(name, dir string) *crisis.Lexicon {
+	if dir == "" {
+		return nil
+	}
+	lex, err := crisis.LoadDir(dir)
+	if err != nil {
+		// LoadDir errors name the directory/file, never message text.
+		l.fail(name + ": " + err.Error())
+		return nil
+	}
+	return lex
+}
+
+func (l *loader) lang(name, def string) string {
+	v := strings.TrimSpace(l.getenv(name))
+	if v == "" {
+		return def
+	}
+	if v != "kk" && v != "ru" {
+		l.fail(name + `: must be "kk" or "ru"`)
+		return def
+	}
+	return v
+}
+
+func (l *loader) timeZone(name, def string) string {
+	v := strings.TrimSpace(l.getenv(name))
+	if v == "" {
+		v = def
+	}
+	if _, err := time.LoadLocation(v); err != nil {
+		l.fail(name + ": must be a valid IANA time zone (host needs current tzdata)")
+		return def
+	}
+	return v
+}
+
+// questionnaireFile is the on-disk shape of BIRGE_QUESTIONNAIRE_FILE.
+// Thresholds are set by the psychologist; the example file ships placeholders.
+type questionnaireFile struct {
+	Version                 string `json:"version"`
+	Questions               []questionnaireQuestion
+	ReverseScoreQuestionIDs []string                          `json:"reverse_score_question_ids"`
+	CrisisItemQuestionID    string                            `json:"crisis_item_question_id"`
+	Thresholds              map[string]questionnaireThreshold `json:"thresholds"`
+	FeedbackByFlag          map[string]questionnaireFeedback  `json:"feedback_by_flag"`
+}
+
+type questionnaireQuestion struct {
+	ID         string                `json:"id"`
+	Instrument string                `json:"instrument"`
+	TextKey    string                `json:"text_key"`
+	Options    []questionnaireOption `json:"options"`
+}
+
+type questionnaireOption struct {
+	Value   int    `json:"value"`
+	TextKey string `json:"text_key"`
+}
+
+type questionnaireThreshold struct {
+	ElevatedAt int `json:"elevated_at"`
+	CrisisAt   int `json:"crisis_at"`
+}
+
+type questionnaireFeedback struct {
+	FeedbackKey string `json:"feedback_key"`
+	Suggestion  string `json:"suggestion"`
+}
+
+func (l *loader) questionnaire(name, path string) wellbeingservice.Settings {
+	if path == "" {
+		return wellbeingservice.Settings{}
+	}
+	b, err := l.readFile(path)
+	if err != nil {
+		l.fail(name + ": cannot read the questionnaire file")
+		return wellbeingservice.Settings{}
+	}
+	var raw questionnaireFile
+	if err := json.Unmarshal(b, &raw); err != nil {
+		l.fail(name + ": must be a JSON questionnaire object")
+		return wellbeingservice.Settings{}
+	}
+	if raw.Version == "" || len(raw.Questions) == 0 {
+		l.fail(name + ": version and questions are required")
+		return wellbeingservice.Settings{}
+	}
+	questions := make([]wellbeingmodel.Question, 0, len(raw.Questions))
+	for _, q := range raw.Questions {
+		if q.ID == "" || !wellbeingmodel.InstrumentIsValid(q.Instrument) || q.TextKey == "" || len(q.Options) == 0 {
+			l.fail(name + ": each question needs id, instrument (phq4|pss4), text_key and options")
+			return wellbeingservice.Settings{}
+		}
+		opts := make([]wellbeingmodel.QuestionOption, 0, len(q.Options))
+		for _, o := range q.Options {
+			if o.TextKey == "" {
+				l.fail(name + ": each option needs text_key")
+				return wellbeingservice.Settings{}
+			}
+			opts = append(opts, wellbeingmodel.QuestionOption{Value: o.Value, TextKey: o.TextKey})
+		}
+		questions = append(questions, wellbeingmodel.Question{
+			ID: q.ID, Instrument: q.Instrument, TextKey: q.TextKey, Options: opts,
+		})
+	}
+	if len(raw.Thresholds) == 0 || len(raw.FeedbackByFlag) == 0 {
+		l.fail(name + ": thresholds and feedback_by_flag are required")
+		return wellbeingservice.Settings{}
+	}
+	thresholds := make(map[string]wellbeingmodel.InstrumentThresholds, len(raw.Thresholds))
+	for inst, th := range raw.Thresholds {
+		if !wellbeingmodel.InstrumentIsValid(inst) {
+			l.fail(name + ": unknown instrument in thresholds")
+			return wellbeingservice.Settings{}
+		}
+		thresholds[inst] = wellbeingmodel.InstrumentThresholds{ElevatedAt: th.ElevatedAt, CrisisAt: th.CrisisAt}
+	}
+	feedback := make(map[string]wellbeingmodel.Feedback, len(raw.FeedbackByFlag))
+	for flag, fb := range raw.FeedbackByFlag {
+		if !wellbeingmodel.FlagIsValid(flag) || fb.FeedbackKey == "" || !wellbeingmodel.SuggestionIsValid(fb.Suggestion) {
+			l.fail(name + ": feedback_by_flag needs a known flag, feedback_key and suggestion")
+			return wellbeingservice.Settings{}
+		}
+		feedback[flag] = wellbeingmodel.Feedback{FeedbackKey: fb.FeedbackKey, Suggestion: fb.Suggestion}
+	}
+	for _, flag := range []string{wellbeingmodel.FlagNone, wellbeingmodel.FlagElevated, wellbeingmodel.FlagCrisis} {
+		if _, ok := feedback[flag]; !ok {
+			l.fail(name + ": feedback_by_flag missing flag " + flag)
+			return wellbeingservice.Settings{}
+		}
+	}
+	return wellbeingservice.Settings{
+		Questionnaire:           wellbeingmodel.Questionnaire{Version: raw.Version, Questions: questions},
+		ReverseScoreQuestionIDs: append([]string(nil), raw.ReverseScoreQuestionIDs...),
+		CrisisItemQuestionID:    raw.CrisisItemQuestionID,
+		Thresholds:              thresholds,
+		FeedbackByFlag:          feedback,
+	}
+}
+
+func wellbeingCrisisPhones(phones []config.CrisisPhone) []wellbeingmodel.CrisisPhone {
+	out := make([]wellbeingmodel.CrisisPhone, 0, len(phones))
+	for _, p := range phones {
+		out = append(out, wellbeingmodel.CrisisPhone{Number: p.Number, Label: p.Label})
+	}
+	return out
+}
+
+func safetyCrisisPhones(phones []config.CrisisPhone) []safetymodel.CrisisPhone {
+	out := make([]safetymodel.CrisisPhone, 0, len(phones))
+	for _, p := range phones {
+		out = append(out, safetymodel.CrisisPhone{Number: p.Number, Label: p.Label})
 	}
 	return out
 }

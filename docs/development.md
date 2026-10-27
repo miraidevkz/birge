@@ -42,9 +42,15 @@ See [architecture § Repository layout](architecture.md#repository-layout-monore
 | `DATABASE_URL` | all | required | PostgreSQL connection string (it holds a password: treat it as a secret) |
 | `BIRGE_APPLY_ROLES` | migrate | `0` | `1` applies `db/roles.sql` after the migrations; the roles must already exist (created by the database operator) |
 | `BIRGE_HTTP_ADDR` | api, worker | `:8080` | listen address; the worker serves only `/healthz` and `/readyz` there |
-| `BIRGE_MIN_APP_VERSION`, `BIRGE_LATEST_APP_VERSION`, `BIRGE_CRISIS_PHONES` | api | `0.0.0`, the minimum, none | client configuration (`internal/platform/config`, ADR-0018) |
+| `BIRGE_MIN_APP_VERSION`, `BIRGE_LATEST_APP_VERSION`, `BIRGE_CRISIS_PHONES` | api, worker | `0.0.0`, the minimum, none | client configuration and crisis lines returned by safety/wellbeing (`internal/platform/config`, ADR-0018); JSON `[{"number":"+7…","label":"…"}]` |
 | `KRATOS_PUBLIC_URL` | api | required | cluster-internal Kratos public API: session checks and the `/auth/` gateway |
-| `KRATOS_ADMIN_URL` | worker | required | cluster-internal Kratos admin API: phone numbers for SMS (`GET /admin/identities/{id}`, trait `phone`) |
+| `KRATOS_ADMIN_URL` | api, worker | required | cluster-internal Kratos admin API: phone numbers for SMS and for safety contact reveal (`GET /admin/identities/{id}`, trait `phone`) |
+| `BIRGE_CRISIS_LEXICON_DIR` | api, worker | required | directory of the level-1 crisis lexicon (`<kk\|ru>.<category>.txt`); startup fails if it does not load or is empty (ADR-0023). Demo only: `internal/domains/safety/crisis/testdata/demo/` |
+| `BIRGE_ESCALATION_BACKUP_AFTER` | api, worker | `15m` | delay before the backup duty shift is alerted for an open escalation; at most `1h` |
+| `BIRGE_STAFF_SMS_LANG` | api, worker | `ru` | language of SMS alerts to on-duty staff phones (`kk` or `ru`) |
+| `BIRGE_QUESTIONNAIRE_FILE` | api | required | path to the wellbeing questionnaire JSON (version, questions with locale keys, reverse-score ids, crisis item, thresholds, feedback). Example (placeholders only): `deploy/config/questionnaire.example.json` |
+| `BIRGE_TIME_ZONE` | api, worker | `Asia/Almaty` | deployment IANA zone for check-in reminder schedules; hosts must ship current tzdata |
+| `BIRGE_PRACTICES_BASE_URL` | api | required | in-jurisdiction object-storage base URL for practice audio (`https://…`) |
 | `NATS_URL` | worker | required | `nats://` or `tls://` URLs, comma-separated |
 | `BIRGE_KEK_ID` | api, worker | required | id of the key-encryption key, stored with every wrapped member key; never reuse an id for other key material |
 | `BIRGE_KEK_KEYSET_FILE` | api, worker | required | file with the KEK as a cleartext Tink AES256-GCM keyset in JSON (development and first deployments; production moves to OpenBao, ADR-0009) |

@@ -17,6 +17,8 @@ import (
 	membershipmodel "birge/internal/domains/membership/model"
 	notifymodel "birge/internal/domains/notify/model"
 	notifyport "birge/internal/domains/notify/port"
+	safetymodel "birge/internal/domains/safety/model"
+	safetyservice "birge/internal/domains/safety/service"
 	"birge/internal/platform/timers"
 )
 
@@ -62,6 +64,34 @@ func (f fakeMembers) Member(_ context.Context, id uuid.UUID) (membershipmodel.Me
 	return m, nil
 }
 
+type fakeStaff struct {
+	byRole map[string][]safetyservice.ExternalRecipient
+	phones map[uuid.UUID]string
+	err    error
+}
+
+func (f *fakeStaff) ResolveStaffRole(_ context.Context, role string) ([]safetyservice.ExternalRecipient, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	got, ok := f.byRole[role]
+	if !ok || len(got) == 0 {
+		return nil, safetymodel.ErrNoDutyCoverage
+	}
+	return got, nil
+}
+
+func (f *fakeStaff) ShiftPhone(_ context.Context, shiftID uuid.UUID) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	phone, ok := f.phones[shiftID]
+	if !ok {
+		return "", safetymodel.ErrNotFound
+	}
+	return phone, nil
+}
+
 // fakeKratosAdmin serves GET /admin/identities/{id} for the identities in phones.
 func fakeKratosAdmin(t *testing.T, phones map[uuid.UUID]string) *httptest.Server {
 	t.Helper()
@@ -89,6 +119,7 @@ func TestRecipients(t *testing.T) {
 	memberID, identity := uuid.New(), uuid.New()
 	noPhoneMember, noPhoneIdentity := uuid.New(), uuid.New()
 	goneMember := uuid.New()
+	shiftID := uuid.New()
 	members := fakeMembers{
 		memberID:      {ID: memberID, IdentityID: identity, Lang: membershipmodel.LangRU},
 		noPhoneMember: {ID: noPhoneMember, IdentityID: noPhoneIdentity, Lang: membershipmodel.LangKK},
@@ -99,7 +130,13 @@ func TestRecipients(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rc := &Recipients{Members: members, Phones: phones}
+	staff := &fakeStaff{
+		byRole: map[string][]safetyservice.ExternalRecipient{
+			notifymodel.StaffPsychologist: {{Ref: shiftID, PhoneE164: testPhone, Lang: "ru"}},
+		},
+		phones: map[uuid.UUID]string{shiftID: testPhone},
+	}
+	rc := &Recipients{Members: members, Phones: phones, Staff: staff, StaffLang: "ru"}
 	ctx := context.Background()
 
 	got, err := rc.Resolve(ctx, notifymodel.Recipient{MemberID: &memberID})
@@ -125,11 +162,25 @@ func TestRecipients(t *testing.T) {
 		}
 	}
 
+	staffGot, err := rc.Resolve(ctx, notifymodel.Recipient{StaffRole: notifymodel.StaffPsychologist})
+	if err != nil || len(staffGot) != 1 || staffGot[0].Kind != notifymodel.RecipientKindStaff || staffGot[0].Ref != shiftID {
+		t.Fatalf("staff Resolve = %+v, %v", staffGot, err)
+	}
+	phone, err = rc.PhoneFor(ctx, notifymodel.RecipientKindStaff, shiftID)
+	if err != nil || phone != testPhone {
+		t.Fatalf("staff PhoneFor = %q, %v", phone, err)
+	}
+	shiftRef := shiftID
+	re, err := rc.Resolve(ctx, notifymodel.Recipient{StaffShiftID: &shiftRef})
+	if err != nil || len(re) != 1 || re[0].Kind != notifymodel.RecipientKindStaff || re[0].Language != "ru" {
+		t.Fatalf("StaffShiftID Resolve = %+v, %v", re, err)
+	}
+
 	unknown, contact := uuid.New(), uuid.New()
 	for name, r := range map[string]notifymodel.Recipient{
 		"unknown member":  {MemberID: &unknown},
 		"trusted contact": {TrustedContactID: &contact},
-		"staff role":      {StaffRole: notifymodel.StaffModerator},
+		"no duty":         {StaffRole: notifymodel.StaffModerator},
 	} {
 		if _, err := rc.Resolve(ctx, r); !errors.Is(err, notifymodel.ErrRecipientUnresolved) {
 			t.Errorf("%s: err = %v, want ErrRecipientUnresolved", name, err)
@@ -137,6 +188,10 @@ func TestRecipients(t *testing.T) {
 	}
 	if _, err := rc.PhoneFor(ctx, notifymodel.RecipientKindMember, unknown); !errors.Is(err, notifymodel.ErrRecipientUnresolved) {
 		t.Errorf("PhoneFor unknown member: err = %v, want ErrRecipientUnresolved", err)
+	}
+	phone, err = rc.PhoneFor(ctx, notifymodel.RecipientKindStaff, uuid.New())
+	if err != nil || phone != "" {
+		t.Errorf("PhoneFor cancelled/unknown shift = %q, %v; want empty", phone, err)
 	}
 }
 

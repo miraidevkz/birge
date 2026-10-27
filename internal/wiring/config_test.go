@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -54,7 +55,43 @@ func (f fakeFiles) read(path string) ([]byte, error) {
 
 const secretDatabaseURL = "postgres://birge:s3cret-password@db.example.invalid:5432/birge"
 
-func validEnv() map[string]string {
+// testLexiconDir writes a minimal DEMO lexicon the loader accepts.
+func testLexiconDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "ru.suicide.txt"), []byte("хочу умереть\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// testQuestionnaireJSON is a minimal valid BIRGE_QUESTIONNAIRE_FILE body.
+func testQuestionnaireJSON() []byte {
+	return []byte(`{
+  "version": "test-v1",
+  "questions": [
+    {"id":"phq_1","instrument":"phq4","text_key":"q.1","options":[{"value":0,"text_key":"o.0"},{"value":1,"text_key":"o.1"},{"value":2,"text_key":"o.2"},{"value":3,"text_key":"o.3"}]},
+    {"id":"phq_2","instrument":"phq4","text_key":"q.2","options":[{"value":0,"text_key":"o.0"},{"value":1,"text_key":"o.1"},{"value":2,"text_key":"o.2"},{"value":3,"text_key":"o.3"}]},
+    {"id":"phq_3","instrument":"phq4","text_key":"q.3","options":[{"value":0,"text_key":"o.0"},{"value":1,"text_key":"o.1"},{"value":2,"text_key":"o.2"},{"value":3,"text_key":"o.3"}]},
+    {"id":"phq_4","instrument":"phq4","text_key":"q.4","options":[{"value":0,"text_key":"o.0"},{"value":1,"text_key":"o.1"},{"value":2,"text_key":"o.2"},{"value":3,"text_key":"o.3"}]},
+    {"id":"pss_1","instrument":"pss4","text_key":"p.1","options":[{"value":0,"text_key":"po.0"},{"value":1,"text_key":"po.1"},{"value":2,"text_key":"po.2"},{"value":3,"text_key":"po.3"},{"value":4,"text_key":"po.4"}]},
+    {"id":"pss_2","instrument":"pss4","text_key":"p.2","options":[{"value":0,"text_key":"po.0"},{"value":1,"text_key":"po.1"},{"value":2,"text_key":"po.2"},{"value":3,"text_key":"po.3"},{"value":4,"text_key":"po.4"}]},
+    {"id":"pss_3","instrument":"pss4","text_key":"p.3","options":[{"value":0,"text_key":"po.0"},{"value":1,"text_key":"po.1"},{"value":2,"text_key":"po.2"},{"value":3,"text_key":"po.3"},{"value":4,"text_key":"po.4"}]},
+    {"id":"pss_4","instrument":"pss4","text_key":"p.4","options":[{"value":0,"text_key":"po.0"},{"value":1,"text_key":"po.1"},{"value":2,"text_key":"po.2"},{"value":3,"text_key":"po.3"},{"value":4,"text_key":"po.4"}]}
+  ],
+  "reverse_score_question_ids": ["pss_2","pss_3"],
+  "crisis_item_question_id": "phq_4",
+  "thresholds": {"phq4":{"elevated_at":3,"crisis_at":9},"pss4":{"elevated_at":8,"crisis_at":13}},
+  "feedback_by_flag": {
+    "none":{"feedback_key":"wellbeing.feedback.none","suggestion":"practice"},
+    "elevated":{"feedback_key":"wellbeing.feedback.elevated","suggestion":"psychologist"},
+    "crisis":{"feedback_key":"wellbeing.feedback.crisis","suggestion":"none"}
+  }
+}`)
+}
+
+func validEnv(t *testing.T) map[string]string {
+	t.Helper()
 	return map[string]string{
 		"DATABASE_URL":               secretDatabaseURL,
 		"NATS_URL":                   "nats://nats.example.invalid:4222",
@@ -67,15 +104,20 @@ func validEnv() map[string]string {
 		"BIRGE_SMS_ALLOWED_PREFIXES": "+7700, +7701",
 		"BIRGE_CONSENT_VERSIONS":     "data_processing=v1,ai_crossborder=v1,research=v2",
 		"BIRGE_DELIVERY_MODE":        "dev",
+		"BIRGE_CRISIS_LEXICON_DIR":   testLexiconDir(t),
+		"BIRGE_QUESTIONNAIRE_FILE":   "/keys/questionnaire.json",
+		"BIRGE_PRACTICES_BASE_URL":   "https://objects.example.invalid/practices",
+		"BIRGE_CRISIS_PHONES":        `[{"number":"+77001112233","label":"Example line"}]`,
 	}
 }
 
 func validFiles(t *testing.T) fakeFiles {
 	t.Helper()
 	return fakeFiles{
-		"/keys/kek.json": testKeysetJSON(t),
-		"/keys/pow":      append(randomKey(t), '\n'),
-		"/keys/hash":     randomKey(t),
+		"/keys/kek.json":           testKeysetJSON(t),
+		"/keys/pow":                append(randomKey(t), '\n'),
+		"/keys/hash":               randomKey(t),
+		"/keys/questionnaire.json": testQuestionnaireJSON(),
 	}
 }
 
@@ -87,7 +129,7 @@ func TestLoadValid(t *testing.T) {
 	files := validFiles(t)
 	for _, cmd := range []Command{CommandAPI, CommandWorker, CommandMigrate} {
 		t.Run(string(cmd), func(t *testing.T) {
-			cfg, err := load(validEnv(), files, cmd)
+			cfg, err := load(validEnv(t), files, cmd)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -99,6 +141,12 @@ func TestLoadValid(t *testing.T) {
 			}
 			if cfg.KEK == nil || cfg.KEK.ID() != "local-1" {
 				t.Error("KEK not loaded")
+			}
+			if cfg.Lexicon == nil || cfg.EscalationBackupAfter != defaultEscalationBackup || cfg.StaffSMSLang != defaultStaffSMSLang {
+				t.Errorf("safety defaults: lexicon=%v backup=%s lang=%q", cfg.Lexicon != nil, cfg.EscalationBackupAfter, cfg.StaffSMSLang)
+			}
+			if cfg.TimeZone != defaultTimeZone || cfg.KratosAdminURL == "" {
+				t.Errorf("time zone / admin: %q %q", cfg.TimeZone, cfg.KratosAdminURL)
 			}
 			if cfg.DeletionDelay != 24*time.Hour || cfg.CriticalSMSAfter != 60*time.Second {
 				t.Errorf("defaults: deletion %s, critical sms %s", cfg.DeletionDelay, cfg.CriticalSMSAfter)
@@ -115,6 +163,9 @@ func TestLoadValid(t *testing.T) {
 				}
 				if cfg.ConsentVersions["research"] != "v2" || !cfg.APIPerIP.Valid() || cfg.AuthGlobal.Burst != 20 {
 					t.Error("API settings not loaded")
+				}
+				if cfg.Wellbeing.Questionnaire.Version != "test-v1" || cfg.PracticesBaseURL == "" {
+					t.Error("wellbeing questionnaire / practices URL not loaded")
 				}
 			}
 			if cmd == CommandWorker {
@@ -162,10 +213,16 @@ func TestLoadRejects(t *testing.T) {
 		{"sms texts required outside dev", CommandWorker, map[string]string{"BIRGE_DELIVERY_MODE": "production", "BIRGE_SMS_TEXTS": ""}, nil, "BIRGE_SMS_TEXTS is required"},
 		{"bad sms texts", CommandWorker, map[string]string{"BIRGE_SMS_TEXTS": "[1]"}, nil, "BIRGE_SMS_TEXTS"},
 		{"bad events max bytes", CommandWorker, map[string]string{"BIRGE_EVENTS_MAX_BYTES": "0"}, nil, "BIRGE_EVENTS_MAX_BYTES"},
+		{"missing lexicon", CommandAPI, map[string]string{"BIRGE_CRISIS_LEXICON_DIR": ""}, nil, "BIRGE_CRISIS_LEXICON_DIR is required"},
+		{"missing questionnaire", CommandAPI, map[string]string{"BIRGE_QUESTIONNAIRE_FILE": ""}, nil, "BIRGE_QUESTIONNAIRE_FILE is required"},
+		{"bad questionnaire", CommandAPI, nil, func(f fakeFiles) { f["/keys/questionnaire.json"] = []byte(`{}`) }, "BIRGE_QUESTIONNAIRE_FILE"},
+		{"missing practices url", CommandAPI, map[string]string{"BIRGE_PRACTICES_BASE_URL": ""}, nil, "BIRGE_PRACTICES_BASE_URL is required"},
+		{"bad staff lang", CommandAPI, map[string]string{"BIRGE_STAFF_SMS_LANG": "en"}, nil, "BIRGE_STAFF_SMS_LANG"},
+		{"bad time zone", CommandWorker, map[string]string{"BIRGE_TIME_ZONE": "Not/AZone"}, nil, "BIRGE_TIME_ZONE"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env := validEnv()
+			env := validEnv(t)
 			for k, v := range tt.set {
 				env[k] = v
 			}
@@ -185,6 +242,14 @@ func TestLoadRejects(t *testing.T) {
 			}
 		})
 	}
+	t.Run("empty lexicon", func(t *testing.T) {
+		env := validEnv(t)
+		env["BIRGE_CRISIS_LEXICON_DIR"] = t.TempDir()
+		_, err := load(env, validFiles(t), CommandWorker)
+		if err == nil || !strings.Contains(err.Error(), "BIRGE_CRISIS_LEXICON_DIR") {
+			t.Fatalf("error = %v, want BIRGE_CRISIS_LEXICON_DIR", err)
+		}
+	})
 }
 
 // All problems are reported at once, so an operator fixes them in one go.
@@ -193,7 +258,7 @@ func TestLoadReportsEveryProblem(t *testing.T) {
 	if err == nil {
 		t.Fatal("empty environment accepted")
 	}
-	for _, name := range []string{"DATABASE_URL", "NATS_URL", "KRATOS_ADMIN_URL", "BIRGE_KEK_ID", "BIRGE_SMS_ALLOWED_PREFIXES", "BIRGE_DELIVERY_MODE"} {
+	for _, name := range []string{"DATABASE_URL", "NATS_URL", "KRATOS_ADMIN_URL", "BIRGE_KEK_ID", "BIRGE_SMS_ALLOWED_PREFIXES", "BIRGE_DELIVERY_MODE", "BIRGE_CRISIS_LEXICON_DIR"} {
 		if !strings.Contains(err.Error(), name) {
 			t.Errorf("error does not mention %s: %v", name, err)
 		}
@@ -203,11 +268,11 @@ func TestLoadReportsEveryProblem(t *testing.T) {
 func TestLoadNeverPrintsKeys(t *testing.T) {
 	files := validFiles(t)
 	files["/keys/hash"] = []byte("0123456789") // too short: rejected
-	_, err := load(validEnv(), files, CommandAPI)
+	_, err := load(validEnv(t), files, CommandAPI)
 	if err == nil || strings.Contains(err.Error(), "0123456789") {
 		t.Fatalf("error = %v: want a rejection without the key", err)
 	}
-	cfg, err := load(validEnv(), validFiles(t), CommandAPI)
+	cfg, err := load(validEnv(t), validFiles(t), CommandAPI)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +284,7 @@ func TestLoadNeverPrintsKeys(t *testing.T) {
 }
 
 func TestUnknownCommand(t *testing.T) {
-	if _, err := load(validEnv(), validFiles(t), "serve"); err == nil {
+	if _, err := load(validEnv(t), validFiles(t), "serve"); err == nil {
 		t.Fatal("unknown command accepted")
 	}
 }
