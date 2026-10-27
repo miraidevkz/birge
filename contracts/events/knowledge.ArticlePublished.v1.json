@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:knowledge.ArticlePublished.v1",
+  "title": "knowledge.ArticlePublished",
+  "description": "A reviewed article version was published; retrieval indexes it and the repository export picks it up.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "article_id",
+    "version_id",
+    "lang",
+    "kind"
+  ],
+  "properties": {
+    "article_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "version_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "lang": {
+      "type": "string",
+      "enum": [
+        "kk",
+        "ru",
+        "en"
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "rights",
+        "selfhelp"
+      ]
+    }
+  }
+}

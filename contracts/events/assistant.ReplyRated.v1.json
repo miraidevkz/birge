@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:assistant.ReplyRated.v1",
+  "title": "assistant.ReplyRated",
+  "description": "A member rated an assistant reply. For metrics only; no text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "message_id",
+    "helped"
+  ],
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "helped": {
+      "type": "boolean"
+    }
+  }
+}

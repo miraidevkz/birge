@@ -99,11 +99,20 @@ type Problem struct {
 	Type   string  `json:"type"`
 }
 
+// ArticleId defines model for ArticleId.
+type ArticleId = openapi_types.UUID
+
 // EscalationId defines model for EscalationId.
 type EscalationId = openapi_types.UUID
 
 // SosId defines model for SosId.
 type SosId = openapi_types.UUID
+
+// TopicId defines model for TopicId.
+type TopicId = openapi_types.UUID
+
+// VersionId defines model for VersionId.
+type VersionId = openapi_types.UUID
 
 // ListInboxParams defines parameters for ListInbox.
 type ListInboxParams struct {

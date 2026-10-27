@@ -25,6 +25,10 @@ tags:
     description: Weekly check-ins, history and audio practices.
   - name: emergency
     description: SOS requests, the district SOS feed and the emergency plan (child card, trusted contacts).
+  - name: assistant
+    description: The AI assistant ("Talk") and "ask in my own words" for rights questions.
+  - name: knowledge
+    description: Reviewed knowledge base (rights and self-help) for members, and the review workflow for staff.
 security:
   - memberSession: []
 paths:
@@ -849,6 +853,268 @@ paths:
               schema: {$ref: '#/components/schemas/SharedPlan'}
         '403': {$ref: '#/components/responses/Problem'}
         default: {$ref: '#/components/responses/Problem'}
+
+  /me/assistant/messages:
+    post:
+      operationId: sendAssistantMessage
+      tags: [assistant]
+      summary: Send one message to the AI assistant and get its reply.
+      description: |
+        Requires the ai_crossborder consent (403 consent_required). Daily limit per member
+        from configuration (429 daily_limit). The crisis check runs before anything else and
+        does not depend on the AI provider: when it fires, the reply is the fixed crisis
+        response (crisis=true, crisis phones, escalation opened) and the model is not asked.
+        If the AI provider fails, the reply has degraded=true and the client offers
+        "Contact a person". The server keeps only anonymized text for 90 days; the client
+        keeps the visible history.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AssistantMessageInput'}
+      responses:
+        '200':
+          description: Reply.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AssistantReply'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/assistant/messages/{messageId}/feedback:
+    parameters:
+      - name: messageId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: rateAssistantReply
+      tags: [assistant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [helped]
+              properties:
+                helped: {type: boolean}
+      responses:
+        '204': {description: Recorded (the last rating wins).}
+        default: {$ref: '#/components/responses/Problem'}
+  /knowledge/topics:
+    get:
+      operationId: listKnowledgeTopics
+      tags: [knowledge]
+      parameters:
+        - $ref: '#/components/parameters/LangQuery'
+        - name: kind
+          in: query
+          required: true
+          schema: {$ref: '#/components/schemas/KnowledgeKind'}
+      responses:
+        '200':
+          description: Topics with at least one published article in the language.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items: {$ref: '#/components/schemas/KnowledgeTopic'}
+        default: {$ref: '#/components/responses/Problem'}
+  /knowledge/topics/{topicId}/articles:
+    parameters:
+      - $ref: '#/components/parameters/TopicId'
+    get:
+      operationId: listTopicArticles
+      tags: [knowledge]
+      parameters:
+        - $ref: '#/components/parameters/LangQuery'
+      responses:
+        '200':
+          description: Published articles (questions) of the topic.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 200
+                items: {$ref: '#/components/schemas/ArticleSummary'}
+        default: {$ref: '#/components/responses/Problem'}
+  /knowledge/articles/{articleId}:
+    parameters:
+      - $ref: '#/components/parameters/ArticleId'
+    get:
+      operationId: getArticle
+      tags: [knowledge]
+      parameters:
+        - $ref: '#/components/parameters/LangQuery'
+      responses:
+        '200':
+          description: The published version in the language; expired legal content is marked and kept out of the AI.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Article'}
+        '404': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/knowledge/topics:
+    get:
+      operationId: staffListTopics
+      tags: [knowledge]
+      security:
+        - staffOidc: []
+      responses:
+        '200':
+          description: All topics.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 200
+                items: {$ref: '#/components/schemas/KnowledgeTopic'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: staffCreateTopic
+      tags: [knowledge]
+      summary: Admin, psychologist (self-help) or lawyer (rights).
+      security:
+        - staffOidc: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KnowledgeTopicInput'}
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KnowledgeTopic'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/knowledge/articles:
+    get:
+      operationId: staffListArticles
+      tags: [knowledge]
+      security:
+        - staffOidc: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: {$ref: '#/components/schemas/ArticleVersionStatus'}
+        - name: cursor
+          in: query
+          required: false
+          schema: {type: string, maxLength: 128}
+      responses:
+        '200':
+          description: Article versions, most recently changed first.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffArticlePage'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: staffCreateDraft
+      tags: [knowledge]
+      summary: Start a new article or a new version of an existing one (draft).
+      security:
+        - staffOidc: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ArticleDraftInput'}
+      responses:
+        '201':
+          description: Draft created.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffArticle'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/knowledge/versions/{versionId}:
+    parameters:
+      - $ref: '#/components/parameters/VersionId'
+    put:
+      operationId: staffUpdateDraft
+      tags: [knowledge]
+      summary: Edit a draft (only the author, only while draft).
+      security:
+        - staffOidc: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ArticleContent'}
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffArticle'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/knowledge/versions/{versionId}/submit:
+    parameters:
+      - $ref: '#/components/parameters/VersionId'
+    post:
+      operationId: staffSubmitForReview
+      tags: [knowledge]
+      security:
+        - staffOidc: []
+      responses:
+        '200':
+          description: In review.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffArticle'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/knowledge/versions/{versionId}/publish:
+    parameters:
+      - $ref: '#/components/parameters/VersionId'
+    post:
+      operationId: staffPublish
+      tags: [knowledge]
+      summary: Reviewer with the matching role (lawyer for rights, psychologist for self-help) publishes; not the author. Audited.
+      security:
+        - staffOidc: []
+      responses:
+        '200':
+          description: Published; the previous published version of this article and language is retired.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffArticle'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/knowledge/versions/{versionId}/reject:
+    parameters:
+      - $ref: '#/components/parameters/VersionId'
+    post:
+      operationId: staffReject
+      tags: [knowledge]
+      security:
+        - staffOidc: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  enum: [inaccurate, outdated_law, unclear, unsafe_advice, missing_source, other]
+      responses:
+        '200':
+          description: Back to draft.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffArticle'}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     memberSession:
@@ -860,6 +1126,26 @@ components:
       openIdConnectUrl: /.well-known/openid-configuration
       description: Staff sign-in through any OIDC provider (ADR-0008).
   parameters:
+    LangQuery:
+      name: lang
+      in: query
+      required: true
+      schema: {$ref: '#/components/schemas/Lang'}
+    TopicId:
+      name: topicId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ArticleId:
+      name: articleId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    VersionId:
+      name: versionId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     SosId:
       name: sosId
       in: path
@@ -1389,3 +1675,151 @@ components:
         ownerDisplayName: {type: string, maxLength: 40}
         childCard: {type: string, maxLength: 2000}
         sentAt: {type: string, format: date-time}
+
+    AssistantMessageInput:
+      type: object
+      additionalProperties: false
+      required: [text, scope]
+      properties:
+        text: {type: string, minLength: 1, maxLength: 2000}
+        scope:
+          type: string
+          enum: [general, rights]
+          description: rights limits retrieval to the legal part of the knowledge base.
+        lang: {$ref: '#/components/schemas/Lang'}
+    AssistantSuggestion:
+      type: string
+      enum: [none, tea, psychologist, rights, practice]
+    AssistantReply:
+      type: object
+      additionalProperties: false
+      required: [messageId, crisis, degraded, sources, suggest]
+      properties:
+        messageId: {type: string, format: uuid}
+        text: {type: string, maxLength: 2000, description: Absent when crisis is true (the client shows its fixed crisis text).}
+        crisis: {type: boolean}
+        crisisPhones:
+          type: array
+          maxItems: 10
+          items: {$ref: '#/components/schemas/CrisisPhone'}
+        escalationId: {type: string, format: uuid}
+        degraded: {type: boolean, description: "The AI provider failed; offer \"Contact a person\"."}
+        sources:
+          type: array
+          maxItems: 5
+          items: {$ref: '#/components/schemas/ArticleRef'}
+        suggest: {$ref: '#/components/schemas/AssistantSuggestion'}
+        disclaimerKey: {type: string, maxLength: 80, description: "Locale key, e.g. the lawyer disclaimer for rights answers."}
+        remainingToday: {type: integer, minimum: 0}
+    KnowledgeKind:
+      type: string
+      enum: [rights, selfhelp]
+    KnowledgeTopic:
+      type: object
+      additionalProperties: false
+      required: [id, kind, code, title]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/KnowledgeKind'}
+        code: {type: string, pattern: '^[a-z_]{2,40}$'}
+        title: {type: string, maxLength: 120, description: In the requested language; topic code when missing.}
+    KnowledgeTopicInput:
+      type: object
+      additionalProperties: false
+      required: [kind, code, titles]
+      properties:
+        kind: {$ref: '#/components/schemas/KnowledgeKind'}
+        code: {type: string, pattern: '^[a-z_]{2,40}$'}
+        titles:
+          type: object
+          additionalProperties: false
+          properties:
+            kk: {type: string, maxLength: 120}
+            ru: {type: string, maxLength: 120}
+            en: {type: string, maxLength: 120}
+    ArticleRef:
+      type: object
+      additionalProperties: false
+      required: [articleId, title]
+      properties:
+        articleId: {type: string, format: uuid}
+        title: {type: string, maxLength: 200}
+        sourceUrl: {type: string, format: uri, maxLength: 2048}
+    ArticleSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, status]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string, maxLength: 200}
+        status: {$ref: '#/components/schemas/ArticleAvailability'}
+    Article:
+      type: object
+      additionalProperties: false
+      required: [id, topicId, kind, lang, title, body, reviewedAt, status]
+      properties:
+        id: {type: string, format: uuid}
+        topicId: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/KnowledgeKind'}
+        lang: {$ref: '#/components/schemas/Lang'}
+        title: {type: string, maxLength: 200}
+        body: {type: string, maxLength: 20000, description: Markdown.}
+        sourceUrl: {type: string, format: uri, maxLength: 2048}
+        reviewedAt: {type: string, format: date-time}
+        status: {$ref: '#/components/schemas/ArticleAvailability'}
+        disclaimerKey: {type: string, maxLength: 80}
+    ArticleVersionStatus:
+      type: string
+      enum: [draft, in_review, published, retired]
+    ArticleAvailability:
+      type: string
+      description: being_rechecked means the review expired; the AI does not use the article.
+      enum: [current, being_rechecked]
+    ArticleContent:
+      type: object
+      additionalProperties: false
+      required: [title, body]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        body: {type: string, minLength: 1, maxLength: 20000}
+        sourceUrl: {type: string, format: uri, maxLength: 2048, description: Required for rights articles at publication.}
+    ArticleDraftInput:
+      type: object
+      additionalProperties: false
+      required: [topicId, lang, content]
+      properties:
+        articleId: {type: string, format: uuid, description: Absent for a new article.}
+        topicId: {type: string, format: uuid}
+        lang: {$ref: '#/components/schemas/Lang'}
+        content: {$ref: '#/components/schemas/ArticleContent'}
+    StaffArticle:
+      type: object
+      additionalProperties: false
+      required: [versionId, articleId, topicId, kind, lang, status, content, authorId, updatedAt]
+      properties:
+        versionId: {type: string, format: uuid}
+        articleId: {type: string, format: uuid}
+        topicId: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/KnowledgeKind'}
+        lang: {$ref: '#/components/schemas/Lang'}
+        status: {$ref: '#/components/schemas/ArticleVersionStatus'}
+        content: {$ref: '#/components/schemas/ArticleContent'}
+        authorId: {type: string, format: uuid}
+        reviewerId: {type: string, format: uuid}
+        reviewedAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        needsSync: {type: boolean, description: Another language version changed after this one.}
+        rejectReason:
+          type: string
+          enum: [inaccurate, outdated_law, unclear, unsafe_advice, missing_source, other]
+        updatedAt: {type: string, format: date-time}
+    StaffArticlePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/StaffArticle'}
+        nextCursor: {type: string, maxLength: 128}

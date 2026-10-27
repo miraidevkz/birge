@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:knowledge.ArticleExpired.v1",
+  "title": "knowledge.ArticleExpired",
+  "description": "A published version passed its review expiry; retrieval removes it and the reviewer gets a task.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "article_id",
+    "version_id",
+    "lang"
+  ],
+  "properties": {
+    "article_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "version_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "lang": {
+      "type": "string",
+      "enum": [
+        "kk",
+        "ru",
+        "en"
+      ]
+    }
+  }
+}

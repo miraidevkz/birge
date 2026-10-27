@@ -5,7 +5,7 @@ GOLANGCI_LINT := $(CURDIR)/bin/golangci-lint
 OAPI := $(GO) -C tools tool oapi-codegen
 PSQLDEF := $(CURDIR)/bin/psqldef
 # API area -> generated file; one oapi-codegen config per area in contracts/codegen/.
-API_AREAS := meta:internal/platform/meta/api.gen.go membership:internal/domains/membership/api/api.gen.go privacy:internal/domains/privacy/api/api.gen.go notify:internal/domains/notify/api/api.gen.go safety:internal/domains/safety/api/api.gen.go wellbeing:internal/domains/wellbeing/api/api.gen.go emergency:internal/domains/emergency/api/api.gen.go
+API_AREAS := meta:internal/platform/meta/api.gen.go membership:internal/domains/membership/api/api.gen.go privacy:internal/domains/privacy/api/api.gen.go notify:internal/domains/notify/api/api.gen.go safety:internal/domains/safety/api/api.gen.go wellbeing:internal/domains/wellbeing/api/api.gen.go emergency:internal/domains/emergency/api/api.gen.go assistant:internal/domains/assistant/api/api.gen.go knowledge:internal/domains/knowledge/api/api.gen.go
 
 .PHONY: check secrets lint api-gen api-check psqldef migration db-check go-check go-fmt-check go-vet go-test go-build sqlc sqlc-check
 
