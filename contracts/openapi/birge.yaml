@@ -1,0 +1,142 @@
+openapi: 3.1.0
+info:
+  title: Birge API
+  version: 0.1.0
+  description: |
+    HTTP API for the Birge mobile app and staff admin.
+    Changes within /v1 are additive only (ADR-0018). Contracts change before code (ADR-0005).
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: /v1
+tags:
+  - name: meta
+    description: Client configuration and compatibility.
+security:
+  - memberSession: []
+paths:
+  /meta/client-config:
+    get:
+      operationId: getClientConfig
+      tags: [meta]
+      summary: Configuration the client needs before sign-in.
+      description: |
+        Returns the minimum supported app version, feature flags and crisis phone numbers.
+        Reachable without a session and by blocked app versions, so the update screen can
+        always show crisis numbers (ADR-0018).
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AppVersion'
+        - $ref: '#/components/parameters/AppPlatform'
+      responses:
+        '200':
+          description: Client configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientConfig'
+        default:
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    memberSession:
+      type: http
+      scheme: bearer
+      description: Session token issued after member sign-in (ADR-0008).
+    staffOidc:
+      type: openIdConnect
+      openIdConnectUrl: /.well-known/openid-configuration
+      description: Staff sign-in through any OIDC provider (ADR-0008).
+  parameters:
+    AppVersion:
+      name: X-App-Version
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^\d+\.\d+\.\d+$'
+        maxLength: 32
+    AppPlatform:
+      name: X-App-Platform
+      in: header
+      required: true
+      schema:
+        type: string
+        enum: [ios, android, web]
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-generated UUIDv7; repeated requests with the same key have one effect.
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Problem:
+      description: Error (RFC 9457 problem details).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          maxLength: 256
+        title:
+          type: string
+          maxLength: 256
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+          maxLength: 1024
+        code:
+          type: string
+          description: Stable machine-readable error code.
+          maxLength: 64
+    ClientConfig:
+      type: object
+      additionalProperties: false
+      required: [minSupportedVersion, latestVersion, updateRequired, crisisPhones, features]
+      properties:
+        minSupportedVersion:
+          type: string
+          maxLength: 32
+        latestVersion:
+          type: string
+          maxLength: 32
+        updateRequired:
+          type: boolean
+          description: True when this app version is blocked (security issue or outside the support window).
+        crisisPhones:
+          type: array
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/CrisisPhone'
+        features:
+          type: object
+          description: Remote feature flags (ADR-0018).
+          maxProperties: 100
+          additionalProperties:
+            type: boolean
+    CrisisPhone:
+      type: object
+      additionalProperties: false
+      required: [number, label]
+      properties:
+        number:
+          type: string
+          pattern: '^[0-9+]{2,16}$'
+        label:
+          type: string
+          description: Localized label, e.g. "Emergency services".
+          maxLength: 120
