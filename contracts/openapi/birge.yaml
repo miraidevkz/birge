@@ -2335,6 +2335,12 @@ components:
         status: {type: string, enum: [visible, held, hidden, deleted]}
         mine: {type: boolean}
         createdAt: {type: string, format: date-time}
+        crisisPhones:
+          type: array
+          maxItems: 10
+          description: Only in the response to the author when the crisis lexicon fired; the message is held.
+          items: {$ref: '#/components/schemas/CrisisPhone'}
+        escalationId: {type: string, format: uuid, description: Only in the response to the author when the crisis lexicon fired.}
     ReportInput:
       type: object
       additionalProperties: false

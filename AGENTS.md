@@ -28,7 +28,7 @@ Skills live in [`.claude/skills/`](.claude/skills/). Load only the ones that mat
 3. **Personal data stays in the deployment's jurisdiction.** No third-party messengers as channels; push and SMS carry no content.
 4. **No secrets and no real data in the repository**, including history, fixtures, logs and screenshots.
 5. **Never suggest leaving a child** with anyone except the mother's trusted contacts or a member she has confirmed she met in person.
-6. **Never lose data.** No destructive migration, no deletion path except the audited account-deletion flow.
+6. **Never lose data.** No destructive migration. Data is deleted only by the audited account-deletion flow and by the retention periods an ADR sets (for example chat history, AI messages); retention clears content and keeps a tombstone where other records refer to it.
 
 If a task conflicts with any of these, stop and report.
 

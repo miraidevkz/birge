@@ -2,7 +2,7 @@ version: "2"
 sql:
   - engine: postgresql
     schema:
-      - db/schema/000_platform.sql
+      - db/schema/0000_platform.sql
     queries:
       - db/queries/platform_outbox.sql
       - db/queries/platform_timers.sql
@@ -32,7 +32,7 @@ sql:
               pointer: true
   - engine: postgresql
     schema:
-      - db/schema/100_membership.sql
+      - db/schema/0100_membership.sql
     queries:
       - db/queries/membership_blocks.sql
       - db/queries/membership_children.sql
@@ -63,7 +63,7 @@ sql:
               pointer: true
   - engine: postgresql
     schema:
-      - db/schema/200_notify.sql
+      - db/schema/0200_notify.sql
     queries:
       - db/queries/notify_notifications.sql
       - db/queries/notify_deliveries.sql
@@ -96,7 +96,7 @@ sql:
               type: RawMessage
   - engine: postgresql
     schema:
-      - db/schema/300_privacy.sql
+      - db/schema/0300_privacy.sql
     queries:
       - db/queries/privacy_consents.sql
       - db/queries/privacy_deletion.sql
@@ -124,7 +124,7 @@ sql:
               pointer: true
   - engine: postgresql
     schema:
-      - db/schema/400_safety.sql
+      - db/schema/0400_safety.sql
     queries:
       - db/queries/safety_escalations.sql
       - db/queries/safety_duty.sql
@@ -152,7 +152,7 @@ sql:
               pointer: true
   - engine: postgresql
     schema:
-      - db/schema/500_wellbeing.sql
+      - db/schema/0500_wellbeing.sql
     queries:
       - db/queries/wellbeing_schedules.sql
       - db/queries/wellbeing_checkins.sql
@@ -181,7 +181,7 @@ sql:
               pointer: true
   - engine: postgresql
     schema:
-      - db/schema/600_emergency.sql
+      - db/schema/0600_emergency.sql
     queries:
       - db/queries/emergency_sos.sql
       - db/queries/emergency_plans.sql
@@ -210,7 +210,7 @@ sql:
               pointer: true
   - engine: postgresql
     schema:
-      - db/schema/800_knowledge.sql
+      - db/schema/0800_knowledge.sql
     queries:
       - db/queries/knowledge_topics.sql
       - db/queries/knowledge_articles.sql
@@ -239,7 +239,7 @@ sql:
               pointer: true
   - engine: postgresql
     schema:
-      - db/schema/900_circle.sql
+      - db/schema/0900_circle.sql
     queries:
       - db/queries/circle_tea.sql
       - db/queries/circle_matches.sql
@@ -268,7 +268,7 @@ sql:
               pointer: true
   - engine: postgresql
     schema:
-      - db/schema/700_assistant.sql
+      - db/schema/0700_assistant.sql
     queries:
       - db/queries/assistant_messages.sql
     gen:

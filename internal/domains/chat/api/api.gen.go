@@ -152,11 +152,17 @@ type ChatMessage struct {
 	AuthorId   openapi_types.UUID `json:"authorId"`
 	AuthorName string             `json:"authorName"`
 	CreatedAt  time.Time          `json:"createdAt"`
-	Id         openapi_types.UUID `json:"id"`
-	Mine       *bool              `json:"mine,omitempty"`
-	RoomId     openapi_types.UUID `json:"roomId"`
-	Seq        int                `json:"seq"`
-	Status     ChatMessageStatus  `json:"status"`
+
+	// CrisisPhones Only in the response to the author when the crisis lexicon fired; the message is held.
+	CrisisPhones *[]CrisisPhone `json:"crisisPhones,omitempty"`
+
+	// EscalationId Only in the response to the author when the crisis lexicon fired.
+	EscalationId *openapi_types.UUID `json:"escalationId,omitempty"`
+	Id           openapi_types.UUID  `json:"id"`
+	Mine         *bool               `json:"mine,omitempty"`
+	RoomId       openapi_types.UUID  `json:"roomId"`
+	Seq          int                 `json:"seq"`
+	Status       ChatMessageStatus   `json:"status"`
 
 	// Text Absent when deleted or hidden.
 	Text *string `json:"text,omitempty"`
@@ -170,6 +176,13 @@ type ChatMessageInput struct {
 	// ClientId Client-generated UUIDv7; repeats are ignored.
 	ClientId openapi_types.UUID `json:"clientId"`
 	Text     string             `json:"text"`
+}
+
+// CrisisPhone defines model for CrisisPhone.
+type CrisisPhone struct {
+	// Label Localized label, e.g. "Emergency services".
+	Label  string `json:"label"`
+	Number string `json:"number"`
 }
 
 // Problem defines model for Problem.

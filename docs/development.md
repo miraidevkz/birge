@@ -144,7 +144,7 @@ BIRGE_DELIVERY_MODE=dev go run ./cmd/birge worker
 
 ### Change the database
 
-1. Edit your context's `db/schema/NNN_<context>.sql`.
+1. Edit your context's `db/schema/NNNN_<context>.sql`.
 2. Add or change queries in `db/queries/<context>_*.sql`, run `make sqlc`.
 3. `make -s migration name=<what_changed>` and save the output under the printed file name in `db/migrations/`.
 4. `make db-check`. Destructive changes are refused unless approved through an ADR ([ADR-0006](adr/0006-database-and-migrations.md), `.claude/skills/db-migration/SKILL.md`).
@@ -152,7 +152,7 @@ BIRGE_DELIVERY_MODE=dev go run ./cmd/birge worker
 ### Add a bounded context
 
 1. Write the contract (OpenAPI tag + `contracts/codegen/<context>.yaml` + a line in `API_AREAS` in the `Makefile`) and the event schemas.
-2. Create `db/schema/NNN_<context>.sql` and a block in `sqlc.yaml` scoped to that file.
+2. Create `db/schema/NNNN_<context>.sql` and a block in `sqlc.yaml` scoped to that file.
 3. Lay out `model/`, `service/`, `port/`, `adapter/`, `api/` (`.claude/skills/domain-module/SKILL.md`), and a `README.md` from [`docs/templates/context-readme.md`](templates/context-readme.md).
 4. `internal/archtest` enforces the boundaries on every test run.
 

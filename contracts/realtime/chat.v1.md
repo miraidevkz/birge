@@ -17,10 +17,10 @@ All frames are JSON objects with a `type`. Unknown types are ignored by both sid
 
 | type | fields | meaning |
 |---|---|---|
-| `message` | `ChatMessage` (see OpenAPI) | a new or changed message (hidden, deleted, restored) |
+| `message` | the fields of `ChatMessage` (see OpenAPI) next to `type` | a new or changed message (hidden, deleted, restored) |
 | `ack` | `clientId`, `messageId`, `seq`, `status` | result of a `send` (`visible` or `held`) |
 | `crisis` | `crisisPhones`, `escalationId` | sent only to the author when the crisis lexicon fires; nothing is shown to others |
-| `error` | `code` | `rate_limited`, `slow_mode`, `banned`, `not_member`, `invalid` |
+| `error` | `code` | `rate_limited`, `slow_mode`, `muted`, `banned`, `not_member`, `invalid` |
 | `pong` | — | keep-alive |
 
 ## Rules
