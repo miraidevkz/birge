@@ -65,11 +65,14 @@ func (s *Service) ModerateRoom(ctx context.Context, p auth.Principal, roomID uui
 	now := s.now()
 	var notices []model.Notice
 	err := s.Store.InTx(ctx, func(tx port.Tx) error {
-		room, err := tx.GetRoom(ctx, roomID, true)
+		// Who may moderate is settled before the room is loaded, so a caller
+		// who may not learns nothing about which rooms exist
+		// (docs/solved-problems.md, "Authorize before the lookup").
+		mod, err := s.moderatorFor(ctx, tx, p, roomID)
 		if err != nil {
 			return err
 		}
-		mod, err := s.moderatorFor(ctx, tx, p, roomID)
+		room, err := tx.GetRoom(ctx, roomID, true)
 		if err != nil {
 			return err
 		}

@@ -578,6 +578,11 @@ func TestMentorLimitsPostgres(t *testing.T) {
 	if err := e.svc.ModerateRoom(e.ctx, mentor, room.ID, hide); !errors.Is(err, model.ErrForbidden) {
 		t.Fatalf("unassigned mentor: %v", err)
 	}
+	// A caller who may not moderate learns nothing about unknown rooms:
+	// forbidden, not "not found".
+	if err := e.svc.ModerateRoom(e.ctx, a, uuid.New(), hide); !errors.Is(err, model.ErrForbidden) {
+		t.Fatalf("member on unknown room: %v", err)
+	}
 	e.members.SetMentor(mentor.MemberID, true)
 	if err := e.svc.AssignMentor(e.ctx, mentor, room.ID, mentor.MemberID, true); !errors.Is(err, model.ErrForbidden) {
 		t.Fatalf("member assigned a mentor: %v", err)

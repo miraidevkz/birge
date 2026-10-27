@@ -8,7 +8,7 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 - **A reference names its owner.** When a stored reference can point into different contexts, store its kind per owning context (`member`, `external` trusted contact, `staff` shift), so a later lookup asks the right owner. (a0515e5: a duty shift resolved as a trusted contact.)
 - **A record created lazily starts with optional fields.** A field required in the contract must exist from the first response; a member created on first sign-in has no name yet. (b163756)
 - **A record created lazily is deleted as a tombstone, not a delete.** Otherwise the next request of the same identity (a session still valid, or replayed after the identity was deleted) creates it again under a new ID. Keep the key column and a deletion marker, and refuse it on lookup. (account deletion: `membership.members.deleted_at`.)
-- **Authorize before the lookup.** A service method that loads a row by ID and only then checks the caller's role answers 404 for unknown IDs and 401/403 for known ones, so anyone can probe which IDs exist. Check that the caller may use the operation at all first, then load, then check the row-specific rule (kind, author). (knowledge: create draft, update, submit, publish, reject)
+- **Authorize before the lookup.** A service method that loads a row by ID and only then checks the caller's role answers 404 for unknown IDs and 401/403 for known ones, so anyone can probe which IDs exist. Check that the caller may use the operation at all first, then load, then check the row-specific rule (kind, author). (knowledge: create draft, update, submit, publish, reject; chat: room moderation)
 
 ## Transactions and delivery
 
