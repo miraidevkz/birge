@@ -66,6 +66,37 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [ ] One-time links for external contacts to view a sent emergency plan
 - [ ] Locale keys and SMS texts for every notification template in use
 
+## Remaining for the MVP (2026-10-27)
+
+### Backend completion
+- [ ] Wire chat, sharing, directory and S3 object storage (in progress)
+- [ ] Wire moderation: content sources per context, queue consumer
+- [ ] Apply moderation decisions: chat (held and reported messages, legal hold), membership (verification approves members, emits MemberVerified), member suspension for "block author"
+- [ ] Staff endpoints for mentor assignment, closing reports and legal hold
+- [ ] Account deletion in every context (consumers of `privacy.DataDeletionRequested`)
+- [ ] Analytics: pseudonymous events and the aggregate metrics of requirements § 9 with CSV export
+- [ ] Push (FCM/APNs) and SMS provider plugins
+- [ ] Knowledge: reviewer reminders before expiry, export of published content to `knowledge/`
+
+### Quality
+- [ ] Evaluation runner `cmd/birge-eval` and the AI stage in CI (ADR-0017)
+- [ ] Coverage ratchet in CI; tests for the weakest contexts
+- [ ] Remaining CI stages: govulncheck, contract diff against released snapshots, images with SBOM and signatures, Helm lint
+- [ ] Observability (ADR-0021): OpenTelemetry, metrics, the required alerts
+- [ ] ASVS checklist, threat-model review, load test of API and chat gateway
+
+### Deployment
+- [ ] Helm charts (k3s) and Compose: PostgreSQL (CloudNativePG), NATS, Kratos with the phone identity schema and courier hook, Hydra, Garage, TEI, Qdrant, OpenBao, observability
+- [ ] Backup and restore drill, key-recovery drill
+
+### Clients
+- [ ] TypeScript API client from the contract
+- [ ] Mom app (Expo / React Native, kk/ru/en, design system per ADR-0014)
+- [ ] Staff admin app
+
+### Documentation for people
+- [ ] Overview, end-to-end scenarios with diagrams, moderator handbook
+
 ## After the MVP
 
 - [ ] Documentation site built from the Markdown in `docs/` with mdBook (MPL-2.0), translated into kk, ru and en with mdbook-i18n-helpers (Apache-2.0, gettext `.po` files, so the same Weblate workflow as the app strings)
