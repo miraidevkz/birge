@@ -70,13 +70,13 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 
 ### Backend completion
 - [x] Wire chat, sharing, directory and S3 object storage
-- [ ] Wire moderation: content sources per context, queue consumer
-- [ ] Apply moderation decisions: chat (held and reported messages, legal hold), membership (verification approves members, emits MemberVerified), member suspension for "block author"
-- [ ] Staff endpoints for mentor assignment, closing reports and legal hold
+- [x] Wire moderation: content sources per context, queue consumer
+- [x] Apply moderation decisions: chat (held and reported messages, legal hold), membership (verification approves members, emits MemberVerified), member suspension for "block author"
+- [x] Staff endpoints for mentor assignment, closing reports and legal hold
 - [ ] Account deletion in every context (consumers of `privacy.DataDeletionRequested`)
 - [ ] Analytics: pseudonymous events and the aggregate metrics of requirements § 9 with CSV export
 - [ ] Push (FCM/APNs) and SMS provider plugins
-- [ ] Knowledge: reviewer reminders before expiry, export of published content to `knowledge/`
+- [x] Knowledge: reviewer review-due queue before expiry, export of published content to `knowledge/`
 
 ### Quality
 - [ ] Evaluation runner `cmd/birge-eval` and the AI stage in CI (ADR-0017)
