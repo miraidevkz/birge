@@ -46,6 +46,20 @@ func (q *Queries) AppendConsent(ctx context.Context, arg AppendConsentParams) (P
 	return i, err
 }
 
+const deleteMemberConsents = `-- name: DeleteMemberConsents :execrows
+DELETE FROM privacy.consent_history WHERE member_id = $1
+`
+
+// The only delete of consent history: account deletion, after the member's
+// key is shredded (privacy.DeletionDue).
+func (q *Queries) DeleteMemberConsents(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberConsents, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getLatestConsent = `-- name: GetLatestConsent :one
 SELECT id, member_id, type, version, granted, changed_at
 FROM privacy.consent_history

@@ -15,6 +15,7 @@ import (
 	"birge/internal/domains/privacy/model"
 	"birge/internal/domains/privacy/port"
 	privacystore "birge/internal/domains/privacy/store"
+	"birge/internal/platform/audit"
 	"birge/internal/platform/db"
 	"birge/internal/platform/outbox"
 	platformstore "birge/internal/platform/store"
@@ -125,6 +126,15 @@ func (t *postgresTx) MarkDeletionCompleted(ctx context.Context, memberID uuid.UU
 		return model.DeletionRequest{}, false, fmt.Errorf("mark deletion completed: %w", err)
 	}
 	return mapDeletion(row), true, nil
+}
+
+// EraseConsents deletes the member's consent history and records
+// privacy.member_deleted once, in this transaction.
+func (t *postgresTx) EraseConsents(ctx context.Context, memberID uuid.UUID) error {
+	if _, err := t.privacy.DeleteMemberConsents(ctx, memberID); err != nil {
+		return fmt.Errorf("delete consents: %w", err)
+	}
+	return audit.RecordMemberDeleted(ctx, t.platform, "privacy", memberID)
 }
 
 // PublishConsentChanged enqueues privacy.ConsentChanged in the outbox of this transaction.

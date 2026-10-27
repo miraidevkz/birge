@@ -133,6 +133,49 @@ func (q *Queries) CloseListing(ctx context.Context, arg CloseListingParams) (Sha
 	return i, err
 }
 
+const deleteMemberContactRequests = `-- name: DeleteMemberContactRequests :execrows
+DELETE FROM sharing.contact_requests
+WHERE requester_id = $1 OR listing_id = ANY($2::uuid[])
+`
+
+type DeleteMemberContactRequestsParams struct {
+	MemberID   uuid.UUID
+	ListingIds []uuid.UUID
+}
+
+func (q *Queries) DeleteMemberContactRequests(ctx context.Context, arg DeleteMemberContactRequestsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberContactRequests, arg.MemberID, arg.ListingIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberListings = `-- name: DeleteMemberListings :execrows
+DELETE FROM sharing.listings WHERE author_id = $1
+`
+
+func (q *Queries) DeleteMemberListings(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberListings, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberUploads = `-- name: DeleteMemberUploads :execrows
+DELETE FROM sharing.photo_uploads WHERE member_id = $1
+`
+
+// An upload of hers can be referenced only by her own listings, deleted above.
+func (q *Queries) DeleteMemberUploads(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberUploads, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getListing = `-- name: GetListing :one
 SELECT id, author_id, idempotency_key, type, category, title, description,
        district_id, photo_upload_id, photo_object_key, status, reject_reason,
@@ -362,6 +405,76 @@ func (q *Queries) ListActiveListings(ctx context.Context, arg ListActiveListings
 			&i.ClosedAt,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemberListingsForDeletion = `-- name: ListMemberListingsForDeletion :many
+
+SELECT id, photo_object_key FROM sharing.listings
+WHERE author_id = $1
+ORDER BY id
+FOR UPDATE
+`
+
+type ListMemberListingsForDeletionRow struct {
+	ID             uuid.UUID
+	PhotoObjectKey *string
+}
+
+// Account deletion: her listings with the contact requests on them, her
+// photo uploads and her contact requests on other listings. Object keys are
+// collected first; the objects are deleted by the sharing.DeleteObjects
+// timer after commit.
+func (q *Queries) ListMemberListingsForDeletion(ctx context.Context, memberID uuid.UUID) ([]ListMemberListingsForDeletionRow, error) {
+	rows, err := q.db.Query(ctx, listMemberListingsForDeletion, memberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemberListingsForDeletionRow
+	for rows.Next() {
+		var i ListMemberListingsForDeletionRow
+		if err := rows.Scan(&i.ID, &i.PhotoObjectKey); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemberUploadsForDeletion = `-- name: ListMemberUploadsForDeletion :many
+SELECT id, object_key, processed_object_key FROM sharing.photo_uploads
+WHERE member_id = $1
+ORDER BY id
+FOR UPDATE
+`
+
+type ListMemberUploadsForDeletionRow struct {
+	ID                 uuid.UUID
+	ObjectKey          string
+	ProcessedObjectKey *string
+}
+
+func (q *Queries) ListMemberUploadsForDeletion(ctx context.Context, memberID uuid.UUID) ([]ListMemberUploadsForDeletionRow, error) {
+	rows, err := q.db.Query(ctx, listMemberUploadsForDeletion, memberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMemberUploadsForDeletionRow
+	for rows.Next() {
+		var i ListMemberUploadsForDeletionRow
+		if err := rows.Scan(&i.ID, &i.ObjectKey, &i.ProcessedObjectKey); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

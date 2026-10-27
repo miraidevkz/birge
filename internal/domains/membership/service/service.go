@@ -348,8 +348,14 @@ func (s *Service) inMyTx(ctx context.Context, fn func(port.Tx, port.MemberRecord
 // ensure returns the member of identity, creating it and publishing
 // MemberRegistered exactly once (the unique identity_id decides between
 // concurrent first calls; the loser reads the winner's row).
+//
+// The tombstone of a deleted member is refused with model.ErrAccountDeleted
+// and never replaced by a new member: the identity stays deleted.
 func (s *Service) ensure(ctx context.Context, tx port.Tx, identity uuid.UUID, now time.Time) (port.MemberRecord, error) {
 	me, err := tx.MemberByIdentity(ctx, identity)
+	if err == nil && me.Deleted {
+		return port.MemberRecord{}, model.ErrAccountDeleted
+	}
 	if !errors.Is(err, model.ErrMemberNotFound) {
 		return me, err
 	}
@@ -365,7 +371,12 @@ func (s *Service) ensure(ctx context.Context, tx port.Tx, identity uuid.UUID, no
 			return me, err
 		}
 	}
-	return tx.MemberByIdentity(ctx, identity)
+	me, err = tx.MemberByIdentity(ctx, identity)
+	if err == nil && me.Deleted {
+		// The insert lost to the existing tombstone of this identity.
+		return port.MemberRecord{}, model.ErrAccountDeleted
+	}
+	return me, err
 }
 
 func (s *Service) load(ctx context.Context, tx port.Tx, rec port.MemberRecord) (model.Member, error) {

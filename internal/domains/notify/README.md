@@ -27,6 +27,7 @@ Delivery is not HTTP: JetStream consumer `notify.DeliveryRequested` → `service
 | Direction | Event | When | Guarantees |
 |---|---|---|---|
 | consumes | `notify.DeliveryRequested` v1 | another context needs a delivery | durable consumer; dedup via `platform.processed_events` (consumer name `notify.DeliveryRequested`); one notification per `(request_id, recipient_kind, recipient_ref)` |
+| consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `notify-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `notify.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 | publishes | none | | |
 
 ## Timers
@@ -64,6 +65,7 @@ Ports used by this context (wired in `internal/wiring`): `Recipients` (`Resolve`
 - `sms/guard` before every SMS; critical uses `AllowCritical` (no daily budget). Guard rejects for critical → `CriticalSMSBlocked` + delivery `failed` (not `skipped`).
 - Logs and events: IDs and event names only — never text, phones or push tokens (service + ports).
 - Marking critical read acknowledges and cancels CriticalSMS (service).
+- Account deletion (AGENTS.md N6): her devices, her inbox (`recipient_kind=member`, ref = her) and every notification whose `params` hold her ID (a plan she sent carries `owner_id`) are deleted with their deliveries; their pending push and SMS timers are cancelled in the same transaction. Nothing is tombstoned: a notification is a message to one recipient, no other record depends on it. One audit entry `notify.member_deleted` (actor system).
 
 ## Failure modes
 

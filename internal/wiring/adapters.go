@@ -441,6 +441,29 @@ func (k *KratosIdentities) Phone(ctx context.Context, identityID uuid.UUID) (str
 	return strings.TrimSpace(phone), nil
 }
 
+// DeleteIdentity deletes identityID (DELETE <admin>/admin/identities/{id}).
+// 204 and 404 both mean the identity is gone; anything else is an error
+// that carries the identity ID and status only, so the timer retries.
+func (k *KratosIdentities) DeleteIdentity(ctx context.Context, identityID uuid.UUID) error {
+	u := k.admin.JoinPath("admin", "identities", identityID.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u.String(), nil)
+	if err != nil {
+		return fmt.Errorf("kratos admin: %w", err)
+	}
+	resp, err := k.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("kratos admin: delete identity %s: %w", identityID, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxIdentityBodySize))
+	switch resp.StatusCode {
+	case http.StatusNoContent, http.StatusNotFound:
+		return nil
+	default:
+		return fmt.Errorf("kratos admin: delete identity %s: status %d", identityID, resp.StatusCode)
+	}
+}
+
 // LogPushSender is the development push sender: it logs the notification ID
 // and the channel and sends nothing. Never the token, never the parameters.
 type LogPushSender struct {

@@ -1,3 +1,7 @@
+-- Account deletion: her whole dialogue, before the retention period ends.
+-- name: DeleteMemberMessages :execrows
+DELETE FROM assistant.messages WHERE member_id = @member_id;
+
 -- name: InsertMemberTurn :one
 INSERT INTO assistant.messages (
     id, member_id, role, text_sealed, crisis_flag, idempotency_key, created_at

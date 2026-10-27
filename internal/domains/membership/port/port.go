@@ -36,6 +36,26 @@ type MemberRecord struct {
 	Roles           []string
 	SuspendedAt     *time.Time
 	SuspendedReason string
+	// Deleted marks the tombstone of a deleted member: only ID and
+	// IdentityID are meaningful; the identity must never get a new member.
+	Deleted bool
+}
+
+// MemberEraser erases a member's membership data on account deletion.
+type MemberEraser interface {
+	// EraseMember, in one transaction: deletes the member's children,
+	// verification requests and blocks in both directions, turns the member
+	// row into a tombstone (identity_id kept, everything else cleared),
+	// schedules model.TimerDeleteIdentity once and records the audit entry
+	// once. An unknown member is not an error. Repeating it changes nothing.
+	EraseMember(ctx context.Context, memberID uuid.UUID, now time.Time) error
+}
+
+// IdentityDeleter deletes an identity at the identity provider (Kratos admin API).
+type IdentityDeleter interface {
+	// DeleteIdentity returns nil when the identity is gone, including when
+	// it did not exist (404).
+	DeleteIdentity(ctx context.Context, identityID uuid.UUID) error
 }
 
 // ProfilePatch changes the fields that are set.

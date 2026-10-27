@@ -12,12 +12,36 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteMemberChildren = `-- name: DeleteMemberChildren :execrows
+DELETE FROM membership.children WHERE member_id = $1
+`
+
+func (q *Queries) DeleteMemberChildren(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberChildren, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberVerificationRequests = `-- name: DeleteMemberVerificationRequests :execrows
+DELETE FROM membership.verification_requests WHERE member_id = $1
+`
+
+func (q *Queries) DeleteMemberVerificationRequests(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberVerificationRequests, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getMemberByID = `-- name: GetMemberByID :one
 SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles,
-       m.suspended_at, m.suspended_reason
+       m.suspended_at, m.suspended_reason, m.deleted_at
 FROM membership.members m
 LEFT JOIN membership.districts d ON d.id = m.district_id
-WHERE m.id = $1
+WHERE m.id = $1 AND m.deleted_at IS NULL
 `
 
 type GetMemberByIDRow struct {
@@ -31,8 +55,11 @@ type GetMemberByIDRow struct {
 	Roles           []string
 	SuspendedAt     *time.Time
 	SuspendedReason *string
+	DeletedAt       *time.Time
 }
 
+// A deleted member's tombstone is not found by ID: for every other context
+// she no longer exists (shown as deleted).
 func (q *Queries) GetMemberByID(ctx context.Context, id uuid.UUID) (GetMemberByIDRow, error) {
 	row := q.db.QueryRow(ctx, getMemberByID, id)
 	var i GetMemberByIDRow
@@ -47,13 +74,14 @@ func (q *Queries) GetMemberByID(ctx context.Context, id uuid.UUID) (GetMemberByI
 		&i.Roles,
 		&i.SuspendedAt,
 		&i.SuspendedReason,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getMemberByIdentity = `-- name: GetMemberByIdentity :one
 SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles,
-       m.suspended_at, m.suspended_reason
+       m.suspended_at, m.suspended_reason, m.deleted_at
 FROM membership.members m
 LEFT JOIN membership.districts d ON d.id = m.district_id
 WHERE m.identity_id = $1
@@ -70,8 +98,11 @@ type GetMemberByIdentityRow struct {
 	Roles           []string
 	SuspendedAt     *time.Time
 	SuspendedReason *string
+	DeletedAt       *time.Time
 }
 
+// The tombstone of a deleted member is found by identity (deleted_at set),
+// so the identity is refused instead of getting a new member.
 func (q *Queries) GetMemberByIdentity(ctx context.Context, identityID uuid.UUID) (GetMemberByIdentityRow, error) {
 	row := q.db.QueryRow(ctx, getMemberByIdentity, identityID)
 	var i GetMemberByIdentityRow
@@ -86,6 +117,7 @@ func (q *Queries) GetMemberByIdentity(ctx context.Context, identityID uuid.UUID)
 		&i.Roles,
 		&i.SuspendedAt,
 		&i.SuspendedReason,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -114,11 +146,12 @@ func (q *Queries) InsertMember(ctx context.Context, arg InsertMemberParams) (uui
 const listVerifiedInDistrict = `-- name: ListVerifiedInDistrict :many
 SELECT id
 FROM membership.members
-WHERE district_id = $1 AND verification = 'verified' AND suspended_at IS NULL
+WHERE district_id = $1 AND verification = 'verified' AND suspended_at IS NULL AND deleted_at IS NULL
 ORDER BY id
 `
 
-// Verified and not suspended: a suspended member is hidden like a block (ADR-0019).
+// Verified, not suspended and not deleted: a suspended member is hidden like
+// a block (ADR-0019).
 func (q *Queries) ListVerifiedInDistrict(ctx context.Context, districtID *uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listVerifiedInDistrict, districtID)
 	if err != nil {
@@ -152,12 +185,35 @@ func (q *Queries) LockMember(ctx context.Context, id uuid.UUID) (uuid.UUID, erro
 	return id_2, err
 }
 
+const lockMemberForDeletion = `-- name: LockMemberForDeletion :one
+
+SELECT identity_id, deleted_at IS NOT NULL AS deleted
+FROM membership.members
+WHERE id = $1
+FOR UPDATE
+`
+
+type LockMemberForDeletionRow struct {
+	IdentityID uuid.UUID
+	Deleted    interface{}
+}
+
+// Account deletion (privacy.DataDeletionRequested). The member row stays as
+// a tombstone that keeps only id and identity_id, so the identity can never
+// create a new member (lazy creation) and a replayed old session is refused.
+func (q *Queries) LockMemberForDeletion(ctx context.Context, id uuid.UUID) (LockMemberForDeletionRow, error) {
+	row := q.db.QueryRow(ctx, lockMemberForDeletion, id)
+	var i LockMemberForDeletionRow
+	err := row.Scan(&i.IdentityID, &i.Deleted)
+	return i, err
+}
+
 const setMemberSuspension = `-- name: SetMemberSuspension :execrows
 UPDATE membership.members
 SET suspended_at = $1,
     suspended_reason = $2,
     updated_at = $3
-WHERE id = $4
+WHERE id = $4 AND deleted_at IS NULL
 `
 
 type SetMemberSuspensionParams struct {
@@ -167,6 +223,8 @@ type SetMemberSuspensionParams struct {
 	ID              uuid.UUID
 }
 
+// A deleted member's tombstone is never suspended (zero rows: the caller
+// treats it as nothing to do).
 func (q *Queries) SetMemberSuspension(ctx context.Context, arg SetMemberSuspensionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setMemberSuspension,
 		arg.SuspendedAt,
@@ -183,7 +241,7 @@ func (q *Queries) SetMemberSuspension(ctx context.Context, arg SetMemberSuspensi
 const setMemberVerification = `-- name: SetMemberVerification :execrows
 UPDATE membership.members
 SET verification = $1, updated_at = $2
-WHERE id = $3
+WHERE id = $3 AND deleted_at IS NULL
 `
 
 type SetMemberVerificationParams struct {
@@ -200,13 +258,36 @@ func (q *Queries) SetMemberVerification(ctx context.Context, arg SetMemberVerifi
 	return result.RowsAffected(), nil
 }
 
+const tombstoneMember = `-- name: TombstoneMember :execrows
+UPDATE membership.members
+SET display_name = NULL, district_id = NULL, verification = 'new', roles = '{}',
+    suspended_at = NULL, suspended_reason = NULL,
+    updated_at = $1, deleted_at = $1
+WHERE id = $2 AND deleted_at IS NULL
+`
+
+type TombstoneMemberParams struct {
+	Now time.Time
+	ID  uuid.UUID
+}
+
+// The suspension goes too (both columns, schema CHECK): the tombstone is
+// refused as deleted, not as suspended.
+func (q *Queries) TombstoneMember(ctx context.Context, arg TombstoneMemberParams) (int64, error) {
+	result, err := q.db.Exec(ctx, tombstoneMember, arg.Now, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateMemberProfile = `-- name: UpdateMemberProfile :execrows
 UPDATE membership.members
 SET display_name = coalesce($1::bytea, display_name),
     lang = coalesce($2::text, lang),
     district_id = coalesce($3::uuid, district_id),
     updated_at = $4
-WHERE id = $5
+WHERE id = $5 AND deleted_at IS NULL
 `
 
 type UpdateMemberProfileParams struct {

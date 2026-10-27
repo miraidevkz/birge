@@ -105,6 +105,11 @@ func (s *Service) SuspendAuthor(ctx context.Context, memberID uuid.UUID, reason 
 	now := s.clock.Now().UTC()
 	return s.store.InTx(ctx, func(tx port.Tx) error {
 		rec, err := tx.MemberByID(ctx, memberID)
+		if errors.Is(err, model.ErrMemberNotFound) {
+			// Unknown or deleted (account deletion): nothing to suspend. A
+			// no-op, not an error, or chat would redeliver the decision forever.
+			return nil
+		}
 		if err != nil {
 			return err
 		}

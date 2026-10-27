@@ -3,6 +3,33 @@
 -- contacts, plan sends) until the transaction ends.
 SELECT pg_advisory_xact_lock(hashtextextended(@scope_key::text, 0));
 
+-- Account deletion (the only deletion path of this context, AGENTS.md N6).
+
+-- name: ListMemberSosIDs :many
+SELECT id FROM emergency.sos_requests
+WHERE member_id = @member_id
+ORDER BY id
+FOR UPDATE;
+
+-- Responses to her requests and her own responses to other requests.
+-- name: DeleteMemberSosResponses :execrows
+DELETE FROM emergency.sos_responses
+WHERE sos_id = ANY(@sos_ids::uuid[]) OR responder_id = @member_id;
+
+-- name: DeleteMemberSos :execrows
+DELETE FROM emergency.sos_requests WHERE member_id = @member_id;
+
+-- name: DeleteMemberChildCard :execrows
+DELETE FROM emergency.child_cards WHERE member_id = @member_id;
+
+-- Her own contacts and the entries in which she is another owner's contact.
+-- name: DeleteMemberTrustedContacts :execrows
+DELETE FROM emergency.trusted_contacts
+WHERE owner_id = @member_id OR contact_member_id = @member_id;
+
+-- name: DeleteMemberPlanSends :execrows
+DELETE FROM emergency.plan_sends WHERE member_id = @member_id;
+
 -- name: CountSosSince :one
 SELECT count(*)::integer
 FROM emergency.sos_requests

@@ -201,6 +201,18 @@ func (t *memoryTx) MarkDeletionCompleted(_ context.Context, memberID uuid.UUID, 
 	return r, true, nil
 }
 
+// EraseConsents removes the member's consent history from memory.
+func (t *memoryTx) EraseConsents(_ context.Context, memberID uuid.UUID) error {
+	kept := make([]model.ConsentRecord, 0, len(t.s.consents))
+	for _, c := range t.s.consents {
+		if c.MemberID != memberID {
+			kept = append(kept, c)
+		}
+	}
+	t.s.consents = kept
+	return nil
+}
+
 // PublishConsentChanged records a privacy.ConsentChanged event in memory.
 func (t *memoryTx) PublishConsentChanged(_ context.Context, now time.Time, data model.ConsentChangedData) error {
 	t.s.events = append(t.s.events, MemoryEvent{

@@ -12,6 +12,20 @@ import (
 	"github.com/google/uuid"
 )
 
+const cancelMatchedTeaRequests = `-- name: CancelMatchedTeaRequests :execrows
+UPDATE circle.tea_requests
+SET status = 'cancelled'
+WHERE member_id = $1 AND status = 'open'
+`
+
+func (q *Queries) CancelMatchedTeaRequests(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelMatchedTeaRequests, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const cancelTeaRequest = `-- name: CancelTeaRequest :one
 UPDATE circle.tea_requests
 SET status = 'cancelled'
@@ -43,6 +57,50 @@ func (q *Queries) CancelTeaRequest(ctx context.Context, arg CancelTeaRequestPara
 		&i.ExpiresAt,
 	)
 	return i, err
+}
+
+const deleteMemberAcquaintances = `-- name: DeleteMemberAcquaintances :execrows
+DELETE FROM circle.acquaintances
+WHERE member_a = $1 OR member_b = $1
+`
+
+func (q *Queries) DeleteMemberAcquaintances(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberAcquaintances, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteUnmatchedTeaRequests = `-- name: DeleteUnmatchedTeaRequests :execrows
+DELETE FROM circle.tea_requests r
+WHERE r.member_id = $1
+  AND NOT EXISTS (
+    SELECT 1 FROM circle.matches m WHERE m.request_a_id = r.id OR m.request_b_id = r.id
+  )
+`
+
+func (q *Queries) DeleteUnmatchedTeaRequests(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUnmatchedTeaRequests, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const expireMemberProposedMatches = `-- name: ExpireMemberProposedMatches :execrows
+UPDATE circle.matches
+SET status = 'expired'
+WHERE (member_a = $1 OR member_b = $1) AND status = 'proposed'
+`
+
+// A proposal she can no longer answer ends for the other member.
+func (q *Queries) ExpireMemberProposedMatches(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, expireMemberProposedMatches, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const expireTeaRequest = `-- name: ExpireTeaRequest :one
@@ -222,6 +280,64 @@ func (q *Queries) InsertTeaRequest(ctx context.Context, arg InsertTeaRequestPara
 		&i.ExpiresAt,
 	)
 	return i, err
+}
+
+const listMemberMatchIDs = `-- name: ListMemberMatchIDs :many
+SELECT id FROM circle.matches
+WHERE member_a = $1 OR member_b = $1
+ORDER BY id
+FOR UPDATE
+`
+
+func (q *Queries) ListMemberMatchIDs(ctx context.Context, memberID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMemberMatchIDs, memberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemberTeaRequestIDs = `-- name: ListMemberTeaRequestIDs :many
+
+SELECT id FROM circle.tea_requests
+WHERE member_id = $1
+ORDER BY id
+FOR UPDATE
+`
+
+// Account deletion. Matches stay as tombstones for the other member's
+// history and keep the two requests they reference (foreign keys); every
+// other request of the member is deleted.
+func (q *Queries) ListMemberTeaRequestIDs(ctx context.Context, memberID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMemberTeaRequestIDs, memberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOpenTeaRequests = `-- name: ListOpenTeaRequests :many

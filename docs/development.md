@@ -167,6 +167,18 @@ BIRGE_DELIVERY_MODE=dev go run ./cmd/birge worker
 2. Create `db/schema/NNNN_<context>.sql` and a block in `sqlc.yaml` scoped to that file.
 3. Lay out `model/`, `service/`, `port/`, `adapter/`, `api/` (`.claude/skills/domain-module/SKILL.md`), and a `README.md` from [`docs/templates/context-readme.md`](templates/context-readme.md).
 4. `internal/archtest` enforces the boundaries on every test run.
+5. If the context stores anything about a member, add account deletion (below); otherwise `TestAccountDeletionEveryContext` fails on the new table.
+
+### Account deletion in a context
+
+`privacy.DataDeletionRequested` is consumed once per context by `wiring.DeletionConsumer` (durable `<context>-deletion`, dedup consumer `<context>.Deletion` in `platform.processed_events`), which calls the context's `service.Deletion.DeleteMember`. A context adds:
+
+- `port.MemberEraser` and an adapter `EraseMember` that runs in **one transaction**: delete her own rows; where another member's record refers to her, clear content and keep a tombstone; skip legal-hold items (log `DeletionSkippedLegalHold` with the record ID); cancel her pending timers (`timers.CancelSubjects`); write `audit.RecordMemberDeleted(ctx, q, "<context>", memberID)` (once, actor system).
+- Side effects outside the database (object storage, the identity provider) go into a timer created in that transaction (`sharing.DeleteObjects`, `membership.DeleteIdentity`).
+- It must be idempotent: a repeated run changes no row.
+- Its tables and member-like columns in `deletionPolicy` (`internal/wiring/deletion_e2e_test.go`), and the rules in its README.
+
+The privacy timer `privacy.DeletionDue` shreds the member key at `BIRGE_DELETION_DELAY` (default 24 h) and then deletes the consent history.
 
 ### Publish an event or schedule work
 

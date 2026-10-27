@@ -48,6 +48,9 @@ CREATE TABLE membership.members (
         CHECK (suspended_reason IS NULL OR suspended_reason ~ '^[a-z][a-z0-9_]{0,39}$'),
     created_at   timestamptz NOT NULL DEFAULT now(),
     updated_at   timestamptz NOT NULL DEFAULT now(),
+    -- Set by account deletion: the row stays as a tombstone with id and
+    -- identity_id only, so the identity is refused and never gets a new member.
+    deleted_at   timestamptz,
     CHECK ((suspended_at IS NULL) = (suspended_reason IS NULL))
 );
 

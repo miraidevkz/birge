@@ -25,6 +25,7 @@ Operations of tag `directory` in `contracts/openapi/birge.yaml`. All are member-
 |---|---|---|---|
 | publishes | `directory.ItemSubmitted` v1 | specialist or review submitted | outbox, same transaction; `object_type`, `object_id` only |
 | consumes | `moderation.Decided` v1 | kinds `specialist` and `review` | deduplicated via `platform.processed_events` (consumer `directory.moderation.Decided`) |
+| consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `directory-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `directory.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
 ## Timers
 
@@ -50,7 +51,8 @@ None beyond platform defaults.
 - Search shows only active specialists; ratings and latest reviews use only active reviews (queries + service).
 - Review author names are first name only (service `firstName` on `MemberInfo.DisplayName`).
 - No names or review text in events or logs (service; tests).
-- Nothing is deleted: status changes only.
+- Nothing is deleted in normal operation: status changes only. The only delete queries belong to account deletion.
+- Account deletion (AGENTS.md N6): her reviews are deleted. They are her own text and no other member's record hangs on them; a tombstone would need a nullable `content`, and it would keep a rating nobody can stand behind. Specialist cards she suggested describe the specialist, not her: active cards and cards other members reviewed stay as tombstones (`added_by` kept, and her name no longer resolves); her pending or rejected suggestions that nobody reviewed are deleted. A moderation item about a deleted object keeps only IDs and codes, and a later `moderation.Decided` for it is a no-op (not found). One transaction; one audit entry `directory.member_deleted` (actor system).
 
 ## Failure modes
 

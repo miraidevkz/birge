@@ -57,6 +57,7 @@ None. Fixed: page size 50 (contract maximum 100), summary 2000 characters.
 - **Shape of a decision:** database CHECKs mirror the service — reject needs a reason; block author and legal hold only for `report` and `chat_message`; open items carry no decision fields. Matrix in `model.ValidateDecision`, `model/model_test.go`.
 - **No content:** summaries are never stored, logged or put into events; `source_reason` is kept only when it is a short code. `TestNoContentInDatabaseOrLogsPostgres` checks items, outbox, audit and logs for fake content, also when a source fails.
 - **No deletion path:** items move from `open` to `decided` and stay.
+- **Account deletion needs nothing here**, so this context has no `privacy.DataDeletionRequested` consumer. An item holds only IDs and codes: the object ID (a listing, review, message or verification request, which its owning context deletes or tombstones), staff IDs and decision codes, never a member ID or content. Summaries are fetched from the owner when the queue is read, so an item about deleted content shows nothing personal. The items stay as the record of moderation decisions (legal hold, ADR-0019). The deletion SQL check in `internal/wiring/deletion_e2e_test.go` enforces that no item contains the deleted member's ID.
 
 ## Failure modes
 

@@ -52,6 +52,7 @@ Operations of tag `chat` in `contracts/openapi/birge.yaml`, plus the WebSocket `
 | publishes | `notify.DeliveryRequested` v1 | `chat.PushFanout` timer: one per eligible member (class `normal`, template `chat.new_message`, params `{room_id}`) | outbox, the timer's transaction; `request_id` = SHA-1 UUID of message + template + member |
 | consumes | `circle.MatchAccepted` v1, `emergency.SosResponseAccepted` v1, `sharing.ContactAccepted` v1 | open the direct room of the pair | JetStream durable consumer `chat-direct-rooms`; deduplicated by event id in `platform.processed_events` and by the room's natural key; needs only the chat database |
 | consumes | `moderation.Decided` v1 | kinds `chat_message` and `report` only | JetStream durable `chat-moderation-decided` (filter `birge.events.moderation.Decided`); deduplicated as `chat.moderation.Decided`; object gone → no-op; audits as role `system` with ActorID = moderation item id |
+| consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `chat-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `chat.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
 `moderation.Decided` application:
 
@@ -60,7 +61,7 @@ Operations of tag `chat` in `contracts/openapi/birge.yaml`, plus the WebSocket `
 | `chat_message` | held → `visible` (never restores a crisis hold); schedule push + fan-out when leaving held | → `hidden` |
 | `report` | `CloseReports` (dismiss) | → `hidden` + `CloseReports` |
 
-Also, when set on the decision: `legal_hold` → `SetLegalHold(true)`; `block_author` → `AuthorSuspender.SuspendAuthor` (membership; required when the flag is set — failure rolls back the chat transaction so the event is redelivered).
+Also, when set on the decision: `legal_hold` → `SetLegalHold(true)`; `block_author` → `AuthorSuspender.SuspendAuthor` (membership; required when the flag is set — failure rolls back the chat transaction so the event is redelivered; a deleted author is a no-op in membership, so it never redelivers forever).
 
 Fan-out (not domain events): NATS **core** subjects `birge.chat.room.<room id>` carry notices `{kind: new|changed|left, room_id, message_id?, seq?, member_id?}` — IDs only, published after commit, best-effort.
 
@@ -108,7 +109,8 @@ Gateway (`gateway.Options`): `QueueSize` 256, `AuthTimeout` 10 s, `IdleTimeout` 
 - **Blocks:** messages of members blocked either way are never listed, rendered for the WebSocket, reportable or pushed; lookups fail closed. `TestBlockedFilteringBothDirectionsPostgres`.
 - **Moderation:** staff all actions, mentors only hide/restore/mute_1h in rooms they are assigned to and only while holding the role; every applied action audited. `TestMentorLimitsPostgres`.
 - **Privacy:** texts sealed with the author's key; events, notices, logs and pushes carry IDs and codes only (tests check logs, outbox and tables for fake text). Display names are first names only; never phones.
-- **No deletion path:** members leave, reports close, retention clears the text and keeps the row.
+- **No deletion path in normal operation:** members leave, reports close, retention clears the text and keeps the row.
+- **Account deletion** (AGENTS.md N6, ADR-0019): every message she wrote becomes a "message deleted" tombstone like retention does (body cleared, `purged_at` set; row, sequence number and `author_id` stay), so the other members' history and the gap-free sequences stay whole; her name is no longer found in membership and is shown as deleted. Messages under legal hold are left untouched and logged as `DeletionSkippedLegalHold` with the message ID only. Her reports, room memberships, restrictions and mentor assignments are deleted; direct rooms with her stay for the other member; the push timers of the purged messages are cancelled. The crisis-escalation retry timer is left running (crisis path). One transaction; one audit entry `chat.member_deleted` (actor system).
 
 ## Failure modes
 

@@ -31,7 +31,7 @@ Operations of tag `circle` in `contracts/openapi/birge.yaml`. All are member-onl
 | publishes | `circle.MatchAccepted` v1 | both accept | outbox, same transaction; `match_id`, `member_a`, `member_b` only |
 | publishes | `circle.AcquaintanceEstablished` v1 | both confirm met | outbox, same transaction; member ids only |
 | publishes | `notify.DeliveryRequested` v1 | match proposed (`circle.match_proposed`); AskMet fires (`circle.ask_met`); class `normal`, recipient `member_id`, params `{match_id}` | outbox, same transaction; `request_id` = SHA-1 UUID of subject + template + member |
-| consumes | none | | |
+| consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `circle-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `circle.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
 ## Timers
 
@@ -72,7 +72,8 @@ Ports used by this context (wired in `internal/wiring`): `MemberInfo` (membershi
 - Pairing is greedy by descending score; ties by earlier request `created_at` then request id (model; unit tests).
 - Members stored canonically (`member_a < member_b`) on matches and acquaintances (table checks).
 - No names, districts, ages or needs in logs or events — IDs and event names only (service; tests).
-- Nothing is deleted: requests cancel/expire, matches change status (no delete queries).
+- Nothing is deleted in normal operation: requests cancel/expire, matches change status. The only delete queries belong to account deletion.
+- Account deletion (AGENTS.md N6): her acquaintances (both directions) and every tea request no match references are deleted. Her matches stay as tombstones, with the two requests they reference (foreign keys): the other member's history keeps the pair, and her name, read from membership at request time, is no longer found (shown as deleted). A `proposed` match ends as `expired` (she can no longer answer), a still-open matched request is `cancelled`; the `RequestExpire` and `AskMet` timers of her requests and matches are cancelled, all in one transaction. One audit entry `circle.member_deleted` (actor system).
 
 ## Failure modes
 

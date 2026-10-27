@@ -7,6 +7,7 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 - **Contexts other than membership key data by `MemberID`, never `IdentityID`.** The identity provider's ID only finds or creates the member. Using it elsewhere shreds a key that does not exist on account deletion and hides a member's own notifications. A member principal in tests carries both IDs, like the real middleware. (247f73e privacy, notify; d2cd720 safety.)
 - **A reference names its owner.** When a stored reference can point into different contexts, store its kind per owning context (`member`, `external` trusted contact, `staff` shift), so a later lookup asks the right owner. (a0515e5: a duty shift resolved as a trusted contact.)
 - **A record created lazily starts with optional fields.** A field required in the contract must exist from the first response; a member created on first sign-in has no name yet. (b163756)
+- **A record created lazily is deleted as a tombstone, not a delete.** Otherwise the next request of the same identity (a session still valid, or replayed after the identity was deleted) creates it again under a new ID. Keep the key column and a deletion marker, and refuse it on lookup. (account deletion: `membership.members.deleted_at`.)
 
 ## Transactions and delivery
 

@@ -28,7 +28,7 @@ Operations of tag `wellbeing` in `contracts/openapi/birge.yaml`:
 |---|---|---|---|
 | publishes | `wellbeing.CheckinCompleted` v1 | check-in stored (first idempotent write) | outbox, same transaction; payload is ids + flag only |
 | publishes | `notify.DeliveryRequested` v1 | reminder timer fires | outbox, same transaction as next-week schedule; template `wellbeing.checkin_reminder`, class `reminder` |
-| consumes | none | | |
+| consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `wellbeing-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `wellbeing.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
 ## Timers
 
@@ -64,6 +64,7 @@ Ports used by this context (wired in `internal/wiring`): `Sealer` (platform enve
 - Questionnaire answers: every configured question answered exactly once with a legal option (model).
 - PHQ-4 0–12, PSS-4 0–16 after reverse scoring (model).
 - Reminder next occurrence computed with `time.LoadLocation` in the deployment zone; no in-process cron (ADR-0020).
+- Account deletion (AGENTS.md N6): her schedule and every check-in are deleted and her pending `wellbeing.Reminder` timer is cancelled, in one transaction. Nothing is tombstoned: no other record refers to a check-in (the safety escalation it may have opened keeps only IDs). One audit entry `wellbeing.member_deleted` (actor system).
 
 ## Failure modes
 

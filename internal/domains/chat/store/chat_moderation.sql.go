@@ -55,6 +55,54 @@ func (q *Queries) CloseReports(ctx context.Context, arg CloseReportsParams) (int
 	return result.RowsAffected(), nil
 }
 
+const deleteMemberMentorships = `-- name: DeleteMemberMentorships :execrows
+DELETE FROM chat.room_mentors WHERE member_id = $1
+`
+
+func (q *Queries) DeleteMemberMentorships(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberMentorships, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberReports = `-- name: DeleteMemberReports :execrows
+DELETE FROM chat.reports WHERE reporter_id = $1
+`
+
+func (q *Queries) DeleteMemberReports(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberReports, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberRestrictions = `-- name: DeleteMemberRestrictions :execrows
+DELETE FROM chat.room_restrictions WHERE member_id = $1
+`
+
+func (q *Queries) DeleteMemberRestrictions(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberRestrictions, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberRoomMemberships = `-- name: DeleteMemberRoomMemberships :execrows
+DELETE FROM chat.room_members WHERE member_id = $1
+`
+
+func (q *Queries) DeleteMemberRoomMemberships(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberRoomMemberships, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getRestriction = `-- name: GetRestriction :one
 SELECT room_id, member_id, banned_at, muted_until, updated_at
 FROM chat.room_restrictions
@@ -127,6 +175,83 @@ func (q *Queries) IsRoomMentor(ctx context.Context, arg IsRoomMentorParams) (boo
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const listMemberHeldMessageIDs = `-- name: ListMemberHeldMessageIDs :many
+
+SELECT id FROM chat.messages
+WHERE author_id = $1 AND legal_hold
+ORDER BY id
+`
+
+// Account deletion. Her messages become "message deleted" tombstones (as
+// retention does) so per-room sequences and the other members' history stay
+// whole; messages under legal hold (ADR-0019) are left untouched. Direct
+// rooms stay: the other member keeps the conversation.
+func (q *Queries) ListMemberHeldMessageIDs(ctx context.Context, memberID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMemberHeldMessageIDs, memberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemberPurgeableMessageIDs = `-- name: ListMemberPurgeableMessageIDs :many
+SELECT id FROM chat.messages
+WHERE author_id = $1 AND NOT legal_hold AND purged_at IS NULL
+ORDER BY id
+FOR UPDATE
+`
+
+func (q *Queries) ListMemberPurgeableMessageIDs(ctx context.Context, memberID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMemberPurgeableMessageIDs, memberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const purgeMessagesByID = `-- name: PurgeMessagesByID :execrows
+UPDATE chat.messages
+SET body = NULL, purged_at = $1, updated_at = $1
+WHERE id = ANY($2::uuid[]) AND NOT legal_hold AND purged_at IS NULL
+`
+
+type PurgeMessagesByIDParams struct {
+	Now *time.Time
+	Ids []uuid.UUID
+}
+
+func (q *Queries) PurgeMessagesByID(ctx context.Context, arg PurgeMessagesByIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeMessagesByID, arg.Now, arg.Ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const removeRoomMentor = `-- name: RemoveRoomMentor :execrows

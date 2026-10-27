@@ -8,6 +8,13 @@ SET weekday = EXCLUDED.weekday,
     updated_at = EXCLUDED.updated_at
 RETURNING member_id, weekday, hour, enabled, updated_at;
 
+-- Account deletion.
+-- name: DeleteMemberSchedule :execrows
+DELETE FROM wellbeing.schedules WHERE member_id = @member_id;
+
+-- name: DeleteMemberCheckins :execrows
+DELETE FROM wellbeing.checkins WHERE member_id = @member_id;
+
 -- name: GetSchedule :one
 SELECT member_id, weekday, hour, enabled, updated_at
 FROM wellbeing.schedules

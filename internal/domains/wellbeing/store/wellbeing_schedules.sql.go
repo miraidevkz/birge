@@ -12,6 +12,31 @@ import (
 	"github.com/google/uuid"
 )
 
+const deleteMemberCheckins = `-- name: DeleteMemberCheckins :execrows
+DELETE FROM wellbeing.checkins WHERE member_id = $1
+`
+
+func (q *Queries) DeleteMemberCheckins(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberCheckins, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberSchedule = `-- name: DeleteMemberSchedule :execrows
+DELETE FROM wellbeing.schedules WHERE member_id = $1
+`
+
+// Account deletion.
+func (q *Queries) DeleteMemberSchedule(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberSchedule, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getSchedule = `-- name: GetSchedule :one
 SELECT member_id, weekday, hour, enabled, updated_at
 FROM wellbeing.schedules

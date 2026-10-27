@@ -205,6 +205,11 @@ func (s *Service) district(ctx context.Context, memberID uuid.UUID) *uuid.UUID {
 	ctx, cancel := context.WithTimeout(ctx, districtLookupTimeout)
 	defer cancel()
 	d, err := s.Directory.District(ctx, memberID)
+	if errors.Is(err, model.ErrNotFound) {
+		// Unknown or deleted member (account deletion; a late chat crisis
+		// retry): the escalation still opens, with no district.
+		return nil
+	}
 	if err != nil {
 		s.log().Warn("member district unavailable", "event", "DistrictLookupFailed", "error", err)
 		return nil

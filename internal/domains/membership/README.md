@@ -9,7 +9,7 @@ Members, children, verification requests, blocks (ADR-0019), staff suspension an
 | `cities` | Deployment city reference | none |
 | `districts` | Districts of a city | none |
 | `needs` | Special-needs codes (labels in locale files) | none |
-| `members` | One row per identity; created lazily on first authenticated call; optional `suspended_at` / `suspended_reason` from moderation `block_author` | `display_name` encrypted (Encryptor / ADR-0009); `identity_id` is an ID |
+| `members` | One row per identity; created lazily on first authenticated call; optional `suspended_at` / `suspended_reason` from moderation `block_author`; after account deletion a tombstone (`deleted_at`) | `display_name` encrypted (Encryptor / ADR-0009); `identity_id` is an ID |
 | `children` | Child cards (birth year + needs); no names | none |
 | `verification_requests` | Moderator verification queue (`reject_reason` when rejected) | none |
 | `blocks` | Mutual invisibility (ADR-0019) | none |
@@ -37,24 +37,26 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 | publishes | `membership.MemberRegistered` v1 | first authenticated request of a new identity | outbox, same transaction as member insert |
 | publishes | `membership.VerificationRequested` v1 | member asks for a call and none is pending | outbox, same transaction as pending request |
 | publishes | `membership.MemberVerified` v1 | verification approved via `moderation.Decided` | outbox, same transaction as approve; `verified_by` = moderation item id (Decided carries no staff id) |
-| consumes | `moderation.Decided` v1 | kind `verification` | JetStream durable `membership-moderation-decided`; deduplicated via `platform.processed_events` |
+| consumes | `moderation.Decided` v1 | kind `verification` | JetStream durable `membership-moderation-decided`; deduplicated via `platform.processed_events`; a deleted member (request gone) is a no-op |
+| consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `membership-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `membership.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
 ## Timers
 
 | Kind | Scheduled when | Handler does | Idempotency |
 |---|---|---|---|
-| none | | | |
+| `membership.DeleteIdentity` | account deletion turns the member into a tombstone (subject = Kratos identity ID, due at once) | `service.Deletion.DeleteIdentity`: `DELETE /admin/identities/{id}` on the Kratos admin API | 204 and 404 are done; any other answer fails and the timer retries with backoff; scheduled only by the run that creates the tombstone |
 
 ## Service API for other contexts
 
 | Function | Callers may rely on |
 |---|---|
-| `service.Service.IsBlocked(ctx, a, b)` | Symmetric block check (either direction) **or** either member suspended. No authorization. |
-| `service.Service.Member(ctx, id)` | Member by ID or `model.ErrMemberNotFound`. No authorization; display name is opened for the caller. |
-| `service.Service.ListVerifiedInDistrict(ctx, districtID)` | IDs of verified, non-suspended members in the district. No authorization. |
-| `service.Service.SuspendAuthor(ctx, memberID, reason, itemID)` | System suspension from chat after `block_author`; idempotent; audited as `system`. |
+| `service.Service.IsBlocked(ctx, a, b)` | Symmetric block check (either direction) **or** either member suspended. A deleted member is not "blocked" (her tombstones stay visible). No authorization. |
+| `service.Service.Member(ctx, id)` | Member by ID or `model.ErrMemberNotFound` (also for a deleted member: callers show her as deleted). No authorization; display name is opened for the caller. |
+| `service.Service.ListVerifiedInDistrict(ctx, districtID)` | IDs of verified, non-suspended, non-deleted members in the district. No authorization. |
+| `service.Service.SuspendAuthor(ctx, memberID, reason, itemID)` | System suspension from chat after `block_author`; idempotent; audited as `system`. A deleted member is a no-op. |
 | `service.Service.VerificationSummary(ctx, requestID)` | First name and district id for the moderation ContentSource; `ErrMemberNotFound` when gone. |
 | `service.Service.ApplyModerationDecided` | Applies `moderation.Decided` for kind verification. |
+| `service.Deletion.DeleteMember(ctx, memberID)` | Account deletion (system only, no principal). Idempotent; one transaction. |
 
 ## Configuration
 
@@ -78,6 +80,7 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 - At most one pending verification request per member (partial unique index + service).
 - Blocks: no self-block, idempotent, mutual invisibility via `IsBlocked` (schema CHECK + service; ADR-0019).
 - Suspension: `suspended_at` and `suspended_reason` both set or both null; suspended members get 403 `member_suspended` on member routes and are hidden like a block.
+- Account deletion (AGENTS.md N6, ADR-0009): children, verification requests and blocks in both directions are deleted; the member row becomes a tombstone that keeps only `id` and `identity_id` (`display_name`, district, roles and suspension cleared, `deleted_at` set) and is never deleted. A deleted account has no crisis exemption: `CrisisMemberID` refuses it with 401 like every other route. `moderation.Decided` for her (verification, `SuspendAuthor`) is a no-op. Why: the identity must stay refused. Every session of it gets 401 (`model.ErrAccountDeleted` in `ensure` and the session middleware) and lazy creation never makes a new member for it, also after the Kratos identity is gone and an old token is replayed. `Member(id)` does not find a tombstone. One audit entry `membership.member_deleted` (actor system). A moderation item about a deleted verification request keeps only its IDs.
 
 ## Failure modes
 
@@ -85,10 +88,11 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 - Outbox/broker lag: events stay in the outbox until the relay publishes (ADR-0007); domain rows are already committed.
 - Kratos unreachable: auth gateway returns upstream/timeout errors; session middleware returns 503 (platform `session`).
 - Encryptor unavailable: profile updates that set a name fail; reads that need Open fail.
+- Kratos admin API down during deletion: the member data is already erased; `membership.DeleteIdentity` retries until Kratos answers, and the tombstone refuses the identity meanwhile.
 
 ## Tests
 
-- Unit: `service/service_test.go`, `model/model_test.go`, `authgw/authgw_test.go`, `api/server_test.go` — lazy create, idempotent children/verification/blocks, authgw PoW and rate limits, HTTP mapping.
+- Unit: `service/service_test.go`, `service/deletion_test.go` (tombstone refuses the identity, retries), `model/model_test.go`, `authgw/authgw_test.go`, `api/server_test.go` — lazy create, idempotent children/verification/blocks, authgw PoW and rate limits, HTTP mapping.
 - Integration: `adapter/postgres_integration_test.go` — PostgreSQL store + outbox with `testinfra.Postgres`.
 - Wiring: `internal/wiring/moderation_e2e_test.go` — verification approve and suspension after `block_author`.
 

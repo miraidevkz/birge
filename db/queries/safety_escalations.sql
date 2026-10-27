@@ -37,6 +37,14 @@ WHERE id = @id
   AND taken_by = @taken_by
 RETURNING id, member_id, source, status, district_id, opened_at, taken_by, taken_at, outcome, note, closed_at;
 
+-- Account deletion: the escalation stays as a shell for staff accountability
+-- (IDs, source, status, times, outcome); the note and the district go.
+-- name: ClearMemberEscalations :execrows
+UPDATE safety.escalations
+SET note = NULL, district_id = NULL
+WHERE member_id = @member_id
+  AND (note IS NOT NULL OR district_id IS NOT NULL);
+
 -- name: ListEscalations :many
 SELECT id, member_id, source, status, district_id, opened_at, taken_by, taken_at, outcome, note, closed_at
 FROM safety.escalations

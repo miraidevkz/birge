@@ -1,3 +1,36 @@
+-- Account deletion. Her messages become "message deleted" tombstones (as
+-- retention does) so per-room sequences and the other members' history stay
+-- whole; messages under legal hold (ADR-0019) are left untouched. Direct
+-- rooms stay: the other member keeps the conversation.
+
+-- name: ListMemberHeldMessageIDs :many
+SELECT id FROM chat.messages
+WHERE author_id = @member_id AND legal_hold
+ORDER BY id;
+
+-- name: ListMemberPurgeableMessageIDs :many
+SELECT id FROM chat.messages
+WHERE author_id = @member_id AND NOT legal_hold AND purged_at IS NULL
+ORDER BY id
+FOR UPDATE;
+
+-- name: PurgeMessagesByID :execrows
+UPDATE chat.messages
+SET body = NULL, purged_at = @now, updated_at = @now
+WHERE id = ANY(@ids::uuid[]) AND NOT legal_hold AND purged_at IS NULL;
+
+-- name: DeleteMemberReports :execrows
+DELETE FROM chat.reports WHERE reporter_id = @member_id;
+
+-- name: DeleteMemberRoomMemberships :execrows
+DELETE FROM chat.room_members WHERE member_id = @member_id;
+
+-- name: DeleteMemberRestrictions :execrows
+DELETE FROM chat.room_restrictions WHERE member_id = @member_id;
+
+-- name: DeleteMemberMentorships :execrows
+DELETE FROM chat.room_mentors WHERE member_id = @member_id;
+
 -- name: GetRestriction :one
 SELECT room_id, member_id, banned_at, muted_until, updated_at
 FROM chat.room_restrictions

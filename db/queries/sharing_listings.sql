@@ -1,3 +1,31 @@
+-- Account deletion: her listings with the contact requests on them, her
+-- photo uploads and her contact requests on other listings. Object keys are
+-- collected first; the objects are deleted by the sharing.DeleteObjects
+-- timer after commit.
+
+-- name: ListMemberListingsForDeletion :many
+SELECT id, photo_object_key FROM sharing.listings
+WHERE author_id = @member_id
+ORDER BY id
+FOR UPDATE;
+
+-- name: ListMemberUploadsForDeletion :many
+SELECT id, object_key, processed_object_key FROM sharing.photo_uploads
+WHERE member_id = @member_id
+ORDER BY id
+FOR UPDATE;
+
+-- name: DeleteMemberContactRequests :execrows
+DELETE FROM sharing.contact_requests
+WHERE requester_id = @member_id OR listing_id = ANY(@listing_ids::uuid[]);
+
+-- name: DeleteMemberListings :execrows
+DELETE FROM sharing.listings WHERE author_id = @member_id;
+
+-- An upload of hers can be referenced only by her own listings, deleted above.
+-- name: DeleteMemberUploads :execrows
+DELETE FROM sharing.photo_uploads WHERE member_id = @member_id;
+
 -- name: InsertListing :one
 INSERT INTO sharing.listings (
     id, author_id, idempotency_key, type, category, title, description,

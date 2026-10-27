@@ -12,6 +12,23 @@ import (
 	"github.com/google/uuid"
 )
 
+const clearMemberEscalations = `-- name: ClearMemberEscalations :execrows
+UPDATE safety.escalations
+SET note = NULL, district_id = NULL
+WHERE member_id = $1
+  AND (note IS NOT NULL OR district_id IS NOT NULL)
+`
+
+// Account deletion: the escalation stays as a shell for staff accountability
+// (IDs, source, status, times, outcome); the note and the district go.
+func (q *Queries) ClearMemberEscalations(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, clearMemberEscalations, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const closeEscalation = `-- name: CloseEscalation :one
 UPDATE safety.escalations
 SET status = 'closed', outcome = $1, note = $2::bytea, closed_at = $3

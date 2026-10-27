@@ -46,7 +46,7 @@ Operations of tag `emergency` in `contracts/openapi/birge.yaml`. All are member-
 | publishes | `emergency.SosClosed` v1 | close by author or by the timer | outbox, same transaction |
 | publishes | `emergency.SosResponseAccepted` v1 | first acceptance of a response | outbox, same transaction |
 | publishes | `emergency.PlanSent` v1 | plan sent (not on replay) | outbox, same transaction |
-| consumes | none | | |
+| consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `emergency-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `emergency.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
 ## Timers
 
@@ -84,7 +84,8 @@ Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS 
 - The shared plan is readable only by a confirmed, active member contact after a send, and every read is audited first (service; tests).
 - Sealed fields only: SOS text, child card, external name and phone (service; schema comments; `TestRaiseSosAtomicPostgres` checks with the real envelope that no plaintext is in the tables or the outbox).
 - No text, name or phone in events, notifications or logs; logs carry IDs and event names (service; `newEnv` cleanup in unit tests checks logs and all event payloads).
-- Nothing is deleted: SOS are closed, contacts removed with `removed_at` (no delete query exists).
+- Nothing is deleted in normal operation: SOS are closed, contacts removed with `removed_at`. The only delete queries belong to account deletion.
+- Account deletion (AGENTS.md N6): her SOS requests with every response to them, her own responses to other members' requests, her child card, her trusted contacts, the entries in which she is another owner's member contact, and her plan sends are deleted; the auto-close timers of her requests are cancelled, all in one transaction. Nothing is tombstoned: the other owner's contact list simply loses her, and a direct chat opened from an accepted response is kept by chat. One audit entry `emergency.member_deleted` (actor system); earlier `view_shared_plan` audit entries stay (append-only).
 
 ## Failure modes
 

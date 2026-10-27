@@ -115,6 +115,75 @@ func (q *Queries) CountSosSince(ctx context.Context, arg CountSosSinceParams) (i
 	return column_1, err
 }
 
+const deleteMemberChildCard = `-- name: DeleteMemberChildCard :execrows
+DELETE FROM emergency.child_cards WHERE member_id = $1
+`
+
+func (q *Queries) DeleteMemberChildCard(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberChildCard, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberPlanSends = `-- name: DeleteMemberPlanSends :execrows
+DELETE FROM emergency.plan_sends WHERE member_id = $1
+`
+
+func (q *Queries) DeleteMemberPlanSends(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberPlanSends, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberSos = `-- name: DeleteMemberSos :execrows
+DELETE FROM emergency.sos_requests WHERE member_id = $1
+`
+
+func (q *Queries) DeleteMemberSos(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberSos, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberSosResponses = `-- name: DeleteMemberSosResponses :execrows
+DELETE FROM emergency.sos_responses
+WHERE sos_id = ANY($1::uuid[]) OR responder_id = $2
+`
+
+type DeleteMemberSosResponsesParams struct {
+	SosIds   []uuid.UUID
+	MemberID uuid.UUID
+}
+
+// Responses to her requests and her own responses to other requests.
+func (q *Queries) DeleteMemberSosResponses(ctx context.Context, arg DeleteMemberSosResponsesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberSosResponses, arg.SosIds, arg.MemberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberTrustedContacts = `-- name: DeleteMemberTrustedContacts :execrows
+DELETE FROM emergency.trusted_contacts
+WHERE owner_id = $1 OR contact_member_id = $1
+`
+
+// Her own contacts and the entries in which she is another owner's contact.
+func (q *Queries) DeleteMemberTrustedContacts(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberTrustedContacts, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getSos = `-- name: GetSos :one
 SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason
 FROM emergency.sos_requests
@@ -290,6 +359,35 @@ func (q *Queries) InsertSosResponse(ctx context.Context, arg InsertSosResponsePa
 		&i.AcceptedAt,
 	)
 	return i, err
+}
+
+const listMemberSosIDs = `-- name: ListMemberSosIDs :many
+
+SELECT id FROM emergency.sos_requests
+WHERE member_id = $1
+ORDER BY id
+FOR UPDATE
+`
+
+// Account deletion (the only deletion path of this context, AGENTS.md N6).
+func (q *Queries) ListMemberSosIDs(ctx context.Context, memberID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMemberSosIDs, memberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listMySos = `-- name: ListMySos :many

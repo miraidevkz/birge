@@ -67,7 +67,9 @@ func (s *Service) LiftSuspension(ctx context.Context, memberID uuid.UUID) error 
 // suspension. Only the crisis and own-data routes use it (wiring
 // crisisExempt): a suspended member keeps the help button, SOS to her own
 // trusted contacts, the emergency plan, consents and deletion
-// (non-negotiable 1). Everything else answers 403 member_suspended.
+// (non-negotiable 1). Everything else answers 403 member_suspended. A
+// deleted account is refused here too (model.ErrAccountDeleted from ensure):
+// it has no crisis exemption.
 func (s *Service) CrisisMemberID(ctx context.Context) (uuid.UUID, error) {
 	identity, err := identityOf(ctx)
 	if err != nil {

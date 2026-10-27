@@ -31,6 +31,19 @@ func (q *Queries) CountMemberTurnsSince(ctx context.Context, arg CountMemberTurn
 	return n, err
 }
 
+const deleteMemberMessages = `-- name: DeleteMemberMessages :execrows
+DELETE FROM assistant.messages WHERE member_id = $1
+`
+
+// Account deletion: her whole dialogue, before the retention period ends.
+func (q *Queries) DeleteMemberMessages(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberMessages, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getAssistantTurnForUpdate = `-- name: GetAssistantTurnForUpdate :one
 SELECT id, helped
 FROM assistant.messages

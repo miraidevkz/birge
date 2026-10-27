@@ -62,6 +62,39 @@ func (q *Queries) AverageActiveRating(ctx context.Context, specialistID uuid.UUI
 	return i, err
 }
 
+const deleteMemberReviews = `-- name: DeleteMemberReviews :execrows
+
+DELETE FROM directory.reviews WHERE author_id = $1
+`
+
+// Account deletion. Her reviews are her own text with nothing of another
+// member around them: deleted. A specialist card she suggested is about the
+// specialist, not her: active cards and cards other members reviewed stay
+// (tombstone, added_by kept); her pending or rejected suggestions nobody
+// reviewed are deleted.
+func (q *Queries) DeleteMemberReviews(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberReviews, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteMemberUnusedSpecialists = `-- name: DeleteMemberUnusedSpecialists :execrows
+DELETE FROM directory.specialists s
+WHERE s.added_by = $1
+  AND s.status <> 'active'
+  AND NOT EXISTS (SELECT 1 FROM directory.reviews r WHERE r.specialist_id = s.id)
+`
+
+func (q *Queries) DeleteMemberUnusedSpecialists(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberUnusedSpecialists, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getReview = `-- name: GetReview :one
 SELECT id, specialist_id, author_id, rating, content, status, reject_reason, created_at, updated_at
 FROM directory.reviews

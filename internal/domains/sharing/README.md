@@ -32,6 +32,7 @@ Operations of tag `sharing` in `contracts/openapi/birge.yaml`. All are member-on
 | publishes | `sharing.ContactAccepted` v1 | author accepts | outbox, same transaction; listing/author/requester ids |
 | publishes | `notify.DeliveryRequested` v1 | contact request; listing decided (`sharing.listing_decided`); class `normal` | outbox, same transaction; deterministic `request_id` |
 | consumes | `moderation.Decided` v1 | kind `listing` | deduplicated via `platform.processed_events` (consumer `sharing.moderation.Decided`) |
+| consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `sharing-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `sharing.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
 ## Timers
 
@@ -39,6 +40,7 @@ Operations of tag `sharing` in `contracts/openapi/birge.yaml`. All are member-on
 |---|---|---|---|
 | `sharing.ProcessPhoto` | listing created with a photo; due = now; subject = listing id | decode upload, re-encode JPEG ≤ 1600 px, strip metadata, store processed key, delete original; try activate if approved | skipped when already processed/failed; permanent decode failure marks failed and returns nil |
 | `sharing.AutoClose` | listing activated; due = `closes_at` (`ListingTTL`, 30d); subject = listing id | close if still active | cancelled when the author closes |
+| `sharing.DeleteObjects` | account deletion removed rows that held object keys; due = now; subject = member id; payload `{keys}` | `service.Deletion.DeleteObjects`: delete every key from object storage | a missing object is not an error, so a retry deletes all keys again; any failure (also storage not configured) retries with backoff |
 
 ## Service API for other contexts
 
@@ -64,7 +66,8 @@ Ports used by this context: `MemberInfo`, `Blocks`, `ObjectStore` (`internal/pla
 - Listings show only processed photos; unprocessed or failed photo keeps the listing pending even after approval (service + schema).
 - Contact requests are unique per listing+requester (unique index + service).
 - No titles, descriptions or photo bytes in events, notifications or logs (service; tests).
-- Nothing is deleted: listings close, contact requests change status (no delete queries). Photo original objects are deleted from object storage after processing (ADR-0015).
+- Nothing is deleted in normal operation: listings close, contact requests change status. Photo original objects are deleted from object storage after processing (ADR-0015). The only delete queries belong to account deletion.
+- Account deletion (AGENTS.md N6): her listings with every contact request on them, her contact requests on other listings and her photo uploads are deleted, and the timers of her listings are cancelled, in one transaction; the object keys those rows held go into the `sharing.DeleteObjects` timer created in the same transaction, because object I/O is a side effect outside it (docs/solved-problems.md). Nothing is tombstoned: a listing is her own offer, and a direct chat opened from it is kept by chat. One audit entry `sharing.member_deleted` (actor system).
 
 ## Failure modes
 

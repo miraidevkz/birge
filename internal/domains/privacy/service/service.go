@@ -238,7 +238,8 @@ func (s *Service) RequestDeletion(ctx context.Context, memberID uuid.UUID) (mode
 	return out, err
 }
 
-// HandleDeletionDue shreds the member key then marks the request completed.
+// HandleDeletionDue shreds the member key, then deletes her consent history
+// and marks the request completed in one transaction.
 // Order matters: shred first so a crash after Shred still retries mark-completed,
 // while a completed row never means the DEK is still live. Idempotent: a
 // completed request skips Shred.
@@ -288,6 +289,13 @@ func (s *Service) HandleDeletionDue(ctx context.Context, memberID uuid.UUID) err
 
 	now := s.Clock.Now().UTC()
 	err = s.Store.InTx(ctx, func(tx port.Tx) error {
+		// The consent history goes only now, after the shred: until the key
+		// is gone the consents are the record of what she agreed to. Same
+		// transaction as mark-completed, so a completed request never
+		// leaves consents behind.
+		if err := tx.EraseConsents(ctx, memberID); err != nil {
+			return err
+		}
 		_, marked, err := tx.MarkDeletionCompleted(ctx, memberID, now)
 		if err != nil {
 			return err

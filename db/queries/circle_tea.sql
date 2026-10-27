@@ -1,3 +1,41 @@
+-- Account deletion. Matches stay as tombstones for the other member's
+-- history and keep the two requests they reference (foreign keys); every
+-- other request of the member is deleted.
+
+-- name: ListMemberTeaRequestIDs :many
+SELECT id FROM circle.tea_requests
+WHERE member_id = @member_id
+ORDER BY id
+FOR UPDATE;
+
+-- name: ListMemberMatchIDs :many
+SELECT id FROM circle.matches
+WHERE member_a = @member_id OR member_b = @member_id
+ORDER BY id
+FOR UPDATE;
+
+-- name: DeleteUnmatchedTeaRequests :execrows
+DELETE FROM circle.tea_requests r
+WHERE r.member_id = @member_id
+  AND NOT EXISTS (
+    SELECT 1 FROM circle.matches m WHERE m.request_a_id = r.id OR m.request_b_id = r.id
+  );
+
+-- name: CancelMatchedTeaRequests :execrows
+UPDATE circle.tea_requests
+SET status = 'cancelled'
+WHERE member_id = @member_id AND status = 'open';
+
+-- A proposal she can no longer answer ends for the other member.
+-- name: ExpireMemberProposedMatches :execrows
+UPDATE circle.matches
+SET status = 'expired'
+WHERE (member_a = @member_id OR member_b = @member_id) AND status = 'proposed';
+
+-- name: DeleteMemberAcquaintances :execrows
+DELETE FROM circle.acquaintances
+WHERE member_a = @member_id OR member_b = @member_id;
+
 -- name: InsertTeaRequest :one
 -- Does nothing (no row) when the member already used this Idempotency-Key.
 -- A second open request for the same member hits tea_requests_one_open_uidx.

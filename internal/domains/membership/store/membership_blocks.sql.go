@@ -39,6 +39,20 @@ func (q *Queries) DeleteBlock(ctx context.Context, arg DeleteBlockParams) error 
 	return err
 }
 
+const deleteMemberBlocks = `-- name: DeleteMemberBlocks :execrows
+DELETE FROM membership.blocks
+WHERE blocker = $1 OR blocked = $1
+`
+
+// Account deletion: blocks in both directions go with the member.
+func (q *Queries) DeleteMemberBlocks(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberBlocks, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertBlock = `-- name: InsertBlock :execrows
 INSERT INTO membership.blocks (blocker, blocked, since)
 VALUES ($1, $2, $3)
@@ -78,6 +92,8 @@ type IsBlockedParams struct {
 }
 
 // A block either way, or either member suspended (mutual invisibility, ADR-0019).
+// A deleted member is not "blocked": her tombstones (chat "message deleted")
+// stay visible to the others, and she has no blocks left.
 func (q *Queries) IsBlocked(ctx context.Context, arg IsBlockedParams) (*bool, error) {
 	row := q.db.QueryRow(ctx, isBlocked, arg.A, arg.B)
 	var blocked *bool
@@ -89,7 +105,7 @@ const listBlocks = `-- name: ListBlocks :many
 SELECT b.blocked, b.since, m.display_name
 FROM membership.blocks b
 JOIN membership.members m ON m.id = b.blocked
-WHERE b.blocker = $1
+WHERE b.blocker = $1 AND m.deleted_at IS NULL
 ORDER BY b.since DESC, b.blocked
 LIMIT $2
 `

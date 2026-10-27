@@ -35,7 +35,7 @@ Operations of tag `safety` in `contracts/openapi/birge.yaml`. No principal → 4
 | publishes | `safety.EscalationTaken` v1 | take | outbox, same transaction as the update, timer cancel and audit |
 | publishes | `safety.EscalationClosed` v1 | close | outbox, same transaction |
 | publishes | `safety.EscalationUnattended` v1 | backup timer fires on a still-open escalation | outbox, in the timer worker's transaction |
-| consumes | none | | |
+| consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `safety-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `safety.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
 ## Timers
 
@@ -79,6 +79,7 @@ One UTF-8 file per language and category, `<kk|ru|en>.<category>.txt`; one entry
 - The queue never shows names or phones; phones are never returned by the roster API (api; tests).
 - Notes and on-duty phones are stored sealed only (service; schema comments).
 - Shifts and escalations are never deleted (no delete query exists).
+- Account deletion keeps the escalation shell (AGENTS.md N6): the row stays for staff accountability with its IDs (`id`, `member_id`, `taken_by`), source, status, timestamps and outcome; the personal fields are cleared: `note` (sealed with her key, which is shredded anyway) and `district_id`. An open or taken escalation stays in the queue as it was and its backup timer keeps running, so deletion never silences the crisis path; contact reveal then finds no member. Closing it with a note after her key is shredded closes without the note and logs `EscalationNoteDroppedMemberDeleted` (escalation ID only; `TestCloseDropsNoteWhenMemberKeyShredded`). An escalation opened for her later (a late chat crisis retry) still opens, without a district, because membership no longer knows her. One audit entry `safety.member_deleted` (actor system). Duty shifts belong to staff, not members, and are untouched.
 - Logs: IDs, roles and event names only; never message text, names, phones or notes (service; `newEnv` test cleanup checks).
 - `crisis.Detect` does no I/O and allocates no shared state; DEMO-set recall must stay 100% (`TestDemoLexiconEvalSet`).
 

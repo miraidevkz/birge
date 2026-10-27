@@ -1,3 +1,18 @@
+-- Account deletion. Her reviews are her own text with nothing of another
+-- member around them: deleted. A specialist card she suggested is about the
+-- specialist, not her: active cards and cards other members reviewed stay
+-- (tombstone, added_by kept); her pending or rejected suggestions nobody
+-- reviewed are deleted.
+
+-- name: DeleteMemberReviews :execrows
+DELETE FROM directory.reviews WHERE author_id = @member_id;
+
+-- name: DeleteMemberUnusedSpecialists :execrows
+DELETE FROM directory.specialists s
+WHERE s.added_by = @member_id
+  AND s.status <> 'active'
+  AND NOT EXISTS (SELECT 1 FROM directory.reviews r WHERE r.specialist_id = s.id);
+
 -- name: UpsertReview :one
 -- One review per (specialist, author): insert or replace and return to pending.
 -- The row id is kept on conflict so in-flight moderation items stay valid.

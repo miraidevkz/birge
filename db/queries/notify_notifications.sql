@@ -1,3 +1,22 @@
+-- Account deletion: the member's inbox and every notification whose
+-- parameters name her (a plan sent by her carries owner_id).
+-- name: ListMemberNotificationIDs :many
+SELECT id FROM notify.notifications
+WHERE (recipient_kind = 'member' AND recipient_ref = @member_id)
+   OR (jsonb_typeof(params) = 'object'
+       AND EXISTS (SELECT 1 FROM jsonb_each_text(params) p WHERE p.value = @member_ref::text))
+ORDER BY id
+FOR UPDATE;
+
+-- name: DeleteNotificationDeliveries :execrows
+DELETE FROM notify.deliveries WHERE notification_id = ANY(@ids::uuid[]);
+
+-- name: DeleteNotifications :execrows
+DELETE FROM notify.notifications WHERE id = ANY(@ids::uuid[]);
+
+-- name: DeleteMemberDevices :execrows
+DELETE FROM notify.devices WHERE member_id = @member_id;
+
 -- name: InsertNotification :one
 INSERT INTO notify.notifications (request_id, recipient_kind, recipient_ref, template, params, class, created_at)
 VALUES (@request_id, @recipient_kind, @recipient_ref, @template, @params, @class, @created_at)

@@ -27,11 +27,13 @@ Operations of tag `privacy` in `contracts/openapi/birge.yaml`:
 | publishes | `privacy.DataDeletionRequested` v1 | first successful deletion request | outbox, same transaction as insert + timer schedule |
 | consumes | none | | |
 
+Every other context that stores member data consumes `privacy.DataDeletionRequested` (durable `<context>-deletion`, dedup consumer `<context>.Deletion`, `internal/wiring/deletion.go`) and erases her rows before the shred is due. Privacy itself needs no consumer: it deletes its consents in `privacy.DeletionDue`, after the shred.
+
 ## Timers
 
 | Kind | Scheduled when | Handler does | Idempotency |
 |---|---|---|---|
-| `privacy.DeletionDue` | on first deletion request (dedup key = member id) | `HandleDeletionDue`: `KeyShredder.Shred`, then set `completed_at` | completed request skips shred; mark-completed is once |
+| `privacy.DeletionDue` | on first deletion request (dedup key = member id) | `HandleDeletionDue`: `KeyShredder.Shred`, then in one transaction delete her consent history, write `privacy.member_deleted` to the audit log and set `completed_at` | completed request skips shred; mark-completed is once |
 
 ## Service API for other contexts
 
@@ -49,7 +51,7 @@ Operations of tag `privacy` in `contracts/openapi/birge.yaml`:
 
 ## Invariants
 
-- Consent history is never updated or deleted; current state = latest row per `(member_id, type)` (schema + service).
+- Consent history is never updated; current state = latest row per `(member_id, type)` (schema + service). It is deleted only by account deletion, after the shred and in the same transaction as mark-completed, so until the key is gone it records what she agreed to, and a completed request never leaves consents behind. `deletion_requests` rows stay (the record that deletion happened).
 - `granted` / `HasConsent` require latest row grant **and** version == configured current (service; tested).
 - `SetConsent` only accepts the current version (service).
 - One deletion request per member (PK + service idempotency).

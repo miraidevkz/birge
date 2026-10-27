@@ -237,7 +237,10 @@ func (s *Service) CloseEscalation(ctx context.Context, p auth.Principal, id uuid
 		return model.Escalation{}, errors.New("safety: sealer not configured")
 	}
 	now := s.now()
-	var out model.Escalation
+	var (
+		out         model.Escalation
+		noteDropped bool
+	)
 	err = s.Store.InTx(ctx, func(tx port.Tx) error {
 		e, err := tx.GetEscalation(ctx, id, true)
 		if err != nil {
@@ -250,9 +253,16 @@ func (s *Service) CloseEscalation(ctx context.Context, p auth.Principal, id uuid
 			return fmt.Errorf("%w: not taken by caller", model.ErrForbidden)
 		}
 		var sealed []byte
+		noteDropped = false
 		if hasNote {
 			sealed, err = s.Sealer.Seal(ctx, e.MemberID, []byte(*note), crypto.AssociatedData(model.FieldEscalationNote, id))
-			if err != nil {
+			switch {
+			case errors.Is(err, crypto.ErrShredded):
+				// The member deleted her account and her key is gone: the
+				// note cannot be stored for her, but the escalation must
+				// still close (staff accountability). Close without it.
+				sealed, noteDropped = nil, true
+			case err != nil:
 				return fmt.Errorf("seal note: %w", err)
 			}
 		}
@@ -283,6 +293,9 @@ func (s *Service) CloseEscalation(ctx context.Context, p auth.Principal, id uuid
 	})
 	if err != nil {
 		return model.Escalation{}, err
+	}
+	if noteDropped {
+		s.log().Warn("escalation note dropped: member deleted", "event", "EscalationNoteDroppedMemberDeleted", "escalation_id", id)
 	}
 	s.log().Info("escalation closed", "event", model.EventEscalationClosed, "escalation_id", id, "outcome", outcome)
 	return out, nil

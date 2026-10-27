@@ -22,7 +22,7 @@ Operations of tag `assistant` in `contracts/openapi/birge.yaml`:
 | Direction | Event | When | Guarantees |
 |---|---|---|---|
 | publishes | `assistant.ReplyRated` v1 | rating stored or changed | outbox, same transaction; payload `message_id`, `helped` only |
-| consumes | none | | |
+| consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `assistant-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `assistant.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
 Escalations are opened through `safety.OpenEscalation` (source `assistant`), which publishes `safety.EscalationOpened`.
 
@@ -82,6 +82,7 @@ Environment variables: `BIRGE_LLM_MODEL`, `BIRGE_LLM_API_KEY_FILE`, `BIRGE_LLM_B
 - Logs: IDs, event names, outcome, failure kind, latency, model ID, prompt version. Never message text or anonymized text, never a member ID next to a crisis flag (service tests scan the log output).
 - One `Idempotency-Key` = one effect: one model call, one stored exchange, one escalation (unique index + replay; tested in service and integration tests).
 - Fragments and member text reach the model as JSON inside `<knowledge_fragments>` / `<member_message>`; '<' and '>' are escaped, so data cannot close its tag (`anthropic_test.go`).
+- Account deletion (AGENTS.md N6): every turn of her dialogue is deleted at once, without waiting for the 90-day retention; nothing is tombstoned (the dialogue is hers alone; an escalation it opened is kept by safety as a shell). The crisis path is not touched. One audit entry `assistant.member_deleted` (actor system).
 
 ## Failure modes
 

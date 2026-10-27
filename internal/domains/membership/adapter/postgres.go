@@ -80,6 +80,7 @@ func memberRecord(r store.GetMemberByIDRow) port.MemberRecord {
 		ID: r.ID, IdentityID: r.IdentityID, SealedName: r.DisplayName, Lang: model.Lang(r.Lang),
 		CityID: r.CityID, DistrictID: r.DistrictID, Verification: model.Verification(r.Verification),
 		Roles: r.Roles, SuspendedAt: r.SuspendedAt,
+		Deleted: r.DeletedAt != nil,
 	}
 	if r.SuspendedReason != nil {
 		rec.SuspendedReason = *r.SuspendedReason

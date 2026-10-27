@@ -53,6 +53,17 @@ const (
 	VerificationRequestRejected = "rejected"
 )
 
+// Account deletion (privacy.DataDeletionRequested, ADR-0009).
+const (
+	// BoundedContext names this context in the audit action
+	// "membership.member_deleted".
+	BoundedContext = "membership"
+	// TimerDeleteIdentity deletes the Kratos identity of a deleted member
+	// (subject = identity ID). It retries through the timer until the
+	// identity provider answers 204 or 404.
+	TimerDeleteIdentity = "membership.DeleteIdentity"
+)
+
 var codeRe = regexp.MustCompile(`^[a-z_]{2,40}$`)
 
 // Lang is the member's interface language.

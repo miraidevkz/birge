@@ -200,6 +200,9 @@ func TestHandleDeletionDueShredsOnce(t *testing.T) {
 	member := uuid.Must(uuid.NewV7())
 	ctx := context.Background()
 
+	if _, err := svc.SetConsent(ctx, member, model.ConsentDataProcessing, "2026-10-01", true); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := svc.RequestDeletion(ctx, member); err != nil {
 		t.Fatal(err)
 	}
@@ -209,6 +212,10 @@ func TestHandleDeletionDueShredsOnce(t *testing.T) {
 	}
 	if shredder.Len() != 1 {
 		t.Fatalf("shred calls = %d, want 1", shredder.Len())
+	}
+	// The consent history goes after the shred, in the mark-completed transaction.
+	if n := store.ConsentCount(member, model.ConsentDataProcessing); n != 0 {
+		t.Fatalf("consent rows after deletion = %d, want 0", n)
 	}
 	var completed *time.Time
 	if err := store.InTx(ctx, func(tx port.Tx) error {

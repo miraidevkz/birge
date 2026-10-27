@@ -32,6 +32,42 @@ func (q *Queries) AcknowledgeNotification(ctx context.Context, arg AcknowledgeNo
 	return result.RowsAffected(), nil
 }
 
+const deleteMemberDevices = `-- name: DeleteMemberDevices :execrows
+DELETE FROM notify.devices WHERE member_id = $1
+`
+
+func (q *Queries) DeleteMemberDevices(ctx context.Context, memberID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMemberDevices, memberID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteNotificationDeliveries = `-- name: DeleteNotificationDeliveries :execrows
+DELETE FROM notify.deliveries WHERE notification_id = ANY($1::uuid[])
+`
+
+func (q *Queries) DeleteNotificationDeliveries(ctx context.Context, ids []uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteNotificationDeliveries, ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteNotifications = `-- name: DeleteNotifications :execrows
+DELETE FROM notify.notifications WHERE id = ANY($1::uuid[])
+`
+
+func (q *Queries) DeleteNotifications(ctx context.Context, ids []uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteNotifications, ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getNotification = `-- name: GetNotification :one
 SELECT id, request_id, recipient_kind, recipient_ref, template, params, class, created_at, read_at, acknowledged_at
 FROM notify.notifications
@@ -180,6 +216,42 @@ func (q *Queries) ListInbox(ctx context.Context, arg ListInboxParams) ([]NotifyN
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemberNotificationIDs = `-- name: ListMemberNotificationIDs :many
+SELECT id FROM notify.notifications
+WHERE (recipient_kind = 'member' AND recipient_ref = $1)
+   OR (jsonb_typeof(params) = 'object'
+       AND EXISTS (SELECT 1 FROM jsonb_each_text(params) p WHERE p.value = $2::text))
+ORDER BY id
+FOR UPDATE
+`
+
+type ListMemberNotificationIDsParams struct {
+	MemberID  uuid.UUID
+	MemberRef string
+}
+
+// Account deletion: the member's inbox and every notification whose
+// parameters name her (a plan sent by her carries owner_id).
+func (q *Queries) ListMemberNotificationIDs(ctx context.Context, arg ListMemberNotificationIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMemberNotificationIDs, arg.MemberID, arg.MemberRef)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -37,6 +37,10 @@ type Tx interface {
 	GetDeletionRequest(ctx context.Context, memberID uuid.UUID) (model.DeletionRequest, error)
 	// MarkDeletionCompleted sets completed_at once; updated is false when absent or already completed.
 	MarkDeletionCompleted(ctx context.Context, memberID uuid.UUID, at time.Time) (model.DeletionRequest, bool, error)
+	// EraseConsents deletes the member's consent history (the only delete
+	// of that table, run after the key is shredded) and records the audit
+	// entry privacy.member_deleted once.
+	EraseConsents(ctx context.Context, memberID uuid.UUID) error
 
 	// PublishConsentChanged enqueues privacy.ConsentChanged in the outbox of this transaction.
 	PublishConsentChanged(ctx context.Context, now time.Time, data model.ConsentChangedData) error

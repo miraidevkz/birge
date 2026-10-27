@@ -545,6 +545,12 @@ func memberPrincipal(members *membershipservice.Service, logger *slog.Logger) fu
 				return
 			}
 			m, err := members.Me(r.Context())
+			if errors.Is(err, membershipmodel.ErrAccountDeleted) {
+				// A session of a deleted account (possibly replayed after the
+				// identity was deleted): refused, and no member is created.
+				httpapi.WriteProblem(w, http.StatusUnauthorized, "unauthenticated", "Sign-in required.")
+				return
+			}
 			if err != nil {
 				if errors.Is(err, membershipmodel.ErrMemberSuspended) {
 					if !crisisExempt(strings.TrimPrefix(r.URL.Path, apiBase)) {
@@ -552,6 +558,11 @@ func memberPrincipal(members *membershipservice.Service, logger *slog.Logger) fu
 						return
 					}
 					id, err := members.CrisisMemberID(r.Context())
+					if errors.Is(err, membershipmodel.ErrAccountDeleted) {
+						// Deleted meanwhile: a deleted account has no crisis exemption.
+						httpapi.WriteProblem(w, http.StatusUnauthorized, "unauthenticated", "Sign-in required.")
+						return
+					}
 					if err != nil {
 						logger.Error("resolve suspended member", "pattern", r.Pattern, "error", err)
 						httpapi.WriteProblem(w, http.StatusInternalServerError, "internal", "Something went wrong.")

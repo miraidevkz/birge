@@ -27,6 +27,10 @@ var (
 	ErrUnauthenticated       = &Error{KindUnauthenticated, "unauthenticated", "Sign-in required."}
 	ErrMemberSessionRequired = &Error{KindForbidden, "member_session_required", "A member session is required."}
 	ErrForbidden             = &Error{KindForbidden, "forbidden", "Not allowed."}
+	// ErrAccountDeleted refuses a session of an identity whose member was
+	// deleted. It is a plain 401 to the client (same code as
+	// ErrUnauthenticated), so a stale session learns nothing more.
+	ErrAccountDeleted = &Error{KindUnauthenticated, "unauthenticated", "Sign-in required."}
 
 	ErrInvalidRequest        = &Error{KindInvalid, "invalid_request", "The request is invalid."}
 	ErrEmptyUpdate           = &Error{KindInvalid, "empty_update", "Nothing to update."}

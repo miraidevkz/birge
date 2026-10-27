@@ -243,7 +243,8 @@ func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
 
 // RunWorker runs the background loops until ctx is cancelled: the outbox
 // relay to JetStream, the notify DeliveryRequested consumer, the emergency
-// SosShared district-push consumer and the timers worker with the notify,
+// SosShared district-push consumer, one privacy.DataDeletionRequested
+// consumer per context (Deleters) and the timers worker with the notify,
 // privacy, safety, wellbeing and emergency handlers, plus /healthz and
 // /readyz (database and NATS) on the HTTP address. When one loop fails, the
 // others are stopped and the error is returned, so the orchestrator restarts
@@ -402,7 +403,9 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		Clock:   clk,
 		Logger:  logger,
 	}
+	deleters := NewDeleters(pool, objects, identities, clk, logger)
 	handlers, err := mergeHandlers(
+		deleters.TimerHandlers(),
 		(&notifyadapter.TimerHandlers{Service: notify}).Handlers(),
 		(&privacyadapter.TimerHandlers{Service: privacy}).Handlers(),
 		(&safetyadapter.TimerHandlers{Service: safety}).Handlers(),
@@ -450,6 +453,10 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		"membership moderation": membershipMod.Run,
 		"timers":                timerWorker.Run,
 		"health endpoints":      func(ctx context.Context) error { return serve(ctx, logger, cfg.HTTPAddr, health) },
+	}
+	// One privacy.DataDeletionRequested consumer per context (ADR-0009, AGENTS.md N6).
+	for _, c := range deleters.Consumers(js, pool, logger) {
+		loops[c.Durable()] = c.Run
 	}
 	if !cfg.RetrievalEnabled {
 		logger.Warn("retrieval disabled: TEI or Qdrant not configured", "event", "RetrievalDisabled")
