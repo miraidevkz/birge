@@ -35,6 +35,7 @@ clients (React Native)            backend (Go, one binary)                  infr
 |---|---|---|
 | `safety` | crisis detection (L1 lexicon), crisis response, escalations, duty roster | core |
 | `circle` | tea requests, matching, matches, acquaintances (pairwise "met" status) | core |
+| `chat` | rooms, memberships, messages, delivery, chat moderation actions | core |
 | `wellbeing` | check-ins (PHQ-4, PSS-4), schedules, practices | core |
 | `emergency` | SOS requests, district SOS feed, emergency plan, trusted contacts, childcare policy | core |
 | `assistant` | AI conversation pipeline, anonymizer, LLM provider port | supporting |
@@ -102,6 +103,7 @@ docs/                 # architecture, ADRs, requirements, threat model
 | Deployment | Kubernetes first (k3s for small installs), Compose as alternative | [0011](adr/0011-kubernetes-first.md) |
 | Data residency | personal data in-jurisdiction; LLM gets anonymized text only | [0013](adr/0013-data-residency.md) |
 | UI | RN Reusables + NativeWind, Reanimated, Expo Router; accessibility first | [0014](adr/0014-ui-stack.md) |
+| Chat | own module: WebSocket + push, PostgreSQL + NATS, server-side moderation, no E2EE | [0016](adr/0016-chat.md) |
 | Object storage | S3 API only; Garage for dev/MVP, local S3-compatible provider in production | [0015](adr/0015-object-storage.md) |
 
 ## Replication to other countries
