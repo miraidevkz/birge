@@ -79,7 +79,8 @@ func (l *lockedWriter) Write(p []byte) (int, error) {
 	return l.w.Write(p)
 }
 
-func member() auth.Principal { return auth.Principal{IdentityID: uuid.New()} }
+// member is a member session as the middleware builds it: identity and member IDs.
+func member() auth.Principal { return auth.Principal{IdentityID: uuid.New(), MemberID: uuid.New()} }
 
 func staff(roles ...string) auth.Principal {
 	return auth.Principal{IdentityID: uuid.New(), Staff: true, Roles: roles}

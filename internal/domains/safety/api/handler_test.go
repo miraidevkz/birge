@@ -74,7 +74,7 @@ func TestEscalationFlowOverHTTP(t *testing.T) {
 	hs := newHarness()
 	memberID := uuid.New()
 	hs.dir.Contacts[memberID] = model.Contact{DisplayName: "Example Member", Lang: "kk", Phone: "+70000000001"}
-	m := &auth.Principal{IdentityID: memberID}
+	m := &auth.Principal{IdentityID: uuid.New(), MemberID: memberID}
 	key := "Idempotency-Key"
 
 	rec := hs.do(t, m, http.MethodPost, "/me/help-requests", `{"source":"menu"}`, key, uuid.NewString())

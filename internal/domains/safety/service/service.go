@@ -220,10 +220,12 @@ type HelpAccepted struct {
 // RequestHumanHelp opens (or returns) the calling member's escalation and
 // returns the crisis lines. Members only; staff sessions are refused.
 func (s *Service) RequestHumanHelp(ctx context.Context, p auth.Principal, source string) (HelpAccepted, error) {
-	if p.Staff || p.IdentityID == uuid.Nil {
+	// Escalations are keyed by the membership member ID, never by the
+	// identity provider's ID (auth.Principal.MemberID).
+	if p.Staff || p.MemberID == uuid.Nil {
 		return HelpAccepted{}, model.ErrUnauthorized
 	}
-	id, _, err := s.OpenEscalation(ctx, p.IdentityID, source)
+	id, _, err := s.OpenEscalation(ctx, p.MemberID, source)
 	if err != nil {
 		return HelpAccepted{}, err
 	}

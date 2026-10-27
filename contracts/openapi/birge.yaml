@@ -1134,7 +1134,7 @@ components:
     Escalation:
       type: object
       additionalProperties: false
-      required: [id, source, status, openedAt, districtId]
+      required: [id, source, status, openedAt]
       properties:
         id: {type: string, format: uuid}
         source: {$ref: '#/components/schemas/EscalationSource'}
@@ -1142,7 +1142,7 @@ components:
           type: string
           enum: [open, taken, closed]
         openedAt: {type: string, format: date-time}
-        districtId: {type: string, format: uuid, description: For routing; no name or contact.}
+        districtId: {type: string, format: uuid, description: "For routing; no name or contact. Absent when unknown."}
         takenAt: {type: string, format: date-time}
         takenByMe: {type: boolean}
         outcome:

@@ -6,7 +6,7 @@ Status: Accepted · Date: 2026-10-27
 A change to a prompt, model, knowledge base or pipeline can silently weaken crisis detection or safety behaviour. LLM output is non-deterministic. Requirements: 100% crisis recall (with and without the LLM), no personal data reaching the LLM, signed acceptance by the project psychologist.
 
 ## Decision
-- **Runner:** our own Go tool (`cmd/birge-eval`) that drives the real pipeline (L1 → anonymize → retrieve → LLM → L2), not the prompt in isolation. Datasets are YAML in `evals/datasets/`; reports are JSON with prompt version, model ID, knowledge-index version, dataset version and commit, compared with the baseline report from `main`.
+- **Runner:** our own Go tool (`cmd/birge-eval`) that drives the real pipeline (L1 → anonymize → retrieve → LLM → L2), not the prompt in isolation. Datasets are line-based text files in `evals/datasets/` (`expected<TAB>lang<TAB>text`, no YAML dependency); reports are JSON with prompt version, model ID, knowledge-index version, dataset version and commit, compared with the baseline report from `main`.
 - **Datasets:**
 
   | Set | Check | Gate |

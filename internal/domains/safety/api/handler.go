@@ -235,8 +235,8 @@ func toAPIEscalation(e model.Escalation, caller uuid.UUID) Escalation {
 		TakenAt:  e.TakenAt,
 		ClosedAt: e.ClosedAt,
 	}
-	if e.DistrictID != nil {
-		out.DistrictId = *e.DistrictID // uuid.Nil when unknown; see README
+	if e.DistrictID != nil && *e.DistrictID != uuid.Nil {
+		out.DistrictId = e.DistrictID // omitted when the district is unknown
 	}
 	if e.Outcome != nil {
 		o := EscalationOutcome(*e.Outcome)

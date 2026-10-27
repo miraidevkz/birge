@@ -256,15 +256,15 @@ type DutyShiftInputRole string
 type Escalation struct {
 	ClosedAt *time.Time `json:"closedAt,omitempty"`
 
-	// DistrictId For routing; no name or contact.
-	DistrictId openapi_types.UUID `json:"districtId"`
-	Id         openapi_types.UUID `json:"id"`
-	OpenedAt   time.Time          `json:"openedAt"`
-	Outcome    *EscalationOutcome `json:"outcome,omitempty"`
-	Source     EscalationSource   `json:"source"`
-	Status     EscalationStatus   `json:"status"`
-	TakenAt    *time.Time         `json:"takenAt,omitempty"`
-	TakenByMe  *bool              `json:"takenByMe,omitempty"`
+	// DistrictId For routing; no name or contact. Absent when unknown.
+	DistrictId *openapi_types.UUID `json:"districtId,omitempty"`
+	Id         openapi_types.UUID  `json:"id"`
+	OpenedAt   time.Time           `json:"openedAt"`
+	Outcome    *EscalationOutcome  `json:"outcome,omitempty"`
+	Source     EscalationSource    `json:"source"`
+	Status     EscalationStatus    `json:"status"`
+	TakenAt    *time.Time          `json:"takenAt,omitempty"`
+	TakenByMe  *bool               `json:"takenByMe,omitempty"`
 }
 
 // EscalationOutcome defines model for Escalation.Outcome.
