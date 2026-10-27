@@ -136,7 +136,7 @@ type CheckinSchedule struct {
 	// Hour Local hour in the deployment time zone.
 	Hour *int `json:"hour,omitempty"`
 
-	// Weekday ISO weekday
+	// Weekday ISO weekday: 1 is Monday.
 	Weekday *int `json:"weekday,omitempty"`
 }
 

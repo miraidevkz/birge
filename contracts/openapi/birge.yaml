@@ -945,7 +945,7 @@ components:
       type: object
       additionalProperties: false
       properties:
-        weekday: {type: integer, minimum: 1, maximum: 7, description: ISO weekday, 1 = Monday.}
+        weekday: {type: integer, minimum: 1, maximum: 7, description: "ISO weekday: 1 is Monday."}
         hour: {type: integer, minimum: 0, maximum: 23, description: Local hour in the deployment time zone.}
         enabled: {type: boolean}
     Questionnaire:
