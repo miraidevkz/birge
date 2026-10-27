@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"birge/internal/platform/crypto"
@@ -115,12 +116,14 @@ func fakeStaffIdP(t *testing.T) *httptest.Server {
 // migratedDatabase creates an empty database in a throwaway cluster and
 // brings it up with the embedded migrations (twice, to prove idempotency)
 // and db/roles.sql. testinfra.Postgres applies db/schema directly, so the
-// test uses a second database of the same cluster.
+// test uses a second database of the same cluster. The returned URL connects
+// as birge_app, not the superuser, so a missing grant in db/roles.sql fails
+// the end-to-end tests instead of production.
 func migratedDatabase(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
 	admin := testinfra.Postgres(t)
-	for _, stmt := range []string{"CREATE DATABASE birge_e2e", "CREATE ROLE birge_app NOLOGIN"} {
+	for _, stmt := range []string{"CREATE DATABASE birge_e2e", "CREATE ROLE birge_app LOGIN"} {
 		if _, err := admin.Exec(ctx, stmt); err != nil {
 			t.Fatalf("%s: %v", stmt, err)
 		}
@@ -133,7 +136,17 @@ func migratedDatabase(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	return url
+	// Tests that scan every table (the account-deletion SQL check) also read
+	// goose's bookkeeping table; the application itself never does.
+	conn, err := pgx.Connect(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close(ctx) }()
+	if _, err := conn.Exec(ctx, "GRANT USAGE ON SCHEMA public TO birge_app; GRANT SELECT ON public.goose_db_version TO birge_app"); err != nil {
+		t.Fatal(err)
+	}
+	return fmt.Sprintf("host=%s port=%d user=birge_app dbname=birge_e2e sslmode=disable", cc.Host, cc.Port)
 }
 
 type e2e struct {

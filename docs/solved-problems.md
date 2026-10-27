@@ -24,6 +24,8 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 - **A restriction on a member never closes her crisis path.** Suspension, blocks or limits stop her reaching others; the help request, her SOS, the emergency plan and her own-data routes stay open, with an e2e test. (moderation review: suspension first answered 403 on every route.)
 - **Documentation claims only what the mechanism guarantees.** Crypto-shredding does not reach backups until they expire. (93c3266)
 
+- **Tests connect as the application role, not a superuser.** The e2e database URL uses `birge_app`, so a schema missing from `db/roles.sql` fails a test instead of production; `db.TestRolesCoverEverySchema` checks every `CREATE SCHEMA` has a grant. (all context schemas but two had no grants.)
+
 ## Contracts and code generation
 
 - **Quote YAML strings that contain punctuation in flow style.** A comma inside `{description: ...}` split it into an extra field and invalidated the whole OpenAPI document; the generator accepted it, the validator did not. The validator's tests load the real contract. (68739b9) A bulk fix must touch only `description` keys that describe a schema, not properties named `description`. (The validator caught a second case before commit.)
