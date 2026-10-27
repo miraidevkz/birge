@@ -23,7 +23,10 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 
 ## Wave 1: identity, delivery, clients
 
-- [ ] `membership` + Ory Kratos (SMS code) + SMS provider module with anti-pumping controls
+- [x] Auth gateway in front of Kratos (PoW, number allowlist, rate limits) and session middleware
+- [ ] Wiring: trusted-proxy client IP, API rate limit in front of the session middleware, keys from the secret store
+- [ ] Shared store for PoW replay and limiters before running more than one replica; daily SMS budget
+- [ ] `membership` core; Kratos deployment and identity schema
 - [ ] `notify` (inbox, push, SMS, escalation ladders) + NATS relay
 - [ ] `apps/mobile` and `apps/admin` skeletons (Expo, Expo Router, NativeWind, RN Reusables, i18n kk/ru); low-end Android performance budget measured
 
