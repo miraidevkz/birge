@@ -1,7 +1,7 @@
 // Package service implements the membership use cases. Methods that act for the
 // signed-in member take the principal from the context (internal/platform/auth)
-// and only ever touch that member's data. IsBlocked and Member are the API for
-// other contexts.
+// and only ever touch that member's data. IsBlocked, Member and
+// ListVerifiedInDistrict are the API for other contexts.
 package service
 
 import (
@@ -292,6 +292,22 @@ func (s *Service) Member(ctx context.Context, id uuid.UUID) (model.Member, error
 		return err
 	})
 	return m, err
+}
+
+// ListVerifiedInDistrict returns the IDs of verified members in districtID.
+// For other contexts (district SOS push); it does no authorization. An
+// unknown or empty district yields an empty slice, not an error.
+func (s *Service) ListVerifiedInDistrict(ctx context.Context, districtID uuid.UUID) ([]uuid.UUID, error) {
+	if districtID == uuid.Nil {
+		return nil, nil
+	}
+	var ids []uuid.UUID
+	err := s.store.InTx(ctx, func(tx port.Tx) error {
+		var err error
+		ids, err = tx.ListVerifiedInDistrict(ctx, districtID)
+		return err
+	})
+	return ids, err
 }
 
 // withMe runs fn for the signed-in member and returns the member record fn

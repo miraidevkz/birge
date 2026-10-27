@@ -56,6 +56,8 @@ type Tx interface {
 	MemberByIdentity(ctx context.Context, identityID uuid.UUID) (MemberRecord, error)
 	// MemberByID returns model.ErrMemberNotFound when absent.
 	MemberByID(ctx context.Context, id uuid.UUID) (MemberRecord, error)
+	// ListVerifiedInDistrict returns the IDs of verified members in districtID.
+	ListVerifiedInDistrict(ctx context.Context, districtID uuid.UUID) ([]uuid.UUID, error)
 	// LockMember locks the member row until the end of the transaction.
 	LockMember(ctx context.Context, id uuid.UUID) error
 	// InsertMember creates the member of identityID; created is false when it already exists.

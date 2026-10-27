@@ -11,6 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"birge/contracts/openapi"
+	emergencyadapter "birge/internal/domains/emergency/adapter"
+	emergencyapi "birge/internal/domains/emergency/api"
+	emergencyservice "birge/internal/domains/emergency/service"
 	membershipadapter "birge/internal/domains/membership/adapter"
 	membershipapi "birge/internal/domains/membership/api"
 	"birge/internal/domains/membership/authgw"
@@ -64,8 +67,8 @@ type APIDeps struct {
 //  2. /auth/: the member sign-in gateway in front of Kratos (it has its own
 //     per-IP, per-number and global limits and the proof of work);
 //  3. /v1/: per-IP rate limit → authentication → request validation → the
-//     generated handlers of meta, membership, privacy, notify, safety and
-//     wellbeing on one mux. Authentication depends on the route:
+//     generated handlers of meta, membership, privacy, notify, safety,
+//     wellbeing and emergency on one mux. Authentication depends on the route:
 //     /v1/staff/ goes through staffauth (OIDC token introspection, MFA
 //     required; 503 when no provider is configured), everything else
 //     through the member session middleware (anonymous operations pass).
@@ -163,9 +166,19 @@ func NewAPIHandler(d APIDeps) (http.Handler, error) {
 		Logger:   d.Logger,
 		Settings: cfg.Wellbeing,
 	}
+	emergency := &emergencyservice.Service{
+		Store:         &emergencyadapter.PostgresStore{Pool: d.Pool},
+		Sealer:        d.Envelope,
+		Members:       &EmergencyMembers{Members: members},
+		Blocks:        &EmergencyBlocks{Members: members},
+		Acquaintances: NeverMet{},
+		Clock:         d.Clock,
+		Logger:        d.Logger,
+		Settings:      emergencyservice.Settings{AutoCloseAfter: cfg.SosAutoCloseAfter},
+	}
 
 	api := http.NewServeMux()
-	mountAPI(api, cfg, members, privacy, notify, safety, wellbeing, d.Logger)
+	mountAPI(api, cfg, members, privacy, notify, safety, wellbeing, emergency, d.Logger)
 
 	// Validation runs after the session (anonymous callers cannot probe the
 	// validator) and before the generated handlers, which do not enforce the
@@ -205,7 +218,8 @@ func NewAPIHandler(d APIDeps) (http.Handler, error) {
 // with the shared problem+json error handlers.
 func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service,
 	privacy *privacyservice.Service, notify *notifyservice.Service,
-	safety *safetyservice.Service, wellbeing *wellbeingservice.Service, logger *slog.Logger,
+	safety *safetyservice.Service, wellbeing *wellbeingservice.Service,
+	emergency *emergencyservice.Service, logger *slog.Logger,
 ) {
 	const base = "/v1"
 	phones := make([]meta.CrisisPhone, 0, len(cfg.CrisisPhones))
@@ -265,13 +279,22 @@ func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service
 			Middlewares: []wellbeingapi.MiddlewareFunc{toMember},
 		},
 	)
+	emergencyapi.HandlerWithOptions(
+		emergencyapi.NewStrictHandlerWithOptions(&emergencyapi.Server{Service: emergency}, nil, emergencyapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
+		}),
+		emergencyapi.StdHTTPServerOptions{
+			BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler,
+			Middlewares: []emergencyapi.MiddlewareFunc{toMember},
+		},
+	)
 }
 
 // memberPrincipal resolves the signed-in member (creating it on first use,
 // ADR-0008 addendum) and sets auth.Principal.MemberID for the handlers of
 // contexts that key their data by member ID (privacy, notify, safety,
-// wellbeing). The identity ID stays untouched. Anonymous and staff requests
-// pass unchanged; the handlers refuse a principal without a MemberID.
+// wellbeing, emergency). The identity ID stays untouched. Anonymous and staff
+// requests pass unchanged; the handlers refuse a principal without a MemberID.
 func memberPrincipal(members *membershipservice.Service, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

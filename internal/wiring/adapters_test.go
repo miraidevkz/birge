@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	emergencyservice "birge/internal/domains/emergency/service"
 	membershipmodel "birge/internal/domains/membership/model"
 	notifymodel "birge/internal/domains/notify/model"
 	notifyport "birge/internal/domains/notify/port"
@@ -62,6 +63,40 @@ func (f fakeMembers) Member(_ context.Context, id uuid.UUID) (membershipmodel.Me
 		return membershipmodel.Member{}, membershipmodel.ErrMemberNotFound
 	}
 	return m, nil
+}
+
+type fakeTrustedContact struct {
+	memberID *uuid.UUID
+	external bool
+	phone    string
+	lang     string
+	err      error
+}
+
+type fakeEmergency struct {
+	byID map[uuid.UUID]fakeTrustedContact
+}
+
+func (f *fakeEmergency) TrustedContactTarget(_ context.Context, id uuid.UUID) (*uuid.UUID, bool, error) {
+	c, ok := f.byID[id]
+	if !ok {
+		return nil, false, emergencyservice.ErrNotFound
+	}
+	if c.err != nil {
+		return nil, false, c.err
+	}
+	return c.memberID, c.external, nil
+}
+
+func (f *fakeEmergency) ContactPhone(_ context.Context, id uuid.UUID) (string, string, error) {
+	c, ok := f.byID[id]
+	if !ok || !c.external {
+		return "", "", emergencyservice.ErrNotFound
+	}
+	if c.err != nil {
+		return "", "", c.err
+	}
+	return c.phone, c.lang, nil
 }
 
 type fakeStaff struct {
@@ -136,7 +171,13 @@ func TestRecipients(t *testing.T) {
 		},
 		phones: map[uuid.UUID]string{shiftID: testPhone},
 	}
-	rc := &Recipients{Members: members, Phones: phones, Staff: staff, StaffLang: "ru"}
+	extContact, memberContact, removedContact := uuid.New(), uuid.New(), uuid.New()
+	extPhone := "+77001112233"
+	emergency := &fakeEmergency{byID: map[uuid.UUID]fakeTrustedContact{
+		extContact:    {external: true, phone: extPhone, lang: "kk"},
+		memberContact: {memberID: &memberID, external: false},
+	}}
+	rc := &Recipients{Members: members, Phones: phones, Staff: staff, Emergency: emergency, StaffLang: "ru"}
 	ctx := context.Background()
 
 	got, err := rc.Resolve(ctx, notifymodel.Recipient{MemberID: &memberID})
@@ -176,10 +217,24 @@ func TestRecipients(t *testing.T) {
 		t.Fatalf("StaffShiftID Resolve = %+v, %v", re, err)
 	}
 
-	unknown, contact := uuid.New(), uuid.New()
+	extGot, err := rc.Resolve(ctx, notifymodel.Recipient{TrustedContactID: &extContact})
+	if err != nil || len(extGot) != 1 || extGot[0].Kind != notifymodel.RecipientKindExternal ||
+		extGot[0].Ref != extContact || extGot[0].Language != "kk" {
+		t.Fatalf("external trusted Resolve = %+v, %v", extGot, err)
+	}
+	phone, err = rc.PhoneFor(ctx, notifymodel.RecipientKindExternal, extContact)
+	if err != nil || phone != extPhone {
+		t.Fatalf("external PhoneFor = %q, %v", phone, err)
+	}
+	memGot, err := rc.Resolve(ctx, notifymodel.Recipient{TrustedContactID: &memberContact})
+	if err != nil || len(memGot) != 1 || memGot[0].Kind != notifymodel.RecipientKindMember || memGot[0].Ref != memberID {
+		t.Fatalf("member trusted Resolve = %+v, %v", memGot, err)
+	}
+
+	unknown := uuid.New()
 	for name, r := range map[string]notifymodel.Recipient{
 		"unknown member":  {MemberID: &unknown},
-		"trusted contact": {TrustedContactID: &contact},
+		"removed contact": {TrustedContactID: &removedContact},
 		"no duty":         {StaffRole: notifymodel.StaffModerator},
 	} {
 		if _, err := rc.Resolve(ctx, r); !errors.Is(err, notifymodel.ErrRecipientUnresolved) {
@@ -189,9 +244,32 @@ func TestRecipients(t *testing.T) {
 	if _, err := rc.PhoneFor(ctx, notifymodel.RecipientKindMember, unknown); !errors.Is(err, notifymodel.ErrRecipientUnresolved) {
 		t.Errorf("PhoneFor unknown member: err = %v, want ErrRecipientUnresolved", err)
 	}
+	if _, err := rc.PhoneFor(ctx, notifymodel.RecipientKindExternal, removedContact); !errors.Is(err, notifymodel.ErrRecipientUnresolved) {
+		t.Errorf("PhoneFor removed contact: err = %v, want ErrRecipientUnresolved", err)
+	}
 	phone, err = rc.PhoneFor(ctx, notifymodel.RecipientKindStaff, uuid.New())
 	if err != nil || phone != "" {
 		t.Errorf("PhoneFor cancelled/unknown shift = %q, %v; want empty", phone, err)
+	}
+}
+
+func TestFirstName(t *testing.T) {
+	for in, want := range map[string]string{
+		"Example Name": "Example",
+		"Single":       "Single",
+		"  A B C  ":    "A",
+		"":             "",
+	} {
+		if got := firstName(in); got != want {
+			t.Errorf("firstName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestNeverMet(t *testing.T) {
+	met, err := (NeverMet{}).Met(context.Background(), uuid.New(), uuid.New())
+	if err != nil || met {
+		t.Fatalf("NeverMet.Met = %v, %v; want false, nil", met, err)
 	}
 }
 

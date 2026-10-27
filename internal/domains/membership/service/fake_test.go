@@ -339,6 +339,20 @@ func (t *fakeTx) IsBlocked(_ context.Context, a, b uuid.UUID) (bool, error) {
 	return ab || ba, nil
 }
 
+func (t *fakeTx) ListVerifiedInDistrict(_ context.Context, districtID uuid.UUID) ([]uuid.UUID, error) {
+	if err := t.check("ListVerifiedInDistrict"); err != nil {
+		return nil, err
+	}
+	var out []uuid.UUID
+	for id, m := range t.f.st.members {
+		if m.DistrictID != nil && *m.DistrictID == districtID && m.Verification == model.VerificationVerified {
+			out = append(out, id)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	return out, nil
+}
+
 func (t *fakeTx) DistrictExists(_ context.Context, id uuid.UUID) (bool, error) {
 	if err := t.check("DistrictExists"); err != nil {
 		return false, err

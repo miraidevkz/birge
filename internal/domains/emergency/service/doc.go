@@ -3,8 +3,9 @@
 // "I can help" responses, and the emergency plan (child card and up to three
 // trusted contacts) with sending it to the confirmed contacts.
 //
-// Other contexts import only this package. notify may rely on:
+// Other contexts import only this package. notify and wiring may rely on:
 //
+//   - SosAuthor: the member who raised an SOS (for the SosShared district push);
 //   - ContactPhone: the phone and SMS language of an external trusted
 //     contact, opened at send time; ErrNotFound once the contact is removed;
 //   - TrustedContactTarget: whether a trusted_contact_id is a member (and

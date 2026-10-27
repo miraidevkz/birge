@@ -52,6 +52,10 @@ func TestSMSTextsDemoPrefix(t *testing.T) {
 		"safety.escalation_opened",
 		"safety.escalation_unattended",
 		"emergency.sos_raised",
+		"emergency.sos_raised_contact",
+		"emergency.sos_responded",
+		"emergency.sos_shared",
+		"emergency.trusted_invitation",
 		"emergency.plan_sent",
 		"wellbeing.checkin_reminder",
 	} {

@@ -35,3 +35,9 @@ WHERE id = @id;
 UPDATE membership.members
 SET verification = @verification, updated_at = @now
 WHERE id = @id;
+
+-- name: ListVerifiedInDistrict :many
+SELECT id
+FROM membership.members
+WHERE district_id = @district_id AND verification = 'verified'
+ORDER BY id;

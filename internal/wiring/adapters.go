@@ -14,6 +14,9 @@ import (
 
 	"github.com/google/uuid"
 
+	emergencymodel "birge/internal/domains/emergency/model"
+	emergencyport "birge/internal/domains/emergency/port"
+	emergencyservice "birge/internal/domains/emergency/service"
 	membershipmodel "birge/internal/domains/membership/model"
 	membershipport "birge/internal/domains/membership/port"
 	notifymodel "birge/internal/domains/notify/model"
@@ -55,11 +58,13 @@ func (e DisplayNameEncryptor) Open(ctx context.Context, memberID uuid.UUID, seal
 // The envelope's Shred has exactly the privacy KeyShredder signature.
 var _ privacyport.KeyShredder = (*crypto.Envelope)(nil)
 
-// Envelope is also the Sealer for safety (notes, duty phones) and wellbeing
-// (check-in answers): each call already carries AssociatedData for its column.
+// Envelope is also the Sealer for safety (notes, duty phones), wellbeing
+// (check-in answers) and emergency (SOS text, child card, contact name/phone):
+// each call already carries AssociatedData for its column.
 var (
 	_ safetyport.Sealer    = (*crypto.Envelope)(nil)
 	_ wellbeingport.Sealer = (*crypto.Envelope)(nil)
+	_ emergencyport.Sealer = (*crypto.Envelope)(nil)
 )
 
 // MemberLookup is the part of the membership service the notify recipients need.
@@ -78,18 +83,25 @@ type StaffDirectory interface {
 	ShiftPhone(ctx context.Context, shiftID uuid.UUID) (string, error)
 }
 
+// TrustedContacts is the part of emergency notify needs for trusted_contact_id.
+type TrustedContacts interface {
+	TrustedContactTarget(ctx context.Context, id uuid.UUID) (memberID *uuid.UUID, external bool, err error)
+	ContactPhone(ctx context.Context, trustedContactID uuid.UUID) (phone, lang string, err error)
+}
+
 // Recipients implements the notify Recipients port. Members resolve via
-// membership; staff_role via safety; trusted contacts (emergency) stay
-// unresolved until that context is wired.
+// membership; staff_role via safety; trusted_contact_id via emergency.
 //
-// Resolve uses membership / safety only (kind, ref, language) so a Kratos
-// outage cannot block consuming DeliveryRequested. PhoneFor calls Kratos
-// (members) or safety.ShiftPhone (staff) at SMS send time, outside any
-// database transaction. Phones are never stored or logged.
+// Resolve uses membership / safety / emergency only (kind, ref, language) so a
+// Kratos outage cannot block consuming DeliveryRequested. PhoneFor calls
+// Kratos (members), safety.ShiftPhone (staff) or emergency.ContactPhone
+// (external trusted contacts) at SMS send time, outside any database
+// transaction. Phones are never stored or logged.
 type Recipients struct {
 	Members   MemberLookup
 	Phones    PhoneLookup
 	Staff     StaffDirectory
+	Emergency TrustedContacts
 	StaffLang string // language for StaffShiftID re-resolve (BIRGE_STAFF_SMS_LANG)
 }
 
@@ -143,8 +155,44 @@ func (rc *Recipients) Resolve(ctx context.Context, r notifymodel.Recipient) ([]n
 		return []notifymodel.ResolvedRecipient{{
 			Kind: notifymodel.RecipientKindStaff, Ref: *r.StaffShiftID, Language: rc.staffLang(),
 		}}, nil
+	case r.TrustedContactID != nil:
+		if rc.Emergency == nil || *r.TrustedContactID == uuid.Nil {
+			return nil, notifymodel.ErrRecipientUnresolved
+		}
+		memberID, external, err := rc.Emergency.TrustedContactTarget(ctx, *r.TrustedContactID)
+		if errors.Is(err, emergencyservice.ErrNotFound) {
+			return nil, notifymodel.ErrRecipientUnresolved
+		}
+		if err != nil {
+			return nil, fmt.Errorf("recipients: trusted contact %s: %w", *r.TrustedContactID, err)
+		}
+		if external {
+			// Language comes from the contact row; phone is opened only in PhoneFor.
+			_, lang, err := rc.Emergency.ContactPhone(ctx, *r.TrustedContactID)
+			if errors.Is(err, emergencyservice.ErrNotFound) {
+				return nil, notifymodel.ErrRecipientUnresolved
+			}
+			if err != nil {
+				return nil, fmt.Errorf("recipients: trusted contact %s: %w", *r.TrustedContactID, err)
+			}
+			return []notifymodel.ResolvedRecipient{{
+				Kind: notifymodel.RecipientKindExternal, Ref: *r.TrustedContactID, Language: lang,
+			}}, nil
+		}
+		if memberID == nil || *memberID == uuid.Nil {
+			return nil, notifymodel.ErrRecipientUnresolved
+		}
+		m, err := rc.Members.Member(ctx, *memberID)
+		if errors.Is(err, membershipmodel.ErrMemberNotFound) {
+			return nil, notifymodel.ErrRecipientUnresolved
+		}
+		if err != nil {
+			return nil, fmt.Errorf("recipients: trusted contact member %s: %w", *memberID, err)
+		}
+		return []notifymodel.ResolvedRecipient{{
+			Kind: notifymodel.RecipientKindMember, Ref: m.ID, Language: string(m.Lang),
+		}}, nil
 	default:
-		// trusted_contact (emergency) is not wired yet.
 		return nil, notifymodel.ErrRecipientUnresolved
 	}
 }
@@ -156,8 +204,7 @@ func (rc *Recipients) staffLang() string {
 	return defaultStaffSMSLang
 }
 
-// PhoneFor returns the E.164 phone for a stored recipient. kind/ref other than
-// member or staff are unresolved until emergency is wired.
+// PhoneFor returns the E.164 phone for a stored recipient.
 func (rc *Recipients) PhoneFor(ctx context.Context, kind string, ref uuid.UUID) (string, error) {
 	switch kind {
 	case notifymodel.RecipientKindMember:
@@ -189,9 +236,89 @@ func (rc *Recipients) PhoneFor(ctx context.Context, kind string, ref uuid.UUID) 
 			return "", fmt.Errorf("recipients: staff shift %s: %w", ref, err)
 		}
 		return phone, nil
+	case notifymodel.RecipientKindExternal:
+		if rc.Emergency == nil || ref == uuid.Nil {
+			return "", notifymodel.ErrRecipientUnresolved
+		}
+		phone, _, err := rc.Emergency.ContactPhone(ctx, ref)
+		if errors.Is(err, emergencyservice.ErrNotFound) {
+			return "", notifymodel.ErrRecipientUnresolved
+		}
+		if err != nil {
+			return "", fmt.Errorf("recipients: trusted contact %s: %w", ref, err)
+		}
+		return phone, nil
 	default:
 		return "", notifymodel.ErrRecipientUnresolved
 	}
+}
+
+// EmergencyMembers implements emergency's MemberInfo from membership.
+// DisplayName is the first name only (contract: never address or location):
+// membership's full display name is split at the first space.
+type EmergencyMembers struct {
+	Members MemberLookup
+}
+
+var _ emergencyport.MemberInfo = (*EmergencyMembers)(nil)
+
+// Profiles returns verification, district, first name and language for each id.
+// Unknown members are absent. Results are never logged.
+func (d *EmergencyMembers) Profiles(ctx context.Context, memberIDs []uuid.UUID) (map[uuid.UUID]emergencymodel.Profile, error) {
+	out := make(map[uuid.UUID]emergencymodel.Profile, len(memberIDs))
+	for _, id := range memberIDs {
+		if id == uuid.Nil {
+			continue
+		}
+		m, err := d.Members.Member(ctx, id)
+		if errors.Is(err, membershipmodel.ErrMemberNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("emergency members: %w", err)
+		}
+		out[id] = emergencymodel.Profile{
+			Verified:    m.Verification == membershipmodel.VerificationVerified,
+			DistrictID:  m.DistrictID,
+			DisplayName: firstName(m.DisplayName),
+			Lang:        string(m.Lang),
+		}
+	}
+	return out, nil
+}
+
+// firstName returns the part of display before the first space, or display
+// when it has no space. Empty input stays empty.
+func firstName(display string) string {
+	first, _, _ := strings.Cut(strings.TrimSpace(display), " ")
+	return first
+}
+
+// EmergencyBlocks implements emergency's Blocks from membership IsBlocked.
+type EmergencyBlocks struct {
+	Members interface {
+		IsBlocked(ctx context.Context, a, b uuid.UUID) (bool, error)
+	}
+}
+
+var _ emergencyport.Blocks = (*EmergencyBlocks)(nil)
+
+// IsBlocked reports whether a blocked b or b blocked a.
+func (b *EmergencyBlocks) IsBlocked(ctx context.Context, a, bID uuid.UUID) (bool, error) {
+	return b.Members.IsBlocked(ctx, a, bID)
+}
+
+// NeverMet implements emergency's Acquaintances while the circle context does
+// not exist. Met always returns false: members cannot yet add member trusted
+// contacts (Acquaintances.Met is required on invite and accept); external
+// contacts work without it.
+type NeverMet struct{}
+
+var _ emergencyport.Acquaintances = NeverMet{}
+
+// Met always returns false; circle is not wired yet.
+func (NeverMet) Met(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
+	return false, nil
 }
 
 // MemberDirectory implements safety's MemberDirectory from membership and Kratos.

@@ -91,6 +91,8 @@ const (
 	TemplateSosRaisedContact = "emergency.sos_raised_contact"
 	// TemplateSosResponded tells the author that someone pressed "I can help".
 	TemplateSosResponded = "emergency.sos_responded"
+	// TemplateSosShared is the district push when an SOS is shared to the feed.
+	TemplateSosShared = "emergency.sos_shared"
 	// TemplateTrustedInvitation asks a member to accept being a trusted contact.
 	TemplateTrustedInvitation = "emergency.trusted_invitation"
 	// TemplatePlanSent tells a confirmed trusted contact that a plan was sent.

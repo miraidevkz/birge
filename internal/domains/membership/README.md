@@ -50,6 +50,7 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 |---|---|
 | `service.Service.IsBlocked(ctx, a, b)` | Symmetric block check (either direction). No authorization. |
 | `service.Service.Member(ctx, id)` | Member by ID or `model.ErrMemberNotFound`. No authorization; display name is opened for the caller. |
+| `service.Service.ListVerifiedInDistrict(ctx, districtID)` | IDs of verified members in the district (empty when none or unknown). No authorization. |
 
 ## Configuration
 

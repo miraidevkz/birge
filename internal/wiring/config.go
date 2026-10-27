@@ -55,8 +55,11 @@ const (
 	// Escalation backup: requirements § 5; allow shorter values in tests.
 	defaultEscalationBackup = 15 * time.Minute
 	maxEscalationBackup     = time.Hour
-	defaultStaffSMSLang     = "ru"
-	defaultTimeZone         = "Asia/Almaty"
+	// SOS auto-close: requirements § 4.6; allow shorter values in tests.
+	defaultSosAutoClose = 24 * time.Hour
+	maxSosAutoClose     = 168 * time.Hour // 7 days
+	defaultStaffSMSLang = "ru"
+	defaultTimeZone     = "Asia/Almaty"
 )
 
 // Config is everything a subcommand needs, read from the environment by Load.
@@ -112,6 +115,10 @@ type Config struct {
 	EscalationBackupAfter time.Duration
 	StaffSMSLang          string
 
+	// SosAutoCloseAfter is how long an open SOS stays open before the worker
+	// closes it (BIRGE_SOS_AUTO_CLOSE_AFTER; default 24h).
+	SosAutoCloseAfter time.Duration
+
 	// Wellbeing: questionnaire from BIRGE_QUESTIONNAIRE_FILE or the EXAMPLE preset.
 	Wellbeing         wellbeingservice.Settings
 	QuestionnaireFile string
@@ -163,6 +170,7 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 	cfg.CrisisLexiconDir = strings.TrimSpace(getenv("BIRGE_CRISIS_LEXICON_DIR"))
 	cfg.Lexicon = l.lexiconOrDemo(&cfg)
 	cfg.EscalationBackupAfter = l.duration("BIRGE_ESCALATION_BACKUP_AFTER", defaultEscalationBackup, maxEscalationBackup)
+	cfg.SosAutoCloseAfter = l.duration("BIRGE_SOS_AUTO_CLOSE_AFTER", defaultSosAutoClose, maxSosAutoClose)
 	cfg.StaffSMSLang = l.lang("BIRGE_STAFF_SMS_LANG", defaultStaffSMSLang)
 	cfg.TimeZone = l.timeZone("BIRGE_TIME_ZONE", defaultTimeZone)
 	// Kratos admin is needed on the API for staff contact reveal (MemberDirectory)

@@ -65,6 +65,15 @@ func (t *pgTx) MemberByID(ctx context.Context, id uuid.UUID) (port.MemberRecord,
 	return memberRecord(r), nil
 }
 
+// ListVerifiedInDistrict returns the IDs of verified members in districtID.
+func (t *pgTx) ListVerifiedInDistrict(ctx context.Context, districtID uuid.UUID) ([]uuid.UUID, error) {
+	ids, err := t.q.ListVerifiedInDistrict(ctx, &districtID)
+	if err != nil {
+		return nil, fmt.Errorf("membership: list verified in district: %w", err)
+	}
+	return ids, nil
+}
+
 func memberRecord(r store.GetMemberByIDRow) port.MemberRecord {
 	return port.MemberRecord{
 		ID: r.ID, IdentityID: r.IdentityID, SealedName: r.DisplayName, Lang: model.Lang(r.Lang),

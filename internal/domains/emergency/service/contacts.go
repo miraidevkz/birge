@@ -9,6 +9,22 @@ import (
 	"birge/internal/domains/emergency/port"
 )
 
+// SosAuthor returns the member who raised the SOS, or ErrNotFound. Used by
+// the district-push consumer of emergency.SosShared (the event carries no
+// author id) so it can exclude her and apply the block filter.
+func (s *Service) SosAuthor(ctx context.Context, sosID uuid.UUID) (uuid.UUID, error) {
+	var author uuid.UUID
+	err := s.Store.InTx(ctx, func(tx port.Tx) error {
+		sos, err := tx.GetSos(ctx, sosID, false)
+		if err != nil {
+			return err
+		}
+		author = sos.MemberID
+		return nil
+	})
+	return author, err
+}
+
 // ContactPhone returns the phone (E.164) and SMS language of an external
 // trusted contact, for notify to send an SMS at send time. The phone is
 // opened with the owner's key and must not be stored or logged by the

@@ -101,6 +101,33 @@ func (q *Queries) InsertMember(ctx context.Context, arg InsertMemberParams) (uui
 	return id, err
 }
 
+const listVerifiedInDistrict = `-- name: ListVerifiedInDistrict :many
+SELECT id
+FROM membership.members
+WHERE district_id = $1 AND verification = 'verified'
+ORDER BY id
+`
+
+func (q *Queries) ListVerifiedInDistrict(ctx context.Context, districtID *uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listVerifiedInDistrict, districtID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMember = `-- name: LockMember :one
 SELECT id FROM membership.members
 WHERE id = $1

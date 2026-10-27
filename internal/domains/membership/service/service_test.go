@@ -447,6 +447,61 @@ func TestBlockFailures(t *testing.T) {
 	}
 }
 
+func TestListVerifiedInDistrict(t *testing.T) {
+	e := newEnv(t)
+	district := uuid.New()
+	otherDistrict := uuid.New()
+	e.store.st.districts[district] = uuid.New()
+	e.store.st.districts[otherDistrict] = uuid.New()
+
+	_, verified := newMember(t, e)
+	rec := e.store.st.members[verified.ID]
+	rec.DistrictID = &district
+	rec.Verification = model.VerificationVerified
+	e.store.st.members[verified.ID] = rec
+
+	_, also := newMember(t, e)
+	rec = e.store.st.members[also.ID]
+	rec.DistrictID = &district
+	rec.Verification = model.VerificationVerified
+	e.store.st.members[also.ID] = rec
+
+	_, pending := newMember(t, e)
+	rec = e.store.st.members[pending.ID]
+	rec.DistrictID = &district
+	rec.Verification = model.VerificationPending
+	e.store.st.members[pending.ID] = rec
+
+	_, elsewhere := newMember(t, e)
+	rec = e.store.st.members[elsewhere.ID]
+	rec.DistrictID = &otherDistrict
+	rec.Verification = model.VerificationVerified
+	e.store.st.members[elsewhere.ID] = rec
+
+	ids, err := e.svc.ListVerifiedInDistrict(context.Background(), district)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 {
+		t.Fatalf("ids = %v, want 2 verified in district", ids)
+	}
+	seen := map[uuid.UUID]bool{}
+	for _, id := range ids {
+		seen[id] = true
+	}
+	if !seen[verified.ID] || !seen[also.ID] || seen[pending.ID] || seen[elsewhere.ID] {
+		t.Fatalf("ids = %v", ids)
+	}
+	empty, err := e.svc.ListVerifiedInDistrict(context.Background(), uuid.New())
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("unknown district = %v, %v", empty, err)
+	}
+	nilIDs, err := e.svc.ListVerifiedInDistrict(context.Background(), uuid.Nil)
+	if err != nil || len(nilIDs) != 0 {
+		t.Fatalf("nil district = %v, %v", nilIDs, err)
+	}
+}
+
 func TestMemberForOtherContexts(t *testing.T) {
 	e := newEnv(t)
 	ctx, me := newMember(t, e)

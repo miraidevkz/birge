@@ -58,6 +58,7 @@ Operations of tag `emergency` in `contracts/openapi/birge.yaml`. All are member-
 
 | Function | Callers may rely on |
 |---|---|
+| `Service.SosAuthor(ctx, sosID) (uuid.UUID, err)` | Member who raised the SOS (`service.ErrNotFound` when unknown). For the SosShared district-push consumer. |
 | `Service.ContactPhone(ctx, trustedContactID) (phone, lang, err)` | For notify at SMS send time: the external contact's E.164 phone (opened with the owner's key) and SMS language (`kk`/`ru`). `service.ErrNotFound` when unknown, removed or a member contact. Never log or store the phone. |
 | `Service.TrustedContactTarget(ctx, id) (memberID *uuid.UUID, external bool, err)` | What a `trusted_contact_id` stands for: a confirmed member contact (`memberID`) or an external one (`external`). `service.ErrNotFound` when unknown, removed or still invited. |
 | `Service.HandleAutoClose(ctx, tx, sosID)` | Timer handler; used by `adapter.TimerHandlers`. |
@@ -68,8 +69,7 @@ Ports used by this context (wired later): `Sealer` (platform crypto), `MemberInf
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `service.Settings.AutoCloseAfter` | 24h | Time after which an open SOS closes by itself (§ 4.6 «конфиг») |
-| TODO(verify): env name for wiring | | `internal/wiring` does not build this context yet |
+| `service.Settings.AutoCloseAfter` | 24h | Time after which an open SOS closes by itself (§ 4.6 «конфиг»); env `BIRGE_SOS_AUTO_CLOSE_AFTER` |
 
 Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS per hour, 3 trusted contacts, 2000 characters per child card; plan sends 3 per hour.
 
@@ -104,10 +104,9 @@ Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS 
 ## Open questions
 
 - **External one-time plan links are out of scope.** The contract promises external contacts an SMS with a 24-hour one-time link to the plan; this context requests the `emergency.plan_sent` delivery for them, but no link exists yet (needs a token table, a public endpoint and its rate limit).
-- New notify templates need locale and `BIRGE_SMS_TEXTS` entries: `emergency.sos_raised`, `emergency.sos_raised_contact`, `emergency.sos_responded`, `emergency.trusted_invitation`, `emergency.plan_sent`.
 - Contact alerts on raise use class `critical` (member contacts get the SMS fallback); the brief fixed the class only for the moderator alert.
 - There is no endpoint for a trusted contact to read the SOS text, for moderators to see SOS in the admin, or for an invited member to list or decline invitations (she learns the `contact_id` from the invitation notification).
 - The shared plan shows the owner's current card, not a snapshot of the sent one.
-- notify must still wire `trusted_contact_id` resolution to `TrustedContactTarget` / `ContactPhone`, and the district push on `emergency.SosShared`.
-- `MemberInfo.DisplayName` must be the first name only (contract: never address or location); this context shows what membership returns.
+- Circle does not exist yet: wiring's `NeverMet` Acquaintances adapter returns false for every pair, so member trusted contacts cannot be added; external contacts work.
+- `MemberInfo.DisplayName` must be the first name only (contract: never address or location); the wiring adapter splits membership's display name at the first space.
 - Adding and removing member contacts repeatedly can send repeated invitation pushes; there is no per-hour limit on invitations yet.

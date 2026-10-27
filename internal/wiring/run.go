@@ -18,6 +18,8 @@ import (
 	"github.com/pressly/goose/v3/lock"
 
 	birgedb "birge/db"
+	emergencyadapter "birge/internal/domains/emergency/adapter"
+	emergencyservice "birge/internal/domains/emergency/service"
 	membershipadapter "birge/internal/domains/membership/adapter"
 	membershipmodel "birge/internal/domains/membership/model"
 	membershipservice "birge/internal/domains/membership/service"
@@ -168,11 +170,12 @@ func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
 }
 
 // RunWorker runs the background loops until ctx is cancelled: the outbox
-// relay to JetStream, the notify DeliveryRequested consumer and the timers
-// worker with the notify, privacy, safety and wellbeing handlers, plus
-// /healthz and /readyz (database and NATS) on the HTTP address. When one
-// loop fails, the others are stopped and the error is returned, so the
-// orchestrator restarts the process instead of running it half-working.
+// relay to JetStream, the notify DeliveryRequested consumer, the emergency
+// SosShared district-push consumer and the timers worker with the notify,
+// privacy, safety, wellbeing and emergency handlers, plus /healthz and
+// /readyz (database and NATS) on the HTTP address. When one loop fails, the
+// others are stopped and the error is returned, so the orchestrator restarts
+// the process instead of running it half-working.
 func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	if cfg.DeliveryMode != DeliveryModeDev {
 		// Load refuses this already; checked again because silently
@@ -227,10 +230,20 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		logger.Warn("BIRGE_SMS_TEXTS is empty: every SMS will be skipped (no text)")
 	}
 	logger.Warn("log-only delivery: push and SMS are logged, not sent", "mode", cfg.DeliveryMode)
+	emergency := &emergencyservice.Service{
+		Store:         &emergencyadapter.PostgresStore{Pool: pool},
+		Sealer:        env,
+		Members:       &EmergencyMembers{Members: members},
+		Blocks:        &EmergencyBlocks{Members: members},
+		Acquaintances: NeverMet{},
+		Clock:         clk,
+		Logger:        logger,
+		Settings:      emergencyservice.Settings{AutoCloseAfter: cfg.SosAutoCloseAfter},
+	}
 	notify := &notifyservice.Service{
 		Store: &notifyadapter.PostgresStore{Pool: pool},
 		Recipients: &Recipients{
-			Members: members, Phones: identities, Staff: safety, StaffLang: cfg.StaffSMSLang,
+			Members: members, Phones: identities, Staff: safety, Emergency: emergency, StaffLang: cfg.StaffSMSLang,
 		},
 		Push:   LogPushSender{Logger: logger},
 		SMS:    LogSMSSender{Logger: logger},
@@ -259,6 +272,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		(&privacyadapter.TimerHandlers{Service: privacy}).Handlers(),
 		(&safetyadapter.TimerHandlers{Service: safety}).Handlers(),
 		(&wellbeingadapter.TimerHandlers{Service: wellbeing}).Handlers(),
+		(&emergencyadapter.TimerHandlers{Service: emergency}).Handlers(),
 	)
 	if err != nil {
 		return err
@@ -269,6 +283,9 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		BatchSize: relayBatchSize, Interval: relayInterval,
 	}
 	consumer := &notifyadapter.DeliveryConsumer{JS: js, Service: notify, Logger: logger}
+	sosShared := &SosSharedConsumer{
+		JS: js, Pool: pool, Members: members, Emergency: emergency, Clock: clk, Logger: logger,
+	}
 	timerWorker := &timers.Worker{Pool: pool, Clock: clk, Logger: logger, Handlers: handlers, Interval: timersInterval}
 
 	health := http.NewServeMux()
@@ -278,6 +295,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	return runAll(ctx, logger, map[string]func(context.Context) error{
 		"outbox relay":     relay.Run,
 		"notify consumer":  consumer.Run,
+		"sos shared":       sosShared.Run,
 		"timers":           timerWorker.Run,
 		"health endpoints": func(ctx context.Context) error { return serve(ctx, logger, cfg.HTTPAddr, health) },
 	})
