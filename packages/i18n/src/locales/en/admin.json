@@ -3,6 +3,7 @@
     "escalations": "Escalations",
     "moderation": "Moderation",
     "duty": "Duty",
+    "knowledge": "Knowledge",
     "profile": "Profile"
   },
   "signIn": {
@@ -131,5 +132,126 @@
     "roles": "Roles",
     "noRoles": "No roles in the token",
     "signOut": "Sign out"
+  },
+  "knowledge": {
+    "articles": {
+      "title": "Knowledge",
+      "emptyTitle": "No articles",
+      "emptyDescription": "Create a draft or change the filters.",
+      "newDraft": "New draft",
+      "openReview": "Review queue",
+      "openReviewDue": "Review due",
+      "createTopic": "New topic",
+      "edit": "Edit",
+      "kind": {
+        "label": "Kind",
+        "all": "All",
+        "rights": "Rights",
+        "selfhelp": "Self-help"
+      },
+      "status": {
+        "label": "Status",
+        "all": "All",
+        "draft": "Draft",
+        "in_review": "In review",
+        "published": "Published",
+        "retired": "Retired"
+      },
+      "lang": "Language: {{lang}}",
+      "updatedAt": "Updated {{time}}"
+    },
+    "editor": {
+      "title": "Draft editor",
+      "titleNew": "New draft",
+      "titleEdit": "Edit draft",
+      "titleNewVersion": "New version",
+      "kind": {
+        "label": "Kind",
+        "rights": "Rights",
+        "selfhelp": "Self-help"
+      },
+      "topic": {
+        "label": "Topic"
+      },
+      "lang": {
+        "label": "Language",
+        "kk": "Kazakh",
+        "ru": "Russian",
+        "en": "English"
+      },
+      "articleTitle": {
+        "label": "Title",
+        "hint": "Up to 200 characters"
+      },
+      "body": {
+        "label": "Body",
+        "hint": "Markdown, up to 20000 characters"
+      },
+      "sourceUrl": {
+        "label": "Source URL",
+        "hint": "Required for rights articles at publication"
+      },
+      "save": "Save draft",
+      "submit": "Submit for review",
+      "invalid": "Check the fields and try again.",
+      "saved": "Draft saved.",
+      "submitted": "Submitted for review."
+    },
+    "topic": {
+      "title": "New topic",
+      "kind": {
+        "label": "Kind",
+        "rights": "Rights",
+        "selfhelp": "Self-help"
+      },
+      "code": {
+        "label": "Code",
+        "hint": "Lowercase letters and underscores, 2–40 characters"
+      },
+      "titleKk": {
+        "label": "Title (Kazakh)"
+      },
+      "titleRu": {
+        "label": "Title (Russian)"
+      },
+      "titleEn": {
+        "label": "Title (English)"
+      },
+      "save": "Create topic",
+      "invalid": "Check the fields and try again."
+    },
+    "review": {
+      "title": "Review queue",
+      "emptyTitle": "Nothing to review",
+      "emptyDescription": "No versions are waiting for review.",
+      "publish": "Publish",
+      "reject": "Reject",
+      "rejectTitle": "Reject version",
+      "confirmReject": "Reject",
+      "reason": {
+        "label": "Reason",
+        "inaccurate": "Inaccurate",
+        "outdated_law": "Outdated law",
+        "unclear": "Unclear",
+        "unsafe_advice": "Unsafe advice",
+        "missing_source": "Missing source",
+        "other": "Other"
+      },
+      "author": "Author {{id}}",
+      "lang": "Language: {{lang}}"
+    },
+    "reviewDue": {
+      "title": "Review due",
+      "emptyTitle": "Nothing due",
+      "emptyDescription": "No published versions need a review yet.",
+      "openEditor": "New version",
+      "expiresAt": "Expires {{time}}",
+      "lang": "Language: {{lang}}"
+    },
+    "problem": {
+      "forbidden": "You are not allowed to do this. Another reviewer may be required, or you authored this version.",
+      "conflict": "This version cannot be changed in its current state.",
+      "failed": "The request failed. Try again."
+    }
   }
 }
