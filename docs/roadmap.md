@@ -26,8 +26,11 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [x] Auth gateway in front of Kratos (PoW, number allowlist, rate limits) and session middleware
 - [ ] Wiring: trusted-proxy client IP, API rate limit in front of the session middleware, keys from the secret store
 - [ ] Shared store for PoW replay and limiters before running more than one replica; daily SMS budget
-- [ ] `membership` core; Kratos deployment and identity schema
-- [ ] `notify` (inbox, push, SMS, escalation ladders) + NATS relay
+- [x] `membership` core (lazy member, children, verification requests, blocks, reference data)
+- [x] `notify` core (inbox, devices, durable push/SMS delivery, critical SMS fallback, SMS guard)
+- [ ] Request validation against the OpenAPI schema (the generated strict server ignores unknown fields and patterns)
+- [ ] Seed reference data (cities, districts, needs) per country; moderator side of verification
+- [ ] Kratos deployment and identity schema
 - [ ] `apps/mobile` and `apps/admin` skeletons (Expo, Expo Router, NativeWind, RN Reusables, i18n kk/ru); low-end Android performance budget measured
 
 ## Wave 2: safety and AI
