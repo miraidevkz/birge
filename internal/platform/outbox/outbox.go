@@ -86,5 +86,9 @@ func envelope(r store.ClaimUnpublishedEventsRow) ([]byte, error) {
 	if r.TraceParent != nil {
 		env.TraceParent = *r.TraceParent
 	}
-	return json.Marshal(env)
+	b, err := json.Marshal(env)
+	if err != nil {
+		return nil, fmt.Errorf("marshal envelope: %w", err)
+	}
+	return b, nil
 }

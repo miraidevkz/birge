@@ -6,7 +6,7 @@ Status: Accepted · Date: 2026-10-27
 The product has ~13 distinct domains, a small team, agent-driven development and a target of horizontal scaling on Kubernetes.
 
 ## Decision
-One Go binary and one database, split into bounded contexts (`internal/domains/<context>`). Contexts own their tables and talk via service interfaces or domain events. Boundaries are enforced in CI (`internal/` packages, `depguard`).
+One Go binary and one database, split into bounded contexts (`internal/domains/<context>`). Contexts own their tables and talk via service interfaces or domain events. Boundaries are enforced on every test run by `internal/archtest` (another context only through its `service` package; platform never imports domains).
 
 ## Alternatives
 - Microservices per domain: network, deployment and consistency costs far above what the team and load need.

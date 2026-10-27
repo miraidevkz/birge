@@ -15,7 +15,8 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [ ] Codegen (Go server, TS client)
 - [x] `db/schema.sql` for platform tables (outbox, timers, audit)
 - [ ] `make migration`, `make db-check` with the destructive-operation gate
-- [ ] `depguard` boundaries, golangci-lint config, `make check`, CI stages per `docs/architecture.md`
+- [x] Boundary test (`internal/archtest`), golangci-lint config, `make go-check`
+- [ ] Remaining CI stages per `docs/architecture.md` (govulncheck, contracts, migrations, images)
 - [ ] `deploy/compose` (dev) and `deploy/helm` skeleton (k3s)
 - [ ] Synthetic data generator and demo mode plan
 

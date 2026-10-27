@@ -21,7 +21,7 @@ internal/domains/<context>/
 
 ## Rules
 
-- Import only your own context, `internal/platform/...`, and other contexts' exported service interfaces. depguard fails the build otherwise.
+- Import only your own context, `internal/platform/...`, and other contexts' `service` package. `internal/archtest` fails the tests otherwise.
 - Put authorization checks in `service`, not only in handlers.
 - Writing data and publishing an event happen in one transaction through the platform outbox, never "commit, then publish".
 - Delays and schedules use platform timers created in the same transaction (ADR-0020); never `time.AfterFunc`, goroutine sleeps or cron.

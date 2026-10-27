@@ -51,7 +51,7 @@ clients (React Native)            backend (Go, one binary)                  infr
 Rules:
 - A context owns its tables. No other context reads or writes them.
 - Contexts talk through **service interfaces** (synchronous, in-process) or **domain events** (asynchronous, via the outbox and NATS).
-- Dependency direction: `cmd → domains → platform`. Domains never import each other's internals; Go `internal/` packages and `depguard` enforce this in CI.
+- Dependency direction: `cmd → domains → platform`. Domains never import each other's internals; `internal/archtest` enforces this on every test run (another context only through its `service` package), and depguard bans unwanted packages.
 - Inside a context: `model` (types, invariants) → `service` (use cases) → ports (interfaces) → adapters (Postgres, NATS, providers). Keep it light: no repository-per-entity ceremony.
 
 ### Critical flows
@@ -124,7 +124,7 @@ CI workflows are thin wrappers around `make` targets, so the same checks run loc
 | Stage | Checks |
 |---|---|
 | Always | gitleaks (secrets), editorconfig |
-| Go | gofmt, go vet, golangci-lint (incl. depguard, gosec), govulncheck, `go test -race` |
+| Go | gofmt, sqlc diff, golangci-lint (incl. depguard, gosec), go vet, `go test -race` with integration tests and the boundary test, govulncheck |
 | Contracts | OpenAPI lint, breaking-change diff against `main` and every released contract in the support window, generated code is up to date |
 | Database | migration lint, destructive-operation gate, apply on an ephemeral PostgreSQL, sqlc diff |
 | AI | deterministic eval sets; LLM eval sets when prompts, model config, knowledge base or pipeline change |

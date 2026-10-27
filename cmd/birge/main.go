@@ -15,9 +15,13 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: birge <api|worker|migrate>")
-		os.Exit(2)
+		return 2
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -28,7 +32,7 @@ func main() {
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		logger.Error("invalid configuration", "error", err)
-		os.Exit(1)
+		return 1
 	}
 
 	switch os.Args[1] {
@@ -41,6 +45,7 @@ func main() {
 	}
 	if err != nil {
 		logger.Error("exit", "error", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

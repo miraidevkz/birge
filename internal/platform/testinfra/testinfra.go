@@ -113,7 +113,7 @@ func waitForPostgres(ctx context.Context, url string) (*pgxpool.Pool, error) {
 		}
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("%w (last error: %v)", ctx.Err(), err)
+			return nil, fmt.Errorf("%w (last error: %w)", ctx.Err(), err)
 		case <-time.After(50 * time.Millisecond):
 		}
 	}

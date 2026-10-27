@@ -4,6 +4,7 @@ package httpserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -44,17 +45,17 @@ func Run(ctx context.Context, logger *slog.Logger, addr string) error {
 
 	select {
 	case err := <-errCh:
-		return err
+		return fmt.Errorf("listen: %w", err)
 	case <-ctx.Done():
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return err
+		return fmt.Errorf("shutdown: %w", err)
 	}
 	if err := <-errCh; !errors.Is(err, http.ErrServerClosed) {
-		return err
+		return fmt.Errorf("serve: %w", err)
 	}
 	return nil
 }
