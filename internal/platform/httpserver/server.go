@@ -12,10 +12,13 @@ import (
 
 const shutdownTimeout = 20 * time.Second
 
-// Handler returns the root handler. Liveness and readiness live outside /v1
-// because they are for the orchestrator, not for clients.
-func Handler() http.Handler {
+// Handler returns the root handler: api under /v1/, and liveness and readiness
+// outside /v1 because they are for the orchestrator, not for clients.
+func Handler(api http.Handler) http.Handler {
 	mux := http.NewServeMux()
+	if api != nil {
+		mux.Handle("/v1/", api)
+	}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
@@ -26,10 +29,10 @@ func Handler() http.Handler {
 }
 
 // Run serves until ctx is cancelled, then shuts down gracefully.
-func Run(ctx context.Context, logger *slog.Logger, addr string) error {
+func Run(ctx context.Context, logger *slog.Logger, addr string, api http.Handler) error {
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           Handler(),
+		Handler:           Handler(api),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,

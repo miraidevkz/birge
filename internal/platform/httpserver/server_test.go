@@ -7,7 +7,7 @@ import (
 )
 
 func TestHealthEndpoints(t *testing.T) {
-	h := Handler()
+	h := Handler(nil)
 	for _, path := range []string{"/healthz", "/readyz"} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))

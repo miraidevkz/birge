@@ -12,6 +12,7 @@ func TestLoad(t *testing.T) {
 		{name: "default address", env: map[string]string{}, want: ":8080"},
 		{name: "explicit address", env: map[string]string{"BIRGE_HTTP_ADDR": "127.0.0.1:9000"}, want: "127.0.0.1:9000"},
 		{name: "invalid address", env: map[string]string{"BIRGE_HTTP_ADDR": "nope"}, wantErr: true},
+		{name: "invalid crisis phones", env: map[string]string{"BIRGE_CRISIS_PHONES": "[{"}, wantErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

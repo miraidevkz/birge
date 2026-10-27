@@ -12,7 +12,7 @@ Contracts come before code (ADR-0005). The contract PR is separate from the impl
 1. Edit the spec. Every operation has an `operationId`, a tag equal to the bounded context, request/response schemas, error responses and a security requirement (or an explicit `security: []` with a reason).
 2. Validate inputs in the schema: lengths, formats, enums, `additionalProperties: false`.
 3. Never put personal data in paths or query strings; use the body.
-4. Run `make contracts`: lint, breaking-change diff against `main`, regenerate the Go server and the TypeScript client.
+4. Each tag (bounded context) has `contracts/codegen/<tag>.yaml` and a line in `API_AREAS` in the Makefile; run `make api-gen` (oapi-codegen strict server into `internal/domains/<context>/api/api.gen.go`). `make api-check` fails on stale code. Errors use `internal/platform/httpapi` problem handlers.
 5. A breaking change needs a new version of the operation; mobile apps in the wild still use the old one. CI also diffs against every snapshot in `contracts/openapi/released/` within the support window (ADR-0018).
 6. Crisis and SOS endpoints must keep accepting requests from blocked app versions and old offline-queue payloads.
 

@@ -12,7 +12,8 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [x] Integration test infra without containers (`testinfra`: throwaway PostgreSQL, in-process NATS)
 - [ ] `internal/platform`: crypto interface, telemetry
 - [x] `contracts/`: OpenAPI 3.1 skeleton, event envelope schema
-- [ ] Codegen (Go server, TS client)
+- [x] Go server codegen (oapi-codegen strict server, one package per area) + `client-config` endpoint
+- [ ] TS client codegen (with the apps, on the Mac)
 - [x] `db/schema.sql` for platform tables (outbox, timers, audit)
 - [ ] `make migration`, `make db-check` with the destructive-operation gate
 - [x] Boundary test (`internal/archtest`), golangci-lint config, `make go-check`

@@ -6,12 +6,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"birge/internal/platform/config"
+	"birge/internal/platform/httpapi"
 	"birge/internal/platform/httpserver"
+	"birge/internal/platform/meta"
 )
 
 func main() {
@@ -37,7 +40,7 @@ func run() int {
 
 	switch os.Args[1] {
 	case "api":
-		err = httpserver.Run(ctx, logger, cfg.HTTPAddr)
+		err = httpserver.Run(ctx, logger, cfg.HTTPAddr, apiHandler(cfg, logger))
 	case "worker", "migrate":
 		err = fmt.Errorf("%s: not implemented yet", os.Args[1])
 	default:
@@ -48,4 +51,24 @@ func run() int {
 		return 1
 	}
 	return 0
+}
+
+// apiHandler mounts the generated /v1 handlers of every API area on one mux.
+func apiHandler(cfg config.Config, logger *slog.Logger) http.Handler {
+	mux := http.NewServeMux()
+	phones := make([]meta.CrisisPhone, 0, len(cfg.CrisisPhones))
+	for _, p := range cfg.CrisisPhones {
+		phones = append(phones, meta.CrisisPhone{Number: p.Number, Label: p.Label})
+	}
+	metaSvc := &meta.Service{Settings: meta.Settings{
+		MinVersion: cfg.MinAppVersion, LatestVersion: cfg.LatestAppVersion, CrisisPhones: phones,
+	}}
+	meta.HandlerWithOptions(
+		meta.NewStrictHandlerWithOptions(metaSvc, nil, meta.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc:  httpapi.RequestErrorHandler,
+			ResponseErrorHandlerFunc: httpapi.ResponseErrorHandler(logger),
+		}),
+		meta.StdHTTPServerOptions{BaseURL: "/v1", BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler},
+	)
+	return mux
 }

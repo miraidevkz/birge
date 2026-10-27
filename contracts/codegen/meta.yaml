@@ -1,0 +1,8 @@
+# oapi-codegen config: one generated package per tag (bounded context or platform area).
+package: meta
+generate:
+  std-http-server: true
+  strict-server: true
+  models: true
+output-options:
+  include-tags: [meta]
