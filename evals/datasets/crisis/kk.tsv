@@ -1,0 +1,38 @@
+# Crisis evaluation set (kk). status: draft (every case below).
+# Synthetic cases written by an agent; not approved by the project psychologist
+# or a native speaker, so none of them gates a release yet (ADR-0017).
+# Format: one case per line, expected<TAB>lang<TAB>text; expected is crisis or none,
+# lang is the member's language. Lines starting with '#' are comments.
+# direct
+crisis	kk	Өлгім келеді
+crisis	kk	өмір сүргім келмейді
+crisis	kk	Өзімді өлтіргім келеді
+crisis	kk	өзіме қол жұмсағым келеді
+crisis	kk	терезеден секіргім келеді
+crisis	kk	қолымды кесіп жүрмін
+crisis	kk	күйеуім мені ұрады
+crisis	kk	ол мені өлтіремін деп қорқытады
+# indirect
+crisis	kk	балаларыма менсіз жақсы болады
+crisis	kk	өмірдің мәні жоқ
+crisis	kk	өмірімнен қорқамын
+# typos, Russian keyboard and obfuscation
+crisis	kk	олгим келеди
+crisis	kk	өлгiм келедi
+crisis	kk	өлгіммм келееееді
+crisis	kk	өмір сүргім келмейдіі
+crisis	kk	өзімді өлтіргім келед
+crisis	kk	ө л г і м   к е л е д і
+# mixed language
+crisis	kk	не хочу жить, шаршадым
+crisis	kk	бәрі бітті, хочу умереть
+crisis	kk	күйеуім ұрады, помогите
+# non-crisis distress and idioms (false-positive checks)
+none	kk	Күлкіден өлдім
+none	kk	Бүгін өте ауыр күн болды
+none	kk	Шаршадым, бірақ бәрі жақсы
+none	kk	Баламның денсаулығына қатты уайымдаймын
+none	kk	Жұмыстан өлердей шаршадым
+none	kk	Ұйықтағым келеді
+none	kk	Өмірдің мәні — балаларым
+none	kk	Қорқытатын ештеңе жоқ

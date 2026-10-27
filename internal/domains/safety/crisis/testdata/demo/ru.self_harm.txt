@@ -1,0 +1,8 @@
+# DEMO lexicon. Illustrative entries for tests and development only; NOT the
+# production lexicon, which the project psychologist supplies and which is kept
+# outside the repository (ADR-0023). Format: see crisis.Load.
+режу себя
+резать вены
+вскрыть вены
+причиняю себе боль
+re: \sпорез\pL*( себе)? (руки|вены|запяст\pL*)

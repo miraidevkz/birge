@@ -119,7 +119,7 @@ BIRGE_DELIVERY_MODE=dev go run ./cmd/birge worker
 
 - Unit tests use fakes of the context's ports (test-only packages such as `notifytest`).
 - Integration tests use `internal/platform/testinfra`: `testinfra.Postgres(t)` (throwaway cluster with the schema applied) and `testinfra.NATS(t)` (in-process JetStream).
-- The crisis path has its own evaluation sets and rules ([ADR-0017](adr/0017-ai-evaluation.md), `.claude/skills/crisis-path/SKILL.md`).
+- The crisis path has its own evaluation sets and rules ([ADR-0017](adr/0017-ai-evaluation.md), `.claude/skills/crisis-path/SKILL.md`). The level-1 set is line-based (`evals/datasets/crisis/*.tsv`, see its README); `go test ./internal/domains/safety/crisis/` runs it against the DEMO lexicon and logs recall and the false-positive rate.
 
 ## Troubleshooting
 
