@@ -1,0 +1,19 @@
+[
+  {
+    "client_id": "birge-admin",
+    "client_name": "Birge staff admin (development)",
+    "grant_types": [
+      "authorization_code",
+      "refresh_token"
+    ],
+    "response_types": [
+      "code"
+    ],
+    "scope": "openid offline_access",
+    "token_endpoint_auth_method": "none",
+    "redirect_uris": [
+      "http://localhost:8082/",
+      "http://localhost:8082/sign-in"
+    ]
+  }
+]

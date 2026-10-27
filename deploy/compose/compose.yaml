@@ -25,6 +25,16 @@ x-birge-env: &birge-env
   BIRGE_SMS_PER_NUMBER_LIMIT: ${BIRGE_SMS_PER_NUMBER_LIMIT:-500}
   # The web client below; native clients send no Origin and stay allowed.
   BIRGE_CHAT_WS_ORIGINS: localhost:8081
+  # Staff sign-in through the development Hydra below. amr "dev" stands in
+  # for the second factor: only this stack accepts it (cmd/birge-devlogin).
+  BIRGE_STAFF_INTROSPECTION_URL: http://hydra:4445/admin/oauth2/introspect
+  BIRGE_STAFF_CLIENT_ID: birge-api
+  BIRGE_STAFF_CLIENT_SECRET_FILE: /secrets/hydra-introspect
+  BIRGE_STAFF_ISSUER: http://localhost:4444/
+  BIRGE_STAFF_AUDIENCE: birge-admin
+  BIRGE_STAFF_ROLES_CLAIM: ext.roles
+  BIRGE_STAFF_ROLE_MAP: psychologist=psychologist,moderator=moderator,lawyer=lawyer,admin=admin
+  BIRGE_STAFF_MFA_AMR: dev
 
 services:
   postgres:
@@ -85,7 +95,9 @@ services:
         { test -f /secrets/kek.json || birge keygen -dir /secrets; } &&
         { test -f /secrets/kratos-secret || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >/secrets/kratos-secret; } &&
         { test -f /secrets/kratos-cipher || od -An -tx1 -N16 /dev/urandom | tr -d ' \n' >/secrets/kratos-cipher; } &&
-        chown -R birge /secrets && chmod 0644 /secrets/kratos-secret /secrets/kratos-cipher
+        { test -f /secrets/hydra-system || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >/secrets/hydra-system; } &&
+        { test -f /secrets/hydra-introspect || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >/secrets/hydra-introspect; } &&
+        chown -R birge /secrets && chmod 0644 /secrets/kratos-secret /secrets/kratos-cipher /secrets/hydra-system
     volumes:
       - secrets:/secrets
 
@@ -121,6 +133,78 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }
+
+  # Staff identity for development: Ory Hydra with the development login app
+  # (cmd/birge-devlogin, no password, never deployed). The admin app signs in
+  # with authorization code + PKCE; the API introspects the tokens. Hydra's
+  # public port (the issuer) and the login app are on 127.0.0.1 only.
+  hydra-db:
+    image: postgres:18.0-alpine
+    # The init script runs only on a new volume; this also covers old ones.
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        { psql -h postgres -U postgres -Atc "SELECT 1 FROM pg_roles WHERE rolname = 'hydra'" | grep -q 1 ||
+          psql -h postgres -U postgres -c "CREATE ROLE hydra LOGIN"; } &&
+        { psql -h postgres -U postgres -Atc "SELECT 1 FROM pg_database WHERE datname = 'hydra'" | grep -q 1 ||
+          psql -h postgres -U postgres -c "CREATE DATABASE hydra OWNER hydra"; }
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  hydra-migrate:
+    image: oryd/hydra:v26.2.0
+    command: ["migrate", "sql", "up", "-e", "--yes"]
+    environment:
+      DSN: postgres://hydra@postgres:5432/hydra?sslmode=disable
+    depends_on:
+      hydra-db: { condition: service_completed_successfully }
+
+  hydra:
+    image: oryd/hydra:v26.2.0
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        export SECRETS_SYSTEM=$$(cat /secrets/hydra-system) &&
+        exec hydra serve all --dev
+    environment:
+      DSN: postgres://hydra@postgres:5432/hydra?sslmode=disable
+      URLS_SELF_ISSUER: http://localhost:4444/
+      URLS_LOGIN: http://localhost:3000/login
+      URLS_CONSENT: http://localhost:3000/consent
+      SERVE_PUBLIC_CORS_ENABLED: "true"
+      SERVE_PUBLIC_CORS_ALLOWED_ORIGINS: http://localhost:8082
+      TTL_ACCESS_TOKEN: 1h
+    volumes:
+      - secrets:/secrets:ro
+    ports:
+      - "127.0.0.1:4444:4444"
+    depends_on:
+      hydra-migrate: { condition: service_completed_successfully }
+      keygen: { condition: service_completed_successfully }
+
+  # Registers the admin app (public client, PKCE) once; later starts keep it.
+  hydra-clients:
+    image: oryd/hydra:v26.2.0
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        hydra get oauth2-client birge-admin -e http://hydra:4445 >/dev/null 2>&1 ||
+        hydra import oauth2-client /etc/config/hydra/admin-client.json -e http://hydra:4445
+    volumes:
+      - ./hydra:/etc/config/hydra:ro
+    depends_on:
+      hydra: { condition: service_started }
+    restart: on-failure
+
+  devlogin:
+    image: birge-dev:local
+    entrypoint: ["birge-devlogin"]
+    environment:
+      HYDRA_ADMIN_URL: http://hydra:4445
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      hydra: { condition: service_started }
 
   # The exported web app (./up.sh web builds it) on 127.0.0.1:8081. Browsers
   # need a secure context for the sign-in proof-of-work (WebCrypto), and

@@ -139,6 +139,10 @@ deploy/compose/up.sh down     # stop; data volumes stay
 
 It publishes only the API on `127.0.0.1:8080` (the auth gateway at `/auth/`). Keys and the Kratos secrets are generated once into a volume; push and SMS are logged, not sent. A phone on USB reaches it with `adb reverse tcp:8080 tcp:8080`, which matches the app's default URLs. Android release builds refuse plain HTTP: build the APK with `BIRGE_DEV_CLEARTEXT=1` to allow it (development only). `deploy/compose/up.sh web` exports the web client against the stack and serves it with the API on `http://localhost:8081`; the sign-in proof-of-work needs WebCrypto, which browsers allow only in a secure context, so from another machine open it through `ssh -L 8081:localhost:8081 <host>`. Allowed sign-in prefixes default to `+77`; override with `BIRGE_SMS_ALLOWED_PREFIXES`.
 
+Sign-in limits are looser than in production so testers can retry from one number (60 code requests per number, 500 SMS per number per hour, 30-minute flows); set `BIRGE_AUTH_RATE_PER_NUMBER`, `BIRGE_AUTH_RATE_PER_IP` or `BIRGE_SMS_PER_NUMBER_LIMIT` to test the real ones.
+
+Staff sign in through a development Ory Hydra (issuer `http://localhost:4444/`) and `cmd/birge-devlogin` on `http://localhost:3000`, which lists one fixed account per staff role and signs in without a password. Its tokens carry `amr` `dev` in place of a second factor, and only this stack's API accepts that (`BIRGE_STAFF_MFA_AMR=dev`); never deploy it. The admin app is the public client `birge-admin` (authorization code with PKCE, redirect `http://localhost:8082/`, see `deploy/compose/hydra/admin-client.json`). From another machine forward ports 4444, 3000 and 8082 as well.
+
 To run the binaries yourself instead, start PostgreSQL, NATS with JetStream and Kratos however you like. Create local development keys under `secrets/` (git-ignored; never commit keys). Production keys come from the secret store, not from `keygen`:
 
 ```sh
