@@ -17,7 +17,9 @@ Birge («Бірге», "together") is an open-source platform of peer support an
 
 Do not read the whole repository. Use `rg` to find what you need.
 
-Task skills live in [`.claude/skills/`](.claude/skills/): `db-migration`, `api-contract`, `domain-module`, `crisis-path`. Load the one that matches your task.
+Skills live in [`.claude/skills/`](.claude/skills/). Load only the ones that match your task.
+- Project: `db-migration`, `api-contract`, `domain-module`, `crisis-path`.
+- Vendored stack skills (`golang-*`, `expo-*`, `supabase-postgres-best-practices`) are pinned upstream copies ([THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)). Their "Birge overrides" block, this file and the ADRs win over the rest of their text. Do not update them from upstream without review.
 
 ## Non-negotiables
 
