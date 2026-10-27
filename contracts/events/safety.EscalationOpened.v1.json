@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:safety.EscalationOpened.v1",
+  "title": "safety.EscalationOpened",
+  "description": "A crisis or help request needs a person. Consumed for alerts and metrics.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "escalation_id",
+    "member_id",
+    "source"
+  ],
+  "properties": {
+    "escalation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "member_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "assistant",
+        "checkin",
+        "sos",
+        "menu"
+      ]
+    }
+  }
+}

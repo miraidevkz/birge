@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:safety.EscalationUnattended.v1",
+  "title": "safety.EscalationUnattended",
+  "description": "Nobody took the escalation in time; backup staff are alerted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "escalation_id",
+    "minutes_open"
+  ],
+  "properties": {
+    "escalation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "minutes_open": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

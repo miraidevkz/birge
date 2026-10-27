@@ -13,6 +13,7 @@ import (
 	"net/http"
 
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // Defines values for AppPlatform.
@@ -92,6 +93,9 @@ type AppPlatform string
 
 // AppVersion defines model for AppVersion.
 type AppVersion = string
+
+// EscalationId defines model for EscalationId.
+type EscalationId = openapi_types.UUID
 
 // GetClientConfigParams defines parameters for GetClientConfig.
 type GetClientConfigParams struct {

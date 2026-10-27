@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:wellbeing.CheckinCompleted.v1",
+  "title": "wellbeing.CheckinCompleted",
+  "description": "A member completed a check-in. Scores stay in wellbeing; only the flag travels.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "member_id",
+    "checkin_id",
+    "flag"
+  ],
+  "properties": {
+    "member_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "checkin_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "flag": {
+      "type": "string",
+      "enum": [
+        "none",
+        "elevated",
+        "crisis"
+      ]
+    }
+  }
+}

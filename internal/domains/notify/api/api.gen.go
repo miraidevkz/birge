@@ -99,6 +99,9 @@ type Problem struct {
 	Type   string  `json:"type"`
 }
 
+// EscalationId defines model for EscalationId.
+type EscalationId = openapi_types.UUID
+
 // ListInboxParams defines parameters for ListInbox.
 type ListInboxParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`

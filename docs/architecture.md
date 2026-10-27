@@ -111,6 +111,7 @@ docs/                 # architecture, ADRs, requirements, threat model
 | Timers | `timers` table, SKIP LOCKED workers, created in the domain transaction | [0020](adr/0020-scheduler.md) |
 | Observability | OpenTelemetry → Prometheus, Loki, Tempo, Grafana; GlitchTip; alerts via `notify` | [0021](adr/0021-observability.md) |
 | Knowledge base | admin editor with review, per-language publishing, expiry (legal 6 mo, self-help 12 mo), export to repo | [0022](adr/0022-knowledge-base-workflow.md) |
+| Crisis path | safety owns lexicon, escalations, duty roster; staff alerted by SMS to on-duty phones | [0023](adr/0023-crisis-path.md) |
 | Object storage | S3 API only; Garage for dev/MVP, local S3-compatible provider in production | [0015](adr/0015-object-storage.md) |
 
 ## Replication to other countries

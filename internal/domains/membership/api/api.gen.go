@@ -161,6 +161,9 @@ type Problem struct {
 	Type   string  `json:"type"`
 }
 
+// EscalationId defines model for EscalationId.
+type EscalationId = openapi_types.UUID
+
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = openapi_types.UUID
 

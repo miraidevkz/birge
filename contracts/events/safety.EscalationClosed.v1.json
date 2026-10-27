@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:safety.EscalationClosed.v1",
+  "title": "safety.EscalationClosed",
+  "description": "The escalation was closed with an outcome.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "escalation_id",
+    "outcome"
+  ],
+  "properties": {
+    "escalation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "contacted",
+        "referred",
+        "emergency_services",
+        "no_answer",
+        "not_a_crisis"
+      ]
+    }
+  }
+}

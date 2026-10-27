@@ -19,6 +19,10 @@ tags:
     description: Consents and account deletion.
   - name: notify
     description: In-app inbox and push devices.
+  - name: safety
+    description: Crisis help requests (members) and the escalation queue and duty roster (staff).
+  - name: wellbeing
+    description: Weekly check-ins, history and audio practices.
 security:
   - memberSession: []
 paths:
@@ -313,6 +317,288 @@ paths:
       responses:
         '204': {description: Removed (idempotent).}
         default: {$ref: '#/components/responses/Problem'}
+
+  /me/help-requests:
+    post:
+      operationId: requestHumanHelp
+      tags: [safety]
+      summary: "\"Contact a person now\": opens an escalation to the on-duty staff."
+      description: |
+        Works for every member, verified or not, and does not depend on the AI assistant.
+        The client shows the fixed crisis screen from its locale files together with the
+        returned crisis phones; it never waits for this call to show them.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [source]
+              properties:
+                source:
+                  type: string
+                  enum: [assistant, checkin, sos, menu]
+                  description: Where the member pressed the button.
+      responses:
+        '202':
+          description: Escalation opened (or the already open one for this member).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HelpRequestAccepted'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/escalations:
+    get:
+      operationId: listEscalations
+      tags: [safety]
+      security:
+        - staffOidc: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, taken, closed]
+            default: open
+        - name: cursor
+          in: query
+          required: false
+          schema: {type: string, maxLength: 128}
+      responses:
+        '200':
+          description: Oldest open first; no personal data until taken.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EscalationPage'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/escalations/{escalationId}/take:
+    parameters:
+      - $ref: '#/components/parameters/EscalationId'
+    post:
+      operationId: takeEscalation
+      tags: [safety]
+      summary: The caller becomes responsible; cancels the backup timer. Audited.
+      security:
+        - staffOidc: []
+      responses:
+        '200':
+          description: Taken by the caller.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Escalation'}
+        '409': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/escalations/{escalationId}/contact:
+    parameters:
+      - $ref: '#/components/parameters/EscalationId'
+    post:
+      operationId: revealEscalationContact
+      tags: [safety]
+      summary: Reveal the member's name and phone to the staff member who took the escalation. Audited.
+      security:
+        - staffOidc: []
+      responses:
+        '200':
+          description: Contact details.
+          headers:
+            Cache-Control:
+              schema: {type: string, enum: [no-store]}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EscalationContact'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/escalations/{escalationId}/close:
+    parameters:
+      - $ref: '#/components/parameters/EscalationId'
+    post:
+      operationId: closeEscalation
+      tags: [safety]
+      security:
+        - staffOidc: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [outcome]
+              properties:
+                outcome:
+                  type: string
+                  enum: [contacted, referred, emergency_services, no_answer, not_a_crisis]
+                note:
+                  type: string
+                  maxLength: 2000
+                  description: Stored encrypted; visible only to staff with access to this escalation.
+      responses:
+        '200':
+          description: Closed.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Escalation'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/duty-roster:
+    get:
+      operationId: getDutyRoster
+      tags: [safety]
+      security:
+        - staffOidc: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          required: true
+          schema: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Shifts overlapping the period.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 500
+                items: {$ref: '#/components/schemas/DutyShift'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: addDutyShift
+      tags: [safety]
+      summary: Admin only.
+      security:
+        - staffOidc: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DutyShiftInput'}
+      responses:
+        '201':
+          description: Shift added.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DutyShift'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/duty-roster/{shiftId}:
+    parameters:
+      - name: shiftId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    delete:
+      operationId: deleteDutyShift
+      tags: [safety]
+      summary: Admin only; a shift that has started cannot be deleted.
+      security:
+        - staffOidc: []
+      responses:
+        '204': {description: Removed.}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/checkins/schedule:
+    get:
+      operationId: getCheckinSchedule
+      tags: [wellbeing]
+      responses:
+        '200':
+          description: Reminder schedule (absent fields = no reminder yet).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckinSchedule'}
+        default: {$ref: '#/components/responses/Problem'}
+    put:
+      operationId: setCheckinSchedule
+      tags: [wellbeing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CheckinSchedule'}
+      responses:
+        '200':
+          description: Saved; the next reminder is scheduled.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckinSchedule'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/checkins/questionnaire:
+    get:
+      operationId: getQuestionnaire
+      tags: [wellbeing]
+      summary: Questions and answer options as locale keys (texts and thresholds are configuration).
+      responses:
+        '200':
+          description: Current questionnaire.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Questionnaire'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/checkins:
+    post:
+      operationId: submitCheckin
+      tags: [wellbeing]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CheckinSubmission'}
+      responses:
+        '201':
+          description: |
+            Scored. When flag is crisis the client shows the fixed crisis screen and an
+            escalation has already been opened (source checkin); when elevated the client
+            offers to contact a psychologist (requestHumanHelp with source checkin).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckinResult'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/checkins/history:
+    get:
+      operationId: getCheckinHistory
+      tags: [wellbeing]
+      parameters:
+        - name: weeks
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 52, default: 8}
+      responses:
+        '200':
+          description: One point per completed check-in, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 60
+                items: {$ref: '#/components/schemas/CheckinPoint'}
+        default: {$ref: '#/components/responses/Problem'}
+  /practices:
+    get:
+      operationId: listPractices
+      tags: [wellbeing]
+      parameters:
+        - name: lang
+          in: query
+          required: true
+          schema: {$ref: '#/components/schemas/Lang'}
+      responses:
+        '200':
+          description: Audio practices in the given language.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 50
+                items: {$ref: '#/components/schemas/Practice'}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     memberSession:
@@ -324,6 +610,11 @@ components:
       openIdConnectUrl: /.well-known/openid-configuration
       description: Staff sign-in through any OIDC provider (ADR-0008).
   parameters:
+    EscalationId:
+      name: escalationId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     AppVersion:
       name: X-App-Version
       in: header
@@ -571,3 +862,171 @@ components:
           type: string
           enum: [ios, android]
         pushToken: {type: string, minLength: 8, maxLength: 4096}
+
+    HelpRequestAccepted:
+      type: object
+      additionalProperties: false
+      required: [escalationId, crisisPhones]
+      properties:
+        escalationId: {type: string, format: uuid}
+        crisisPhones:
+          type: array
+          maxItems: 10
+          items: {$ref: '#/components/schemas/CrisisPhone'}
+    EscalationSource:
+      type: string
+      enum: [assistant, checkin, sos, menu]
+    Escalation:
+      type: object
+      additionalProperties: false
+      required: [id, source, status, openedAt, districtId]
+      properties:
+        id: {type: string, format: uuid}
+        source: {$ref: '#/components/schemas/EscalationSource'}
+        status:
+          type: string
+          enum: [open, taken, closed]
+        openedAt: {type: string, format: date-time}
+        districtId: {type: string, format: uuid, description: For routing; no name or contact.}
+        takenAt: {type: string, format: date-time}
+        takenByMe: {type: boolean}
+        outcome:
+          type: string
+          enum: [contacted, referred, emergency_services, no_answer, not_a_crisis]
+        closedAt: {type: string, format: date-time}
+    EscalationPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/Escalation'}
+        nextCursor: {type: string, maxLength: 128}
+    EscalationContact:
+      type: object
+      additionalProperties: false
+      required: [displayName, phone, lang]
+      properties:
+        displayName: {type: string, maxLength: 40}
+        phone: {type: string, pattern: '^\+[1-9][0-9]{7,14}$'}
+        lang: {$ref: '#/components/schemas/Lang'}
+    DutyShift:
+      type: object
+      additionalProperties: false
+      required: [id, staffId, role, startsAt, endsAt, backup]
+      properties:
+        id: {type: string, format: uuid}
+        staffId: {type: string, format: uuid}
+        role:
+          type: string
+          enum: [psychologist, moderator]
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: string, format: date-time}
+        backup: {type: boolean, description: Backup shifts are notified when the primary does not take an escalation in time.}
+    DutyShiftInput:
+      type: object
+      additionalProperties: false
+      required: [staffId, role, startsAt, endsAt, backup, phone]
+      properties:
+        staffId: {type: string, format: uuid}
+        role:
+          type: string
+          enum: [psychologist, moderator]
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: string, format: date-time}
+        backup: {type: boolean}
+        phone:
+          type: string
+          pattern: '^\+[1-9][0-9]{7,14}$'
+          description: On-duty phone for SMS alerts; stored encrypted, never returned.
+    CheckinSchedule:
+      type: object
+      additionalProperties: false
+      properties:
+        weekday: {type: integer, minimum: 1, maximum: 7, description: ISO weekday, 1 = Monday.}
+        hour: {type: integer, minimum: 0, maximum: 23, description: Local hour in the deployment time zone.}
+        enabled: {type: boolean}
+    Questionnaire:
+      type: object
+      additionalProperties: false
+      required: [version, questions]
+      properties:
+        version: {type: string, maxLength: 32}
+        questions:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, instrument, textKey, options]
+            properties:
+              id: {type: string, pattern: '^[a-z0-9_]{1,40}$'}
+              instrument:
+                type: string
+                enum: [phq4, pss4]
+              textKey: {type: string, maxLength: 80}
+              options:
+                type: array
+                maxItems: 6
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [value, textKey]
+                  properties:
+                    value: {type: integer, minimum: 0, maximum: 5}
+                    textKey: {type: string, maxLength: 80}
+    CheckinSubmission:
+      type: object
+      additionalProperties: false
+      required: [questionnaireVersion, answers]
+      properties:
+        questionnaireVersion: {type: string, maxLength: 32}
+        answers:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [questionId, value]
+            properties:
+              questionId: {type: string, pattern: '^[a-z0-9_]{1,40}$'}
+              value: {type: integer, minimum: 0, maximum: 5}
+    CheckinFlag:
+      type: string
+      enum: [none, elevated, crisis]
+    CheckinResult:
+      type: object
+      additionalProperties: false
+      required: [id, flag, feedbackKey, suggestion]
+      properties:
+        id: {type: string, format: uuid}
+        flag: {$ref: '#/components/schemas/CheckinFlag'}
+        feedbackKey: {type: string, maxLength: 80, description: Locale key of the short feedback; never a diagnosis.}
+        suggestion:
+          type: string
+          enum: [practice, tea, talk, psychologist, none]
+        escalationId: {type: string, format: uuid, description: Present when flag is crisis.}
+        crisisPhones:
+          type: array
+          maxItems: 10
+          items: {$ref: '#/components/schemas/CrisisPhone'}
+    CheckinPoint:
+      type: object
+      additionalProperties: false
+      required: [completedAt, phq4, pss4]
+      properties:
+        completedAt: {type: string, format: date-time}
+        phq4: {type: integer, minimum: 0, maximum: 12}
+        pss4: {type: integer, minimum: 0, maximum: 16}
+    Practice:
+      type: object
+      additionalProperties: false
+      required: [id, titleKey, durationSeconds, url]
+      properties:
+        id: {type: string, format: uuid}
+        titleKey: {type: string, maxLength: 80}
+        durationSeconds: {type: integer, minimum: 1, maximum: 3600}
+        url: {type: string, format: uri, maxLength: 2048, description: In-jurisdiction object storage.}
