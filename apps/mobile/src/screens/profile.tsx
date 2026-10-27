@@ -140,6 +140,12 @@ export function ProfileScreen() {
       </Card>
 
       <Card>
+        <ListItem
+          title={t('emergencyPlan')}
+          subtitle={t('emergencyPlanHint')}
+          onPress={() => router.push('/emergency-plan')}
+          testID="profile-emergency-plan"
+        />
         <ListItem title={t('links.privacy')} onPress={() => router.push('/privacy')} testID="profile-link-privacy" />
         <ListItem
           title={t('links.knowledge')}

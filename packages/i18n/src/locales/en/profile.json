@@ -23,6 +23,8 @@
     "knowledge": "Knowledge base",
     "assistant": "AI assistant"
   },
+  "emergencyPlan": "Emergency plan",
+  "emergencyPlanHint": "Child card and trusted contacts",
   "saveFailed": "Could not save. Try again.",
   "saved": "Saved."
 }

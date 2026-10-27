@@ -1,0 +1,48 @@
+{
+  "title": "Emergency plan",
+  "intro": "A short card about your child and up to three trusted contacts. Only people you choose can receive it.",
+  "childCard": {
+    "heading": "Child card",
+    "label": "Needs, medicines, how to calm, fears",
+    "hint": "Free text, up to 2000 characters. Stored encrypted.",
+    "empty": "No child card yet.",
+    "save": "Save child card",
+    "saved": "Child card saved."
+  },
+  "contacts": {
+    "heading": "Trusted contacts",
+    "emptyTitle": "No trusted contacts yet",
+    "emptyDescription": "Add up to three people you trust. Members must have met you in person and accept the invitation.",
+    "status": {
+      "invited": "Invitation pending",
+      "confirmed": "Confirmed"
+    },
+    "kind": {
+      "member": "Member",
+      "external": "External"
+    },
+    "addHeading": "Add an external contact",
+    "name": "Name",
+    "phone": "Mobile number",
+    "phoneHint": "International format, for example +70000000000",
+    "add": "Add contact",
+    "remove": "Remove",
+    "invalidPhone": "Enter a valid mobile number in international format.",
+    "invalidName": "Enter a name.",
+    "full": "You already have three trusted contacts."
+  },
+  "send": {
+    "heading": "Send the plan",
+    "description": "Confirmed contacts receive a notification. External contacts get an SMS without the card text.",
+    "action": "Send plan to trusted contacts",
+    "confirm": "Send the child card to your confirmed trusted contacts now?",
+    "confirmAction": "Yes, send",
+    "cancel": "Cancel",
+    "sent": "Sending the plan.",
+    "needCard": "Save a child card before sending.",
+    "needContact": "Add at least one confirmed trusted contact before sending."
+  },
+  "lastSent": "Last sent {{when}}",
+  "saveError": "Could not save. Check your connection and try again.",
+  "loadError": "Could not load the plan."
+}

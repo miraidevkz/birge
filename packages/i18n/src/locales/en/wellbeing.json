@@ -1,0 +1,72 @@
+{
+  "title": "How am I",
+  "start": {
+    "heading": "Weekly check-in",
+    "intro": "Eight short questions about how you have felt. Answers are private. This is not a diagnosis.",
+    "action": "Start check-in",
+    "history": "Past check-ins"
+  },
+  "progress": "Question {{current}} of {{total}}",
+  "questions": {
+    "missing": "This question is not available in this version of the app."
+  },
+  "phq4": {
+    "q1": "Little interest or pleasure in doing things",
+    "q2": "Feeling down, depressed, or hopeless",
+    "q3": "Feeling nervous, anxious, or on edge",
+    "q4": "Not being able to stop or control worrying",
+    "opt": {
+      "0": "Not at all",
+      "1": "Several days",
+      "2": "More than half the days",
+      "3": "Nearly every day"
+    }
+  },
+  "pss4": {
+    "q1": "In the last month, how often have you felt that you were unable to control the important things in your life?",
+    "q2": "In the last month, how often have you felt confident about your ability to handle your personal problems?",
+    "q3": "In the last month, how often have you felt that things were going your way?",
+    "q4": "In the last month, how often have you felt difficulties were piling up so high that you could not overcome them?",
+    "opt": {
+      "0": "Never",
+      "1": "Almost never",
+      "2": "Sometimes",
+      "3": "Fairly often",
+      "4": "Very often"
+    }
+  },
+  "feedback": {
+    "none": "Thank you for checking in. Take a moment for yourself when you can.",
+    "elevated": "Thank you for sharing. It may help to talk with a psychologist.",
+    "crisis": "Thank you for telling us. Please use the numbers below or contact a person on duty.",
+    "missing": "Thank you for checking in."
+  },
+  "suggestion": {
+    "heading": "A suggestion for you",
+    "practice": "Try a short audio practice when you have a quiet minute.",
+    "tea": "Meet a mother nearby for tea when you are ready.",
+    "talk": "Open Talk to write freely to the assistant.",
+    "psychologist": "A psychologist on duty can contact you.",
+    "none": "No extra step right now."
+  },
+  "elevated": {
+    "heading": "Talk to a psychologist",
+    "description": "A person on duty will contact you as soon as possible.",
+    "action": "Yes, contact a psychologist",
+    "sent": "Request sent. A person on duty will contact you.",
+    "queued": "No connection. Your request is saved and will be sent automatically when you are back online.",
+    "failed": "The request could not be sent. Try again or open Help for phone numbers."
+  },
+  "result": {
+    "title": "Your check-in",
+    "done": "Done",
+    "history": "See past check-ins"
+  },
+  "history": {
+    "title": "Past check-ins",
+    "emptyTitle": "No check-ins yet",
+    "emptyDescription": "After you complete a weekly check-in, your scores will appear here.",
+    "point": "PHQ-4 {{phq4}}, PSS-4 {{pss4}}"
+  },
+  "submitError": "The check-in could not be sent. Check your connection and try again."
+}

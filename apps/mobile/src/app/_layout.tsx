@@ -66,7 +66,10 @@ export default function RootLayout() {
               <Stack.Screen name="knowledge" />
               <Stack.Screen name="knowledge-article/[articleId]" />
               <Stack.Screen name="assistant" />
-              {/* Crisis screen: no transition animation (ADR-0014). */}
+              <Stack.Screen name="checkin" />
+              <Stack.Screen name="checkin-history" />
+              <Stack.Screen name="emergency-plan" />
+              {/* Crisis / SOS: no transition animation (ADR-0014). */}
               <Stack.Screen name="sos" options={{ animation: 'none', presentation: 'fullScreenModal' }} />
             </Stack>
           </SosProvider>

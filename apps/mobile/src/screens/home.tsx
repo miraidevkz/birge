@@ -3,6 +3,7 @@ import { unwrap, type Schemas } from '@birge/api';
 import { i18n, useTranslation } from '@birge/i18n';
 import { Card, Heading, List, ListItem, Screen, Text } from '@birge/ui';
 import { useQuery } from '@tanstack/react-query';
+import { router } from 'expo-router';
 
 import { api } from '@/lib/api';
 import { nextCheckin } from '@/lib/next-checkin';
@@ -34,9 +35,16 @@ function CheckinCard() {
   else if (next) body = formatDateTime(next, i18n.language, true);
   else body = schedule.data.enabled === false ? t('checkin.off') : t('checkin.none');
   return (
-    <Card testID="home-checkin">
+    <Card
+      testID="home-checkin"
+      onPress={() => router.push('/checkin')}
+      accessibilityLabel={`${t('checkin.openLabel')}. ${t('checkin.action')}`}
+    >
       <Heading>{t('checkin.heading')}</Heading>
       <Text tone={next ? 'default' : 'muted'}>{body}</Text>
+      <Text variant="label" tone="primary">
+        {t('checkin.action')}
+      </Text>
     </Card>
   );
 }

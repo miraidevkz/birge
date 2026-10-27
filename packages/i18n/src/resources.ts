@@ -9,6 +9,7 @@ import enChat from './locales/en/chat.json';
 import enCircle from './locales/en/circle.json';
 import enCommon from './locales/en/common.json';
 import enDirectory from './locales/en/directory.json';
+import enEmergency from './locales/en/emergency.json';
 import enHelp from './locales/en/help.json';
 import enHome from './locales/en/home.json';
 import enInbox from './locales/en/inbox.json';
@@ -16,13 +17,16 @@ import enKnowledge from './locales/en/knowledge.json';
 import enPrivacy from './locales/en/privacy.json';
 import enProfile from './locales/en/profile.json';
 import enSharing from './locales/en/sharing.json';
+import enSos from './locales/en/sos.json';
 import enUi from './locales/en/ui.json';
+import enWellbeing from './locales/en/wellbeing.json';
 import kkAssistant from './locales/kk/assistant.json';
 import kkAuth from './locales/kk/auth.json';
 import kkChat from './locales/kk/chat.json';
 import kkCircle from './locales/kk/circle.json';
 import kkCommon from './locales/kk/common.json';
 import kkDirectory from './locales/kk/directory.json';
+import kkEmergency from './locales/kk/emergency.json';
 import kkHelp from './locales/kk/help.json';
 import kkHome from './locales/kk/home.json';
 import kkInbox from './locales/kk/inbox.json';
@@ -30,13 +34,16 @@ import kkKnowledge from './locales/kk/knowledge.json';
 import kkPrivacy from './locales/kk/privacy.json';
 import kkProfile from './locales/kk/profile.json';
 import kkSharing from './locales/kk/sharing.json';
+import kkSos from './locales/kk/sos.json';
 import kkUi from './locales/kk/ui.json';
+import kkWellbeing from './locales/kk/wellbeing.json';
 import ruAssistant from './locales/ru/assistant.json';
 import ruAuth from './locales/ru/auth.json';
 import ruChat from './locales/ru/chat.json';
 import ruCircle from './locales/ru/circle.json';
 import ruCommon from './locales/ru/common.json';
 import ruDirectory from './locales/ru/directory.json';
+import ruEmergency from './locales/ru/emergency.json';
 import ruHelp from './locales/ru/help.json';
 import ruHome from './locales/ru/home.json';
 import ruInbox from './locales/ru/inbox.json';
@@ -44,7 +51,9 @@ import ruKnowledge from './locales/ru/knowledge.json';
 import ruPrivacy from './locales/ru/privacy.json';
 import ruProfile from './locales/ru/profile.json';
 import ruSharing from './locales/ru/sharing.json';
+import ruSos from './locales/ru/sos.json';
 import ruUi from './locales/ru/ui.json';
+import ruWellbeing from './locales/ru/wellbeing.json';
 
 /** Namespaces, one per feature. `common` is the default. */
 export const namespaces = [
@@ -62,6 +71,9 @@ export const namespaces = [
   'privacy',
   'knowledge',
   'assistant',
+  'wellbeing',
+  'emergency',
+  'sos',
 ] as const;
 
 /** Namespace is one locale file name. */
@@ -84,6 +96,9 @@ export const resources = {
     privacy: kkPrivacy,
     knowledge: kkKnowledge,
     assistant: kkAssistant,
+    wellbeing: kkWellbeing,
+    emergency: kkEmergency,
+    sos: kkSos,
   },
   ru: {
     common: ruCommon,
@@ -100,6 +115,9 @@ export const resources = {
     privacy: ruPrivacy,
     knowledge: ruKnowledge,
     assistant: ruAssistant,
+    wellbeing: ruWellbeing,
+    emergency: ruEmergency,
+    sos: ruSos,
   },
   en: {
     common: enCommon,
@@ -116,5 +134,8 @@ export const resources = {
     privacy: enPrivacy,
     knowledge: enKnowledge,
     assistant: enAssistant,
+    wellbeing: enWellbeing,
+    emergency: enEmergency,
+    sos: enSos,
   },
 } as const satisfies Record<string, Record<Namespace, object>>;

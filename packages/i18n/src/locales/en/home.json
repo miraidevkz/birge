@@ -3,7 +3,9 @@
   "checkin": {
     "heading": "Next check-in",
     "off": "Weekly check-in reminders are off.",
-    "none": "No check-in reminder yet."
+    "none": "No check-in reminder yet.",
+    "action": "Start check-in",
+    "openLabel": "Weekly check-in"
   },
   "inbox": {
     "heading": "Latest",

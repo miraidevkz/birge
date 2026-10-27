@@ -39,16 +39,20 @@ All configuration comes from the environment at build time ([`app.config.ts`](ap
 
 ```
 src/app/            routes only (Expo Router): _layout, (tabs)/{index,circle,help,profile},
-                    chat/{index,[roomId]}, listings, specialists, privacy, knowledge, assistant, sign-in, sos
+                    chat/{index,[roomId]}, listings, specialists, privacy, knowledge, assistant,
+                    sign-in, sos, checkin, checkin-history, emergency-plan
 src/screens/        screen bodies: sign-in, home, help (crisis), circle, chat-rooms, listings,
-                    specialists, profile, privacy, knowledge, assistant, placeholder, signed-in gate
-src/lib/            app services: config, session, api, storage (.web), crisis-phones, help-outbox, query
+                    specialists, profile, privacy, knowledge, assistant, sos, checkin,
+                    checkin-history, emergency-plan, placeholder, signed-in gate
+src/lib/            app services: config, session, api, storage (.web), crisis-phones, help-outbox,
+                    query, wellbeing-text
 public/             web shell: index.html (links the manifest), manifest.webmanifest, icon
 scripts/            check-web-build.mjs
 ```
 
 - **Session.** The Kratos session token lives in `expo-secure-store` (iOS Keychain, Android Keystore); on the web in `localStorage` (see `storage.web.ts` for why the web build must have a strict CSP). Tabs wait for the stored session before redirecting to sign-in.
-- **SOS entry.** Every `Screen` shows it; it opens `/sos`, which is outside the tabs and works signed out.
-- **Crisis path.** `screens/help.tsx` renders the fixed text and the last known crisis numbers immediately, never waiting for the network; "contact a person" goes through the outbox and is replayed until the server acknowledges ([ADR-0018](../../docs/adr/0018-client-compatibility.md), [ADR-0023](../../docs/adr/0023-crisis-path.md)). No animation on that screen.
+- **SOS entry.** Every `Screen` shows it; it opens `/sos` (raise/close SOS, crisis phones), which is outside the tabs and works signed out. "I feel very bad" is `requestHumanHelp` with source `sos`, not `POST /me/sos`.
+- **Crisis path.** `screens/help.tsx` renders the fixed text and the last known crisis numbers immediately, never waiting for the network; "contact a person" goes through the outbox and is replayed until the server acknowledges ([ADR-0018](../../docs/adr/0018-client-compatibility.md), [ADR-0023](../../docs/adr/0023-crisis-path.md)). No animation on help or SOS. Check-in `flag=crisis` reuses `HelpScreen` with source `checkin`.
+- **Check-in / emergency plan.** Home opens `/checkin`; history is `/checkin-history`. Profile opens `/emergency-plan` (child card, trusted contacts, send).
 - **Data.** React Query for reads; retries only what can succeed; a 401 ends the session.
 - **UI.** Only `@birge/ui` components and tokens in screens; texts only from `@birge/i18n`.
