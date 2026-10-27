@@ -1,0 +1,18 @@
+# DEMO lexicon. Illustrative entries for tests and development only; NOT the
+# production lexicon, which the project psychologist supplies and which is kept
+# outside the repository (ADR-0023). Format: see crisis.Load.
+өлгім келеді
+өлгім келіп тұр
+өзімді өлтіргім келеді
+өзімді өлтіремін
+өмір сүргім келмейді
+өзіме қол жұмсағым келеді
+өзіме қол жұмса*
+асылып өл*
+суицид*
+балаларыма менсіз жақсы болады
+менсіз бәріне жақсы болады
+өмірдің мәні жоқ
+өмір сүрудің мәні жоқ
+терезеден секіргім келеді
+таблетка ішіп өл*

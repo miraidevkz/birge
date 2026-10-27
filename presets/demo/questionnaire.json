@@ -1,5 +1,5 @@
 {
-  "_comment": "EXAMPLE only — not for production. Thresholds are placeholders for the psychologist to set; texts live in locale files (kk/ru) under the text_key / feedback_key values.",
+  "_comment": "EXAMPLE only — not for production. Thresholds are placeholders for the psychologist to set; texts live in locale files (kk/ru/en) under the text_key / feedback_key values.",
   "version": "example-v1",
   "questions": [
     {

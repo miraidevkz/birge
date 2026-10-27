@@ -51,6 +51,7 @@ func run() int {
 		logger.Error("invalid configuration", "error", err)
 		return 1
 	}
+	wiring.LogDemoPresets(logger, cfg.DemoPresets)
 
 	switch cmd {
 	case wiring.CommandAPI:
@@ -58,7 +59,7 @@ func run() int {
 	case wiring.CommandWorker:
 		err = wiring.RunWorker(ctx, logger, cfg)
 	case wiring.CommandMigrate:
-		err = wiring.Migrate(ctx, logger, cfg.DatabaseURL, cfg.ApplyRoles)
+		err = wiring.Migrate(ctx, logger, cfg)
 	}
 	if err != nil {
 		logger.Error("exit", "error", err)

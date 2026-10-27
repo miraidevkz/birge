@@ -37,18 +37,32 @@ See [architecture § Repository layout](architecture.md#repository-layout-monore
 
 "Commands" lists the subcommands that read a variable; the others ignore it.
 
+### Demo presets
+
+A fresh deployment can start with no configuration or reference data files: when the variables below are unset, `birge` uses the embedded DEMO/EXAMPLE values from package `presets` (`presets/demo/`). Each preset in use is logged once at Warn (`event=DemoPreset name=<preset>`); `/readyz` stays healthy. **A real deployment must replace all of them.** The crisis lexicon and questionnaire thresholds come from the psychologist; consent text versions and crisis phones come from the operator; SMS bodies and membership reference data are deployment-specific. Keys and secrets are never presets (`birge keygen` creates local ones).
+
+| Preset (`name=`) | File | Replaces when unset |
+|---|---|---|
+| `crisis_lexicon` | `presets/demo/crisis/` (`<kk\|ru\|en>.<category>.txt`) | `BIRGE_CRISIS_LEXICON_DIR` |
+| `questionnaire` | `presets/demo/questionnaire.json` (EXAMPLE) | `BIRGE_QUESTIONNAIRE_FILE` |
+| `sms_texts` | `presets/demo/sms_texts.json` | `BIRGE_SMS_TEXTS` |
+| `consent_versions` | `presets/demo/settings.json` | `BIRGE_CONSENT_VERSIONS` |
+| `crisis_phones` | `presets/demo/settings.json` | `BIRGE_CRISIS_PHONES` |
+| `reference` | `presets/demo/reference.json` | seeded by `birge migrate` only when membership cities, districts and needs are all empty (never overwrites) |
+
 | Variable | Commands | Default | Meaning |
 |---|---|---|---|
 | `DATABASE_URL` | all | required | PostgreSQL connection string (it holds a password: treat it as a secret) |
 | `BIRGE_APPLY_ROLES` | migrate | `0` | `1` applies `db/roles.sql` after the migrations; the roles must already exist (created by the database operator) |
 | `BIRGE_HTTP_ADDR` | api, worker | `:8080` | listen address; the worker serves only `/healthz` and `/readyz` there |
-| `BIRGE_MIN_APP_VERSION`, `BIRGE_LATEST_APP_VERSION`, `BIRGE_CRISIS_PHONES` | api, worker | `0.0.0`, the minimum, none | client configuration and crisis lines returned by safety/wellbeing (`internal/platform/config`, ADR-0018); JSON `[{"number":"+7…","label":"…"}]` |
+| `BIRGE_MIN_APP_VERSION`, `BIRGE_LATEST_APP_VERSION` | api, worker | `0.0.0`, the minimum | client configuration (`internal/platform/config`, ADR-0018) |
+| `BIRGE_CRISIS_PHONES` | api, worker | DEMO (`112` / "Emergency services") | crisis lines returned by safety/wellbeing; JSON `[{"number":"…","label":"…"}]`; unset → `presets/demo/settings.json` |
 | `KRATOS_PUBLIC_URL` | api | required | cluster-internal Kratos public API: session checks and the `/auth/` gateway |
 | `KRATOS_ADMIN_URL` | api, worker | required | cluster-internal Kratos admin API: phone numbers for SMS and for safety contact reveal (`GET /admin/identities/{id}`, trait `phone`) |
-| `BIRGE_CRISIS_LEXICON_DIR` | api, worker | required | directory of the level-1 crisis lexicon (`<kk\|ru>.<category>.txt`); startup fails if it does not load or is empty (ADR-0023). Demo only: `internal/domains/safety/crisis/testdata/demo/` |
+| `BIRGE_CRISIS_LEXICON_DIR` | api, worker | DEMO preset | directory of the level-1 crisis lexicon (`<kk\|ru\|en>.<category>.txt`); startup fails if a configured directory does not load or is empty (ADR-0023). Unset → `presets/demo/crisis/` |
 | `BIRGE_ESCALATION_BACKUP_AFTER` | api, worker | `15m` | delay before the backup duty shift is alerted for an open escalation; at most `1h` |
 | `BIRGE_STAFF_SMS_LANG` | api, worker | `ru` | language of SMS alerts to on-duty staff phones (`kk` or `ru`) |
-| `BIRGE_QUESTIONNAIRE_FILE` | api | required | path to the wellbeing questionnaire JSON (version, questions with locale keys, reverse-score ids, crisis item, thresholds, feedback). Example (placeholders only): `deploy/config/questionnaire.example.json` |
+| `BIRGE_QUESTIONNAIRE_FILE` | api | EXAMPLE preset | path to the wellbeing questionnaire JSON (version, questions with locale keys, reverse-score ids, crisis item, thresholds, feedback). Unset → `presets/demo/questionnaire.json` (thresholds are placeholders for the psychologist) |
 | `BIRGE_TIME_ZONE` | api, worker | `Asia/Almaty` | deployment IANA zone for check-in reminder schedules; hosts must ship current tzdata |
 | `BIRGE_PRACTICES_BASE_URL` | api | required | in-jurisdiction object-storage base URL for practice audio (`https://…`) |
 | `NATS_URL` | worker | required | `nats://` or `tls://` URLs, comma-separated |
@@ -62,13 +76,13 @@ See [architecture § Repository layout](architecture.md#repository-layout-monore
 | `BIRGE_AUTH_RATE_PER_IP`, `BIRGE_AUTH_RATE_PER_NUMBER`, `BIRGE_AUTH_RATE_GLOBAL` | api | `20/1m`, `3/10m`, `20/1s` | gateway token buckets as `<burst>/<interval>`: burst tokens, one more every interval |
 | `BIRGE_API_RATE_PER_IP` | api | `300/100ms` | per-IP token bucket for `/v1`, same format; in memory, per replica |
 | `BIRGE_TRUSTED_PROXY_HEADER` | api | unset | header set by the ingress (e.g. `X-Forwarded-For`); its right-most value is the client IP. Unset: the connection's address. Set it only behind a proxy that appends to that header |
-| `BIRGE_CONSENT_VERSIONS` | api | required | current consent text versions, `<type>=<version>` comma-separated, one for every type (`data_processing`, `ai_crossborder`, `research`) |
+| `BIRGE_CONSENT_VERSIONS` | api | DEMO (`*-demo-1`) | current consent text versions, `<type>=<version>` comma-separated, one for every type (`data_processing`, `ai_crossborder`, `research`); unset → `presets/demo/settings.json` |
 | `BIRGE_DELETION_DELAY` | api, worker | `24h` | time from a deletion request to crypto-shredding; at most `24h` |
 | `NOTIFY_CRITICAL_SMS_AFTER` | api, worker | `60s` | wait for an acknowledgement before the critical SMS fallback; at most `15m` |
 | `BIRGE_SMS_PER_NUMBER_LIMIT`, `BIRGE_SMS_PER_NUMBER_WINDOW` | worker | `5`, `1h` | notify SMS guard: sends per number per window |
 | `BIRGE_SMS_GLOBAL_LIMIT`, `BIRGE_SMS_GLOBAL_WINDOW` | worker | `60`, `1m` | notify SMS guard: sends per process per window |
 | `BIRGE_SMS_DAILY_BUDGET` | worker | `1000` | notify SMS guard: sends per UTC day (does not block critical SMS) |
-| `BIRGE_SMS_TEXTS` | worker | empty in `dev` | neutral fixed SMS bodies, JSON `{"<template>": {"kk": "...", "ru": "...", "en": "..."}}`; required when `BIRGE_DELIVERY_MODE` is not `dev`; an SMS for a template without a text is skipped (and logged) |
+| `BIRGE_SMS_TEXTS` | worker | DEMO preset | neutral fixed SMS bodies, JSON `{"<template>": {"kk": "...", "ru": "...", "en": "..."}}`; unset → `presets/demo/sms_texts.json`; required when `BIRGE_DELIVERY_MODE` is not `dev` and the value is an empty object; an SMS for a template without a text is skipped (and logged) |
 | `BIRGE_DELIVERY_MODE` | worker | required | `dev` only: push and SMS are logged (notification ID and channel), not sent. There are no real providers yet, so any other value refuses to start rather than drop notifications |
 | `BIRGE_EVENTS_MAX_AGE` | worker | `720h` | JetStream EVENTS stream MaxAge (how long events are retained) |
 | `BIRGE_EVENTS_MAX_BYTES` | worker | `1073741824` (1 GiB) | JetStream EVENTS stream MaxBytes (size cap; oldest messages discarded first) |

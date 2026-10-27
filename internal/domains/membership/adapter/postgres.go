@@ -309,6 +309,47 @@ func (t *pgTx) Needs(ctx context.Context) ([]string, error) {
 	return needs(codes), nil
 }
 
+// SeedReferenceIfEmpty inserts cities, districts and needs when every
+// membership reference table is empty. It never overwrites existing rows.
+// seeded is true only when this call inserted the seed.
+func (p *Postgres) SeedReferenceIfEmpty(ctx context.Context, ref model.ReferenceSeed) (seeded bool, err error) {
+	if len(ref.Cities) == 0 || len(ref.Needs) == 0 {
+		return false, fmt.Errorf("membership: reference seed needs cities and needs")
+	}
+	err = db.InTx(ctx, p.Pool, func(tx pgx.Tx) error {
+		q := store.New(tx)
+		empty, err := q.ReferenceIsEmpty(ctx)
+		if err != nil {
+			return fmt.Errorf("membership: reference empty check: %w", err)
+		}
+		if !empty {
+			return nil
+		}
+		for _, c := range ref.Cities {
+			if c.Code == "" || len(c.Districts) == 0 {
+				return fmt.Errorf("membership: reference seed city needs a code and districts")
+			}
+			id, err := q.InsertCity(ctx, c.Code)
+			if err != nil {
+				return fmt.Errorf("membership: insert city: %w", err)
+			}
+			for _, d := range c.Districts {
+				if err := q.InsertDistrict(ctx, store.InsertDistrictParams{CityID: id, Code: d}); err != nil {
+					return fmt.Errorf("membership: insert district: %w", err)
+				}
+			}
+		}
+		for _, n := range ref.Needs {
+			if err := q.InsertNeed(ctx, n); err != nil {
+				return fmt.Errorf("membership: insert need: %w", err)
+			}
+		}
+		seeded = true
+		return nil
+	})
+	return seeded, err
+}
+
 // Publish stores e in the platform outbox in this transaction.
 func (t *pgTx) Publish(ctx context.Context, now time.Time, e outbox.Event) error {
 	_, err := outbox.Enqueue(ctx, t.outbox, now, "", e)

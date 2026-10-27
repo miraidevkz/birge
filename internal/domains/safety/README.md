@@ -62,12 +62,12 @@ Ports used by this context (wired in `internal/wiring`): `Sealer` (platform enve
 | `service.Settings.BackupAfter` | 15m | Delay before the backup shift is alerted (`BIRGE_ESCALATION_BACKUP_AFTER`) |
 | `service.Settings.CrisisPhones` | empty | Crisis lines returned to the member (`BIRGE_CRISIS_PHONES`) |
 | `service.Settings.StaffLang` | `ru` | Language of SMS alerts to on-duty phones (`BIRGE_STAFF_SMS_LANG`) |
-| `Service.Lexicon` | required | `crisis.LoadDir(BIRGE_CRISIS_LEXICON_DIR)`; startup refuses an empty or unloadable lexicon |
+| `Service.Lexicon` | required | `crisis.LoadDir(BIRGE_CRISIS_LEXICON_DIR)` or the embedded DEMO preset when unset; startup refuses an empty or unloadable lexicon |
 | see `docs/development.md` § Configuration | | all variables, defaults and which subcommand reads them |
 
 ### Lexicon format
 
-One UTF-8 file per language and category, `<kk|ru>.<category>.txt`; one entry per line: a phrase (`хочу умереть`), a prefix phrase (`покончит* с собой`), or `re: <RE2>` over the normalised text; `#` starts a comment line. Full rules in `crisis.Load` and the package documentation (normalisation, fuzzy and compact matching). `crisis/testdata/demo/` is a DEMO lexicon for tests only.
+One UTF-8 file per language and category, `<kk|ru|en>.<category>.txt`; one entry per line: a phrase (`хочу умереть`), a prefix phrase (`покончит* с собой`), or `re: <RE2>` over the normalised text; `#` starts a comment line. Full rules in `crisis.Load` and the package documentation (normalisation, fuzzy and compact matching). Embedded DEMO: `presets/demo/crisis/`; test copy: `crisis/testdata/demo/`.
 
 ## Invariants
 

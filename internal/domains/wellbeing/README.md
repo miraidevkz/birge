@@ -46,7 +46,7 @@ Ports used by this context (wired in `internal/wiring`): `Sealer` (platform enve
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `service.Settings.Questionnaire` | required | Current version and questions (ids, instrument, text keys, options) from `BIRGE_QUESTIONNAIRE_FILE` |
+| `service.Settings.Questionnaire` | required | Current version and questions (ids, instrument, text keys, options) from `BIRGE_QUESTIONNAIRE_FILE` or the EXAMPLE preset when unset |
 | `service.Settings.ReverseScoreQuestionIDs` | empty | Question ids scored as maxOption−value (PSS reverse items) |
 | `service.Settings.CrisisItemQuestionID` | empty | Max answer on this item forces `flag=crisis` |
 | `service.Settings.Thresholds` | required | Per-instrument `ElevatedAt` / `CrisisAt` |

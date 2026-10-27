@@ -1,0 +1,10 @@
+# DEMO lexicon. Illustrative entries for tests and development only; NOT the
+# production lexicon, which the project psychologist supplies and which is kept
+# outside the repository (ADR-0023). Format: see crisis.Load.
+муж бьёт меня
+муж избивает
+избивает меня
+угрожает убить
+грозится убить
+изнасил*
+боюсь за свою жизнь

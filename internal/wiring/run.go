@@ -19,6 +19,7 @@ import (
 
 	birgedb "birge/db"
 	membershipadapter "birge/internal/domains/membership/adapter"
+	membershipmodel "birge/internal/domains/membership/model"
 	membershipservice "birge/internal/domains/membership/service"
 	notifyadapter "birge/internal/domains/notify/adapter"
 	notifyservice "birge/internal/domains/notify/service"
@@ -34,6 +35,7 @@ import (
 	platformdb "birge/internal/platform/db"
 	"birge/internal/platform/outbox"
 	"birge/internal/platform/timers"
+	"birge/presets"
 )
 
 // JetStream stream of all domain events (ADR-0007). The notify consumer and
@@ -58,11 +60,13 @@ const (
 const rolesHeader = "SET lock_timeout = '5s';\nSET statement_timeout = '60s';\n"
 
 // Migrate applies the embedded migrations with goose and then, when
-// applyRoles is set, db/roles.sql. Both steps are idempotent: goose records
+// ApplyRoles is set, db/roles.sql. Both steps are idempotent: goose records
 // applied versions, and grants repeat without effect. A PostgreSQL session
 // lock serializes concurrent runs (several migration jobs starting at once).
-func Migrate(ctx context.Context, logger *slog.Logger, databaseURL string, applyRoles bool) error {
-	sqlDB, err := sql.Open("pgx", databaseURL)
+// After migrations, membership reference tables are seeded from the DEMO
+// preset only when they are empty (never overwrites; logs event=DemoPreset).
+func Migrate(ctx context.Context, logger *slog.Logger, cfg Config) error {
+	sqlDB, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("migrate: open database: %w", err)
 	}
@@ -87,19 +91,44 @@ func Migrate(ctx context.Context, logger *slog.Logger, databaseURL string, apply
 		return fmt.Errorf("migrate: read version: %w", err)
 	}
 	logger.Info("database migrated", "version", version, "applied", len(results))
-	if !applyRoles {
-		return nil
+	if cfg.ApplyRoles {
+		conn, err := sqlDB.Conn(ctx)
+		if err != nil {
+			return fmt.Errorf("migrate: roles: %w", err)
+		}
+		defer func() { _ = conn.Close() }()
+		// One simple-protocol call: PostgreSQL runs the statements as one implicit transaction.
+		if _, err := conn.ExecContext(ctx, rolesHeader+birgedb.Roles); err != nil {
+			return fmt.Errorf("migrate: apply db/roles.sql: %w", err)
+		}
+		logger.Info("roles applied")
 	}
-	conn, err := sqlDB.Conn(ctx)
+	return seedDemoReference(ctx, logger, cfg.DatabaseURL)
+}
+
+// seedDemoReference inserts DEMO cities, districts and needs when every
+// membership reference table is empty. Idempotent: a second migrate is a no-op.
+func seedDemoReference(ctx context.Context, logger *slog.Logger, databaseURL string) error {
+	ref, err := presets.LoadReference()
 	if err != nil {
-		return fmt.Errorf("migrate: roles: %w", err)
+		return fmt.Errorf("migrate: demo reference: %w", err)
 	}
-	defer func() { _ = conn.Close() }()
-	// One simple-protocol call: PostgreSQL runs the statements as one implicit transaction.
-	if _, err := conn.ExecContext(ctx, rolesHeader+birgedb.Roles); err != nil {
-		return fmt.Errorf("migrate: apply db/roles.sql: %w", err)
+	pool, err := platformdb.Open(ctx, databaseURL)
+	if err != nil {
+		return fmt.Errorf("migrate: demo reference: %w", err)
 	}
-	logger.Info("roles applied")
+	defer pool.Close()
+	seed := membershipmodel.ReferenceSeed{Needs: ref.Needs}
+	for _, c := range ref.Cities {
+		seed.Cities = append(seed.Cities, membershipmodel.ReferenceCitySeed{Code: c.Code, Districts: c.Districts})
+	}
+	seeded, err := (&membershipadapter.Postgres{Pool: pool}).SeedReferenceIfEmpty(ctx, seed)
+	if err != nil {
+		return fmt.Errorf("migrate: demo reference: %w", err)
+	}
+	if seeded {
+		LogDemoPresets(logger, []string{presets.NameReference})
+	}
 	return nil
 }
 

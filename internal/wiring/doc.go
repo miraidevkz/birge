@@ -20,7 +20,8 @@
 //     stopped together on shutdown or on the first failure.
 //   - Migrate: the migrations embedded in the binary (package birge/db),
 //     applied with goose under a PostgreSQL session lock, then db/roles.sql
-//     when asked (ADR-0006).
+//     when asked (ADR-0006), then DEMO membership reference seed when those
+//     tables are empty (presets; never overwrites).
 //   - Adapters between contexts and platform: the membership Encryptor on the
 //     platform envelope, safety/wellbeing Sealer (same envelope with
 //     per-column associated data), safety MemberDirectory (membership +
@@ -30,8 +31,11 @@
 //     log-only push and SMS senders.
 //   - EVENTS stream retention (BIRGE_EVENTS_MAX_AGE / BIRGE_EVENTS_MAX_BYTES)
 //     applied in EnsureStream on worker start.
-//   - Crisis lexicon (BIRGE_CRISIS_LEXICON_DIR): loaded at startup for api and
-//     worker; an empty or unloadable lexicon refuses to start (ADR-0023).
+//   - Crisis lexicon and other configuration presets: when BIRGE_* variables
+//     for lexicon, questionnaire, SMS texts, consent versions or crisis phones
+//     are unset, the embedded DEMO/EXAMPLE values from package presets are
+//     used and logged once at Warn (event=DemoPreset). An empty or unloadable
+//     lexicon still refuses to start (ADR-0023). Keys stay required.
 //
 // Invariants:
 //

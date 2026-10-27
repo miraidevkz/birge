@@ -1,0 +1,9 @@
+# DEMO lexicon. Illustrative entries for tests and development only; NOT the
+# production lexicon, which the project psychologist supplies and which is kept
+# outside the repository (ADR-0023). Format: see crisis.Load.
+күйеуім мені ұрады
+күйеуім ұрады
+мені соғады
+өлтіремін деп қорқытады
+зорла*
+өмірімнен қорқамын

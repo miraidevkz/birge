@@ -168,3 +168,16 @@ type District struct {
 	ID   uuid.UUID
 	Code string
 }
+
+// ReferenceCitySeed is a city code with district codes for a first-start seed.
+// IDs are assigned by the database; SeedReferenceIfEmpty never overwrites.
+type ReferenceCitySeed struct {
+	Code      string
+	Districts []string
+}
+
+// ReferenceSeed is the membership reference data inserted when tables are empty.
+type ReferenceSeed struct {
+	Cities []ReferenceCitySeed
+	Needs  []string
+}

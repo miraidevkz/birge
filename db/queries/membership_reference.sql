@@ -19,3 +19,25 @@ WHERE code = ANY(@codes::text[]);
 SELECT code
 FROM membership.needs
 ORDER BY code;
+
+-- name: ReferenceIsEmpty :one
+SELECT NOT EXISTS (
+    SELECT 1 FROM membership.cities
+    UNION ALL
+    SELECT 1 FROM membership.districts
+    UNION ALL
+    SELECT 1 FROM membership.needs
+) AS empty;
+
+-- name: InsertCity :one
+INSERT INTO membership.cities (code)
+VALUES (@code)
+RETURNING id;
+
+-- name: InsertDistrict :exec
+INSERT INTO membership.districts (city_id, code)
+VALUES (@city_id, @code);
+
+-- name: InsertNeed :exec
+INSERT INTO membership.needs (code)
+VALUES (@code);

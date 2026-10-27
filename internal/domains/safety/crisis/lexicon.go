@@ -18,6 +18,7 @@ import (
 const (
 	LangKazakh  = "kk"
 	LangRussian = "ru"
+	LangEnglish = "en"
 )
 
 // FuzzyMinLen is the shortest normalised phrase word that also matches with
@@ -31,7 +32,8 @@ const FuzzyMinLen = 5
 const CompactMinLen = 8
 
 var (
-	fileNameRe = regexp.MustCompile(`^(kk|ru)\.([a-z][a-z_]{0,39})\.txt$`)
+	// Any language code ("kk", "ru", "en", "kk-Latn"): a new language is data, not code.
+	fileNameRe = regexp.MustCompile(`^([a-z]{2,3}(?:-[A-Z][a-z]{3})?)\.([a-z][a-z_]{0,39})\.txt$`)
 	// ErrEmptyLexicon is returned when the directory holds no entries at all:
 	// a crisis detector that can never fire must stop the process, not run.
 	ErrEmptyLexicon = errors.New("crisis: lexicon has no entries")
@@ -71,7 +73,7 @@ func LoadDir(dir string) (*Lexicon, error) {
 // Load reads a lexicon from the root of fsys.
 //
 // Layout: one UTF-8 text file per language and category, named
-// "<lang>.<category>.txt" where lang is kk or ru and category is
+// "<lang>.<category>.txt" where lang is a language code such as kk, ru, en or kk-Latn and category is
 // [a-z][a-z_]*, for example "ru.suicide.txt". Other files (README, dot files,
 // anything not ending in .txt) are ignored; a .txt file with any other name is
 // an error so that a misnamed file is never silently skipped.
@@ -105,7 +107,7 @@ func Load(fsys fs.FS) (*Lexicon, error) {
 		}
 		m := fileNameRe.FindStringSubmatch(name)
 		if m == nil {
-			return nil, fmt.Errorf("crisis: %s: file name must be <kk|ru>.<category>.txt", name)
+			return nil, fmt.Errorf("crisis: %s: file name must be <lang>.<category>.txt", name)
 		}
 		cat, err := loadFile(fsys, name, m[2])
 		if err != nil {

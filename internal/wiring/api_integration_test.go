@@ -90,7 +90,7 @@ func migratedDatabase(t *testing.T) string {
 	url := fmt.Sprintf("host=%s port=%d user=%s dbname=birge_e2e sslmode=disable", cc.Host, cc.Port, cc.User)
 	logger := slog.New(slog.DiscardHandler)
 	for range 2 {
-		if err := Migrate(ctx, logger, url, true); err != nil {
+		if err := Migrate(ctx, logger, Config{DatabaseURL: url, ApplyRoles: true}); err != nil {
 			t.Fatal(err)
 		}
 	}

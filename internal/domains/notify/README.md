@@ -48,7 +48,7 @@ Ports used by this context (wired in `internal/wiring`): `Recipients` (`Resolve`
 | Variable | Default | Meaning |
 |---|---|---|
 | `service.Config.CriticalSMSAfter` | 60s | Wait for acknowledgement before member critical SMS |
-| `service.Config.SMSTexts` | required for SMS | `template → language →` neutral fixed body (no message content) |
+| `service.Config.SMSTexts` | required for SMS | `template → language →` neutral fixed body (no message content); unset `BIRGE_SMS_TEXTS` → DEMO preset |
 | `guard.Config.AllowedPrefixes` | empty rejects all | E.164 prefix allow-list |
 | `guard.Config.PerNumberLimit` / `PerNumberWindow` | 0 disabled / 1h | Per-number rate limit |
 | `guard.Config.GlobalLimit` / `GlobalWindow` | 0 disabled / 1m | Process-wide rate limit |

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strconv"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"birge/internal/platform/config"
 	"birge/internal/platform/crypto"
 	"birge/internal/platform/ratelimit"
+	"birge/presets"
 )
 
 // Command is a subcommand of the birge binary; it decides which settings are required.
@@ -103,16 +105,20 @@ type Config struct {
 	EventsMaxBytes int64
 
 	// Safety (ADR-0023): lexicon is loaded at startup; empty or unloadable refuses to start.
+	// When BIRGE_CRISIS_LEXICON_DIR is unset, Lexicon comes from the embedded DEMO preset.
 	CrisisLexiconDir      string
 	Lexicon               *crisis.Lexicon
 	EscalationBackupAfter time.Duration
 	StaffSMSLang          string
 
-	// Wellbeing: questionnaire file is required for the API; time zone for reminders.
+	// Wellbeing: questionnaire from BIRGE_QUESTIONNAIRE_FILE or the EXAMPLE preset.
 	Wellbeing         wellbeingservice.Settings
 	QuestionnaireFile string
 	TimeZone          string
 	PracticesBaseURL  string
+
+	// DemoPresets lists embedded presets in use (logged once at Warn on start).
+	DemoPresets []string
 }
 
 // String redacts the configuration so that an accidental %v cannot print secrets.
@@ -148,14 +154,15 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 	cfg.DeletionDelay = l.duration("BIRGE_DELETION_DELAY", 24*time.Hour, maxDeletionDelay)
 	cfg.CriticalSMSAfter = l.duration("NOTIFY_CRITICAL_SMS_AFTER", 60*time.Second, maxCriticalSMSAfter)
 	cfg.TrustedProxyHeader = l.headerName("BIRGE_TRUSTED_PROXY_HEADER")
-	cfg.CrisisLexiconDir = l.required("BIRGE_CRISIS_LEXICON_DIR")
-	cfg.Lexicon = l.lexicon("BIRGE_CRISIS_LEXICON_DIR", cfg.CrisisLexiconDir)
+	cfg.CrisisLexiconDir = strings.TrimSpace(getenv("BIRGE_CRISIS_LEXICON_DIR"))
+	cfg.Lexicon = l.lexiconOrDemo(&cfg)
 	cfg.EscalationBackupAfter = l.duration("BIRGE_ESCALATION_BACKUP_AFTER", defaultEscalationBackup, maxEscalationBackup)
 	cfg.StaffSMSLang = l.lang("BIRGE_STAFF_SMS_LANG", defaultStaffSMSLang)
 	cfg.TimeZone = l.timeZone("BIRGE_TIME_ZONE", defaultTimeZone)
 	// Kratos admin is needed on the API for staff contact reveal (MemberDirectory)
 	// and on the worker for member SMS PhoneFor.
 	cfg.KratosAdminURL = l.httpURL("KRATOS_ADMIN_URL", true)
+	l.crisisPhonesOrDemo(&cfg)
 
 	if api {
 		cfg.KratosPublicURL = l.httpURL("KRATOS_PUBLIC_URL", true)
@@ -169,9 +176,9 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		cfg.AuthPerNumber = authgw.Rate(l.rate("BIRGE_AUTH_RATE_PER_NUMBER", "3/10m"))
 		cfg.AuthGlobal = authgw.Rate(l.rate("BIRGE_AUTH_RATE_GLOBAL", "20/1s"))
 		cfg.APIPerIP = l.rate("BIRGE_API_RATE_PER_IP", "300/100ms")
-		cfg.ConsentVersions = l.consentVersions("BIRGE_CONSENT_VERSIONS")
-		cfg.QuestionnaireFile = l.required("BIRGE_QUESTIONNAIRE_FILE")
-		cfg.Wellbeing = l.questionnaire("BIRGE_QUESTIONNAIRE_FILE", cfg.QuestionnaireFile)
+		cfg.ConsentVersions = l.consentVersionsOrDemo(&cfg)
+		cfg.QuestionnaireFile = strings.TrimSpace(getenv("BIRGE_QUESTIONNAIRE_FILE"))
+		cfg.Wellbeing = l.questionnaireOrDemo(&cfg)
 		cfg.PracticesBaseURL = l.httpURL("BIRGE_PRACTICES_BASE_URL", true)
 		cfg.Wellbeing.PracticesBaseURL = cfg.PracticesBaseURL
 		cfg.Wellbeing.TimeZone = cfg.TimeZone
@@ -187,7 +194,7 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 			GlobalWindow:    l.duration("BIRGE_SMS_GLOBAL_WINDOW", time.Minute, 24*time.Hour),
 			DailyBudget:     l.positiveInt("BIRGE_SMS_DAILY_BUDGET", 1000),
 		}
-		cfg.SMSTexts = l.smsTexts("BIRGE_SMS_TEXTS")
+		cfg.SMSTexts = l.smsTextsOrDemo(&cfg)
 		cfg.EventsMaxAge = l.duration("BIRGE_EVENTS_MAX_AGE", defaultEventsMaxAge, maxEventsMaxAge)
 		cfg.EventsMaxBytes = l.positiveInt64("BIRGE_EVENTS_MAX_BYTES", defaultEventsMaxBytes)
 		// Reminder scheduling needs the deployment zone; questionnaire is API-only.
@@ -204,7 +211,8 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 			l.fail("BIRGE_DELIVERY_MODE: only \"dev\" is supported until real push and SMS providers exist")
 		}
 		// Outside development, SMS bodies must be configured: an empty map
-		// would skip every SMS, including critical ones.
+		// would skip every SMS, including critical ones. Unset falls back to
+		// the DEMO preset above; an explicit empty object still fails here.
 		if cfg.DeliveryMode != DeliveryModeDev && len(cfg.SMSTexts) == 0 {
 			l.fail("BIRGE_SMS_TEXTS is required when BIRGE_DELIVERY_MODE is not dev")
 		}
@@ -215,11 +223,21 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 	return cfg, nil
 }
 
+// LogDemoPresets emits one Warn line per embedded preset in use. Call once at
+// process start; /readyz stays healthy regardless.
+func LogDemoPresets(logger *slog.Logger, names []string) {
+	for _, name := range names {
+		logger.Warn("demo preset in use", "event", "DemoPreset", "name", name)
+	}
+}
+
 // loader collects problems so that Load can report all of them at once.
 type loader struct {
-	getenv   func(string) string
-	readFile func(string) ([]byte, error)
-	errs     []error
+	getenv     func(string) string
+	readFile   func(string) ([]byte, error)
+	errs       []error
+	settings   presets.Settings
+	settingsOK bool
 }
 
 func (l *loader) fail(msg string) { l.errs = append(l.errs, errors.New(msg)) }
@@ -439,8 +457,7 @@ func isHeaderNameChar(c byte) bool {
 }
 
 // consentVersions parses "type=version,..." and requires every known consent type.
-func (l *loader) consentVersions(name string) map[string]string {
-	v := l.required(name)
+func (l *loader) consentVersions(name, v string) map[string]string {
 	if v == "" {
 		return nil
 	}
@@ -462,9 +479,33 @@ func (l *loader) consentVersions(name string) map[string]string {
 	return out
 }
 
+func (l *loader) consentVersionsOrDemo(cfg *Config) map[string]string {
+	v := strings.TrimSpace(l.getenv("BIRGE_CONSENT_VERSIONS"))
+	if v != "" {
+		return l.consentVersions("BIRGE_CONSENT_VERSIONS", v)
+	}
+	s, err := l.demoSettings()
+	if err != nil {
+		l.fail("BIRGE_CONSENT_VERSIONS: " + err.Error())
+		return nil
+	}
+	out := l.consentVersions("presets/"+presets.NameConsentVersions, formatConsentVersions(s.ConsentVersions))
+	if out != nil {
+		cfg.DemoPresets = append(cfg.DemoPresets, presets.NameConsentVersions)
+	}
+	return out
+}
+
+func formatConsentVersions(m map[string]string) string {
+	parts := make([]string, 0, len(privacymodel.AllConsentTypes))
+	for _, t := range privacymodel.AllConsentTypes {
+		parts = append(parts, t+"="+m[t])
+	}
+	return strings.Join(parts, ",")
+}
+
 // smsTexts parses the JSON object {"<template>": {"<lang>": "<text>"}}.
-func (l *loader) smsTexts(name string) map[string]map[string]string {
-	v := strings.TrimSpace(l.getenv(name))
+func (l *loader) smsTexts(name, v string) map[string]map[string]string {
 	if v == "" {
 		return nil
 	}
@@ -476,17 +517,87 @@ func (l *loader) smsTexts(name string) map[string]map[string]string {
 	return out
 }
 
-func (l *loader) lexicon(name, dir string) *crisis.Lexicon {
-	if dir == "" {
-		return nil
+func (l *loader) smsTextsOrDemo(cfg *Config) map[string]map[string]string {
+	v := strings.TrimSpace(l.getenv("BIRGE_SMS_TEXTS"))
+	if v != "" {
+		return l.smsTexts("BIRGE_SMS_TEXTS", v)
 	}
-	lex, err := crisis.LoadDir(dir)
+	texts, err := presets.SMSTexts()
 	if err != nil {
-		// LoadDir errors name the directory/file, never message text.
-		l.fail(name + ": " + err.Error())
+		l.fail("BIRGE_SMS_TEXTS: " + err.Error())
 		return nil
 	}
+	cfg.DemoPresets = append(cfg.DemoPresets, presets.NameSMSTexts)
+	return texts
+}
+
+func (l *loader) lexiconOrDemo(cfg *Config) *crisis.Lexicon {
+	if cfg.CrisisLexiconDir != "" {
+		lex, err := crisis.LoadDir(cfg.CrisisLexiconDir)
+		if err != nil {
+			// LoadDir errors name the directory/file, never message text.
+			l.fail("BIRGE_CRISIS_LEXICON_DIR: " + err.Error())
+			return nil
+		}
+		return lex
+	}
+	fsys, err := presets.CrisisLexicon()
+	if err != nil {
+		l.fail("BIRGE_CRISIS_LEXICON_DIR: " + err.Error())
+		return nil
+	}
+	lex, err := crisis.Load(fsys)
+	if err != nil {
+		l.fail("BIRGE_CRISIS_LEXICON_DIR: " + err.Error())
+		return nil
+	}
+	cfg.DemoPresets = append(cfg.DemoPresets, presets.NameCrisisLexicon)
 	return lex
+}
+
+func (l *loader) crisisPhonesOrDemo(cfg *Config) {
+	if len(cfg.CrisisPhones) > 0 {
+		return
+	}
+	// BIRGE_CRISIS_PHONES set to invalid JSON already failed in platform/config.
+	// Empty / unset → DEMO phones from settings.json.
+	s, err := l.demoSettings()
+	if err != nil {
+		l.fail("BIRGE_CRISIS_PHONES: " + err.Error())
+		return
+	}
+	cfg.CrisisPhones = s.CrisisPhones
+	cfg.DemoPresets = append(cfg.DemoPresets, presets.NameCrisisPhones)
+}
+
+func (l *loader) questionnaireOrDemo(cfg *Config) wellbeingservice.Settings {
+	if cfg.QuestionnaireFile != "" {
+		return l.questionnaire("BIRGE_QUESTIONNAIRE_FILE", cfg.QuestionnaireFile)
+	}
+	b, err := presets.Questionnaire()
+	if err != nil {
+		l.fail("BIRGE_QUESTIONNAIRE_FILE: " + err.Error())
+		return wellbeingservice.Settings{}
+	}
+	settings := l.questionnaireBytes("presets/"+presets.NameQuestionnaire, b)
+	if settings.Questionnaire.Version != "" {
+		cfg.DemoPresets = append(cfg.DemoPresets, presets.NameQuestionnaire)
+	}
+	return settings
+}
+
+// demoSettings caches the embedded settings.json for consent versions and phones.
+func (l *loader) demoSettings() (presets.Settings, error) {
+	if l.settingsOK {
+		return l.settings, nil
+	}
+	s, err := presets.LoadSettings()
+	if err != nil {
+		return presets.Settings{}, err
+	}
+	l.settings = s
+	l.settingsOK = true
+	return s, nil
 }
 
 func (l *loader) lang(name, def string) string {
@@ -555,6 +666,10 @@ func (l *loader) questionnaire(name, path string) wellbeingservice.Settings {
 		l.fail(name + ": cannot read the questionnaire file")
 		return wellbeingservice.Settings{}
 	}
+	return l.questionnaireBytes(name, b)
+}
+
+func (l *loader) questionnaireBytes(name string, b []byte) wellbeingservice.Settings {
 	var raw questionnaireFile
 	if err := json.Unmarshal(b, &raw); err != nil {
 		l.fail(name + ": must be a JSON questionnaire object")

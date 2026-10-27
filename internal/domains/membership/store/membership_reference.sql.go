@@ -34,6 +34,44 @@ func (q *Queries) DistrictExists(ctx context.Context, id uuid.UUID) (bool, error
 	return found, err
 }
 
+const insertCity = `-- name: InsertCity :one
+INSERT INTO membership.cities (code)
+VALUES ($1)
+RETURNING id
+`
+
+func (q *Queries) InsertCity(ctx context.Context, code string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertCity, code)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertDistrict = `-- name: InsertDistrict :exec
+INSERT INTO membership.districts (city_id, code)
+VALUES ($1, $2)
+`
+
+type InsertDistrictParams struct {
+	CityID uuid.UUID
+	Code   string
+}
+
+func (q *Queries) InsertDistrict(ctx context.Context, arg InsertDistrictParams) error {
+	_, err := q.db.Exec(ctx, insertDistrict, arg.CityID, arg.Code)
+	return err
+}
+
+const insertNeed = `-- name: InsertNeed :exec
+INSERT INTO membership.needs (code)
+VALUES ($1)
+`
+
+func (q *Queries) InsertNeed(ctx context.Context, code string) error {
+	_, err := q.db.Exec(ctx, insertNeed, code)
+	return err
+}
+
 const listCities = `-- name: ListCities :many
 SELECT id, code
 FROM membership.cities
@@ -121,4 +159,21 @@ func (q *Queries) ListNeeds(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const referenceIsEmpty = `-- name: ReferenceIsEmpty :one
+SELECT NOT EXISTS (
+    SELECT 1 FROM membership.cities
+    UNION ALL
+    SELECT 1 FROM membership.districts
+    UNION ALL
+    SELECT 1 FROM membership.needs
+) AS empty
+`
+
+func (q *Queries) ReferenceIsEmpty(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, referenceIsEmpty)
+	var empty bool
+	err := row.Scan(&empty)
+	return empty, err
 }

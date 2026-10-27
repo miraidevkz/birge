@@ -43,7 +43,7 @@ Operations of tag `privacy` in `contracts/openapi/birge.yaml`:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `service.Settings.CurrentVersions` | required map | Consent type → current text version string |
+| `service.Settings.CurrentVersions` | required map | Consent type → current text version string (`BIRGE_CONSENT_VERSIONS` or DEMO `demo-1` when unset) |
 | `service.Settings.DeletionDueAfter` | 24h | Delay from request to shred |
 | see `docs/development.md` § Configuration | | all variables, defaults and which subcommand reads them |
 

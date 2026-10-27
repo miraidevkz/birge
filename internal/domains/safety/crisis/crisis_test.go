@@ -52,7 +52,7 @@ func loadEvalSet(t *testing.T) []evalCase {
 				continue
 			}
 			parts := strings.Split(line, "\t")
-			if len(parts) != 3 || (parts[0] != "crisis" && parts[0] != "none") || (parts[1] != LangKazakh && parts[1] != LangRussian) {
+			if len(parts) != 3 || (parts[0] != "crisis" && parts[0] != "none") || (parts[1] != LangKazakh && parts[1] != LangRussian && parts[1] != LangEnglish) {
 				t.Fatalf("%s:%d: want expected<TAB>lang<TAB>text", filepath.Base(path), n)
 			}
 			cases = append(cases, evalCase{file: filepath.Base(path), line: n, expected: parts[0], lang: parts[1], text: parts[2]})
@@ -170,16 +170,17 @@ func TestNilAndEmptyLexicon(t *testing.T) {
 
 func TestLoadErrors(t *testing.T) {
 	tests := map[string]fstest.MapFS{
-		"bad file name":     {"suicide.txt": {Data: []byte("хочу умереть\n")}},
-		"unknown language":  {"en.suicide.txt": {Data: []byte("want to die\n")}},
-		"bad regex":         {"ru.suicide.txt": {Data: []byte("re: (\n")}},
-		"empty regex":       {"ru.suicide.txt": {Data: []byte("re:\n")}},
-		"regex with ё":      {"ru.suicide.txt": {Data: []byte("re: ёлка\n")}},
-		"regex with ь":      {"ru.suicide.txt": {Data: []byte("re: умереть\n")}},
-		"regex upper case":  {"ru.suicide.txt": {Data: []byte("re: Умер\n")}},
-		"regex Kazakh":      {"kk.suicide.txt": {Data: []byte("re: өлгім\n")}},
-		"phrase only noise": {"ru.suicide.txt": {Data: []byte("!!!\n")}},
-		"invalid utf8":      {"ru.suicide.txt": {Data: []byte("\xff\xfe\n")}},
+		"bad file name":      {"suicide.txt": {Data: []byte("хочу умереть\n")}},
+		"malformed language": {"RU.suicide.txt": {Data: []byte("хочу умереть\n")}},
+		"long language":      {"russian.suicide.txt": {Data: []byte("хочу умереть\n")}},
+		"bad regex":          {"ru.suicide.txt": {Data: []byte("re: (\n")}},
+		"empty regex":        {"ru.suicide.txt": {Data: []byte("re:\n")}},
+		"regex with ё":       {"ru.suicide.txt": {Data: []byte("re: ёлка\n")}},
+		"regex with ь":       {"ru.suicide.txt": {Data: []byte("re: умереть\n")}},
+		"regex upper case":   {"ru.suicide.txt": {Data: []byte("re: Умер\n")}},
+		"regex Kazakh":       {"kk.suicide.txt": {Data: []byte("re: өлгім\n")}},
+		"phrase only noise":  {"ru.suicide.txt": {Data: []byte("!!!\n")}},
+		"invalid utf8":       {"ru.suicide.txt": {Data: []byte("\xff\xfe\n")}},
 	}
 	for name, fsys := range tests {
 		if _, err := Load(fsys); err == nil {

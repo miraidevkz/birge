@@ -1,0 +1,14 @@
+{
+  "_comment": "DEMO only — consent text versions and crisis phones for a fresh start. A real deployment must set BIRGE_CONSENT_VERSIONS and BIRGE_CRISIS_PHONES. Questionnaire thresholds stay in questionnaire.json (psychologist).",
+  "consent_versions": {
+    "data_processing": "demo-1",
+    "ai_crossborder": "demo-1",
+    "research": "demo-1"
+  },
+  "crisis_phones": [
+    {
+      "number": "112",
+      "label": "Emergency services"
+    }
+  ]
+}

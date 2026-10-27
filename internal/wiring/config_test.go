@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -210,11 +211,9 @@ func TestLoadRejects(t *testing.T) {
 		{"bad nats", CommandWorker, map[string]string{"NATS_URL": "http://nats.example.invalid"}, nil, "NATS_URL"},
 		{"no delivery mode", CommandWorker, map[string]string{"BIRGE_DELIVERY_MODE": ""}, nil, "no push or SMS provider is configured"},
 		{"unknown delivery mode", CommandWorker, map[string]string{"BIRGE_DELIVERY_MODE": "production"}, nil, "only \"dev\" is supported"},
-		{"sms texts required outside dev", CommandWorker, map[string]string{"BIRGE_DELIVERY_MODE": "production", "BIRGE_SMS_TEXTS": ""}, nil, "BIRGE_SMS_TEXTS is required"},
+		{"sms texts required outside dev", CommandWorker, map[string]string{"BIRGE_DELIVERY_MODE": "production", "BIRGE_SMS_TEXTS": "{}"}, nil, "BIRGE_SMS_TEXTS is required"},
 		{"bad sms texts", CommandWorker, map[string]string{"BIRGE_SMS_TEXTS": "[1]"}, nil, "BIRGE_SMS_TEXTS"},
 		{"bad events max bytes", CommandWorker, map[string]string{"BIRGE_EVENTS_MAX_BYTES": "0"}, nil, "BIRGE_EVENTS_MAX_BYTES"},
-		{"missing lexicon", CommandAPI, map[string]string{"BIRGE_CRISIS_LEXICON_DIR": ""}, nil, "BIRGE_CRISIS_LEXICON_DIR is required"},
-		{"missing questionnaire", CommandAPI, map[string]string{"BIRGE_QUESTIONNAIRE_FILE": ""}, nil, "BIRGE_QUESTIONNAIRE_FILE is required"},
 		{"bad questionnaire", CommandAPI, nil, func(f fakeFiles) { f["/keys/questionnaire.json"] = []byte(`{}`) }, "BIRGE_QUESTIONNAIRE_FILE"},
 		{"missing practices url", CommandAPI, map[string]string{"BIRGE_PRACTICES_BASE_URL": ""}, nil, "BIRGE_PRACTICES_BASE_URL is required"},
 		{"bad staff lang", CommandAPI, map[string]string{"BIRGE_STAFF_SMS_LANG": "en"}, nil, "BIRGE_STAFF_SMS_LANG"},
@@ -258,10 +257,96 @@ func TestLoadReportsEveryProblem(t *testing.T) {
 	if err == nil {
 		t.Fatal("empty environment accepted")
 	}
-	for _, name := range []string{"DATABASE_URL", "NATS_URL", "KRATOS_ADMIN_URL", "BIRGE_KEK_ID", "BIRGE_SMS_ALLOWED_PREFIXES", "BIRGE_DELIVERY_MODE", "BIRGE_CRISIS_LEXICON_DIR"} {
+	for _, name := range []string{"DATABASE_URL", "NATS_URL", "KRATOS_ADMIN_URL", "BIRGE_KEK_ID", "BIRGE_SMS_ALLOWED_PREFIXES", "BIRGE_DELIVERY_MODE"} {
 		if !strings.Contains(err.Error(), name) {
 			t.Errorf("error does not mention %s: %v", name, err)
 		}
+	}
+}
+
+func TestDemoPresetsWhenUnset(t *testing.T) {
+	files := validFiles(t)
+	for _, cmd := range []Command{CommandAPI, CommandWorker} {
+		t.Run(string(cmd), func(t *testing.T) {
+			env := validEnv(t)
+			delete(env, "BIRGE_CRISIS_LEXICON_DIR")
+			delete(env, "BIRGE_QUESTIONNAIRE_FILE")
+			delete(env, "BIRGE_SMS_TEXTS")
+			delete(env, "BIRGE_CONSENT_VERSIONS")
+			delete(env, "BIRGE_CRISIS_PHONES")
+			cfg, err := load(env, files, cmd)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := map[string]bool{
+				"crisis_lexicon": true,
+				"crisis_phones":  true,
+			}
+			if cmd == CommandAPI {
+				want["questionnaire"] = true
+				want["consent_versions"] = true
+			}
+			if cmd == CommandWorker {
+				want["sms_texts"] = true
+			}
+			got := map[string]bool{}
+			for _, n := range cfg.DemoPresets {
+				got[n] = true
+			}
+			for n := range want {
+				if !got[n] {
+					t.Errorf("missing DemoPreset %q in %v", n, cfg.DemoPresets)
+				}
+			}
+			if len(cfg.DemoPresets) != len(want) {
+				t.Errorf("DemoPresets = %v, want exactly %v", cfg.DemoPresets, want)
+			}
+			if cfg.Lexicon == nil || cfg.Lexicon.Size() == 0 {
+				t.Error("demo lexicon not loaded")
+			}
+			if len(cfg.CrisisPhones) != 1 || cfg.CrisisPhones[0].Number != "112" {
+				t.Errorf("demo crisis phones = %+v", cfg.CrisisPhones)
+			}
+			if cmd == CommandAPI {
+				if cfg.ConsentVersions["data_processing"] != "demo-1" {
+					t.Errorf("consent = %v", cfg.ConsentVersions)
+				}
+				if cfg.Wellbeing.Questionnaire.Version == "" {
+					t.Error("demo questionnaire not loaded")
+				}
+			}
+			if cmd == CommandWorker {
+				if len(cfg.SMSTexts) == 0 || cfg.SMSTexts["safety.escalation_opened"]["en"] == "" {
+					t.Errorf("demo sms texts = %v", cfg.SMSTexts)
+				}
+			}
+			var buf strings.Builder
+			log := slog.New(slog.NewJSONHandler(&buf, nil))
+			LogDemoPresets(log, cfg.DemoPresets)
+			for n := range want {
+				if !strings.Contains(buf.String(), `"name":"`+n+`"`) || !strings.Contains(buf.String(), `"event":"DemoPreset"`) {
+					t.Errorf("log missing DemoPreset %q: %s", n, buf.String())
+				}
+			}
+		})
+	}
+}
+
+func TestConfiguredValueReplacesDemoPreset(t *testing.T) {
+	env := validEnv(t)
+	files := validFiles(t)
+	cfg, err := load(env, files, CommandAPI)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.DemoPresets) != 0 {
+		t.Fatalf("DemoPresets = %v, want none when every variable is set", cfg.DemoPresets)
+	}
+	if cfg.CrisisPhones[0].Number == "112" {
+		t.Fatal("configured crisis phones replaced by demo")
+	}
+	if cfg.Wellbeing.Questionnaire.Version != "test-v1" {
+		t.Fatalf("questionnaire version = %q", cfg.Wellbeing.Questionnaire.Version)
 	}
 }
 

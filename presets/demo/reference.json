@@ -1,0 +1,10 @@
+{
+  "_comment": "DEMO only — synthetic city, districts and needs codes for a fresh deployment. Labels live in locale files. Replace with real reference data for production; migrate never overwrites existing rows.",
+  "cities": [
+    {
+      "code": "demo_city",
+      "districts": ["demo_district_a", "demo_district_b", "demo_district_c"]
+    }
+  ],
+  "needs": ["autism", "hearing"]
+}

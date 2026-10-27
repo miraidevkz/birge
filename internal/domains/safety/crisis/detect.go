@@ -17,7 +17,7 @@ type Result struct {
 }
 
 // Detect reports whether text matches the lexicon. lang is the member's
-// language ("kk" or "ru"; anything else is allowed) and is only the order in
+// language ("kk", "ru" or "en"; anything else is allowed) and is only the order in
 // which languages are checked: every loaded language is checked (see the
 // package documentation). Detect is pure and safe for concurrent use; a nil
 // Lexicon matches nothing.
