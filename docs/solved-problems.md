@@ -32,4 +32,4 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 ## Process
 
 - **Merge only on the check's exit code.** A pipeline that filters output with `grep` hides a failing test; read `$?` of `make go-check` before merging. (68739b9 fixed what this let through.)
-- **Task branches never contain migrations.** Agents edit their schema file; the tech lead generates the migration at merge, so parallel branches cannot produce conflicting migration orders. (190cb6e review)
+- **Task branches never contain migrations.** Agents edit their schema file; the tech lead generates the migration on the rebased branch, runs `make go-check` there and only then fast-forwards `main`, so `main` never holds a schema without its migration. (190cb6e review; 36e9631 fixed a merge that went first.)
