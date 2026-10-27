@@ -28,6 +28,7 @@ Caring for a child with special needs often leaves the parent exhausted and isol
 - [Architecture](docs/architecture.md)
 - [Architecture decision records](docs/adr/)
 - [MVP requirements](docs/requirements/mvp.ru.md) (Russian)
+- [Roadmap](docs/roadmap.md)
 - [Contributing with AI agents](AGENTS.md)
 
 ## License
