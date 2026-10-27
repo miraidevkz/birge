@@ -1,10 +1,13 @@
 // SOS screen (crisis variant, ADR-0014): phones render at once from the last
 // known list; raising/closing uses the API; "I feel very bad" is requestHumanHelp
 // with source sos (not POST /me/sos). Never blocks on the network for phones.
+// "Call 112" is always shown from the help locale and dials tel:112, independent
+// of the crisis phone list (mvp §4.6, non-negotiable 1).
 import { ApiError, unwrap, type Schemas } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
 import { Banner, Button, Heading, List, ListItem, Screen, Text, TextField } from '@birge/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking } from 'react-native';
 
@@ -18,9 +21,13 @@ type SosType = Schemas['SosType'];
 type DraftType = SosType | null;
 type HelpStatus = 'idle' | 'sending' | 'sent' | 'queued' | 'failed';
 
+/** LIFE_THREAT_NUMBER is fixed and independent of CRISIS_PHONES / the network. */
+const LIFE_THREAT_NUMBER = '112';
+
 /** SosScreen raises and closes SOS and shows crisis phones immediately. */
 export function SosScreen() {
   const { t } = useTranslation('sos');
+  const { t: tHelp } = useTranslation('help');
   const phones = useCrisisPhones();
   const { signedIn } = useSession();
   const queryClient = useQueryClient();
@@ -134,78 +141,87 @@ export function SosScreen() {
     raise.mutate({ type: draft, text: trimmed.slice(0, 300) });
   }
 
+  const signedOutFooter = (
+    <Banner
+      tone="info"
+      action={
+        <Button
+          title={tHelp('status.signIn')}
+          variant="secondary"
+          onPress={() => router.push('/sign-in')}
+          testID="sos-sign-in"
+        />
+      }
+    >
+      {t('status.signedOut')}
+    </Banner>
+  );
+
+  const requestFooter = draft ? (
+    <>
+      <Heading>{t('form.heading')}</Heading>
+      {draft === 'childcare' ? <Text tone="muted">{t('form.childcareNote')}</Text> : null}
+      <TextField
+        label={t('form.label')}
+        hint={t('form.hint')}
+        error={formError ?? undefined}
+        value={text}
+        onChangeText={setText}
+        maxLength={300}
+        multiline
+        testID="sos-text"
+      />
+      <Button
+        title={t('form.action')}
+        variant="destructive"
+        loading={raise.isPending}
+        onPress={onRaise}
+        testID="sos-raise"
+      />
+      <Button
+        title={t('form.cancel')}
+        variant="secondary"
+        onPress={() => {
+          setDraft(null);
+          setText('');
+          setFormError(null);
+        }}
+      />
+    </>
+  ) : (
+    <>
+      <Heading>{t('types.heading')}</Heading>
+      <Button
+        title={t('types.childcare')}
+        variant="secondary"
+        onPress={() => setDraft('childcare')}
+        testID="sos-type-childcare"
+      />
+      <Button
+        title={t('types.feelBad')}
+        variant="destructive"
+        loading={helpStatus === 'sending'}
+        disabled={helpStatus === 'sent'}
+        onPress={contactPerson}
+        testID="sos-type-feel-bad"
+      />
+      <Button
+        title={t('types.item')}
+        variant="secondary"
+        onPress={() => setDraft('item_or_medicine')}
+        testID="sos-type-item"
+      />
+      <Button title={t('types.other')} variant="secondary" onPress={() => setDraft('other')} testID="sos-type-other" />
+    </>
+  );
+
   return (
     <Screen
       title={t('title')}
       variant="crisis"
       scroll={false}
       testID="sos-screen"
-      footer={
-        draft ? (
-          <>
-            <Heading>{t('form.heading')}</Heading>
-            {draft === 'childcare' ? <Text tone="muted">{t('form.childcareNote')}</Text> : null}
-            <TextField
-              label={t('form.label')}
-              hint={t('form.hint')}
-              error={formError ?? undefined}
-              value={text}
-              onChangeText={setText}
-              maxLength={300}
-              multiline
-              testID="sos-text"
-            />
-            <Button
-              title={t('form.action')}
-              variant="destructive"
-              loading={raise.isPending}
-              onPress={onRaise}
-              testID="sos-raise"
-            />
-            <Button
-              title={t('form.cancel')}
-              variant="secondary"
-              onPress={() => {
-                setDraft(null);
-                setText('');
-                setFormError(null);
-              }}
-            />
-          </>
-        ) : (
-          <>
-            <Heading>{t('types.heading')}</Heading>
-            <Button
-              title={t('types.childcare')}
-              variant="secondary"
-              onPress={() => (signedIn ? setDraft('childcare') : setBanner({ tone: 'info', key: 'status.signedOut' }))}
-              testID="sos-type-childcare"
-            />
-            <Button
-              title={t('types.feelBad')}
-              variant="destructive"
-              loading={helpStatus === 'sending'}
-              disabled={helpStatus === 'sent'}
-              onPress={contactPerson}
-              testID="sos-type-feel-bad"
-            />
-            <Button
-              title={t('types.item')}
-              variant="secondary"
-              onPress={() =>
-                signedIn ? setDraft('item_or_medicine') : setBanner({ tone: 'info', key: 'status.signedOut' })
-              }
-              testID="sos-type-item"
-            />
-            <Button
-              title={t('types.other')}
-              variant="secondary"
-              onPress={() => (signedIn ? setDraft('other') : setBanner({ tone: 'info', key: 'status.signedOut' }))}
-              testID="sos-type-other"
-            />
-          </>
-        )
-      }
+      footer={signedIn ? requestFooter : signedOutFooter}
     >
       <List
         data={phones}
@@ -221,7 +237,19 @@ export function SosScreen() {
         empty={{ title: t('phonesHeading'), description: t('noPhones') }}
         header={
           <>
-            <Banner tone="danger">{t('lifeThreat')}</Banner>
+            <Banner
+              tone="danger"
+              action={
+                <Button
+                  title={tHelp('call112')}
+                  variant="destructive"
+                  onPress={() => void Linking.openURL(`tel:${LIFE_THREAT_NUMBER}`)}
+                  testID="call-112"
+                />
+              }
+            >
+              {tHelp('lifeThreat')}
+            </Banner>
             {banner ? <Banner tone={banner.tone}>{t(banner.key)}</Banner> : null}
             {phones.length > 0 ? <Heading>{t('phonesHeading')}</Heading> : null}
             {signedIn && open.length > 0 ? (

@@ -1,9 +1,11 @@
 {
   "title": "Help now",
   "intro": "You are not alone. If you or your child are in danger right now, call one of these numbers.",
+  "lifeThreat": "If there is a threat to life — call 112",
+  "call112": "Call 112",
   "phonesHeading": "Crisis phone numbers",
   "call": "Call {{label}}, {{number}}",
-  "noPhones": "Phone numbers appear after the app has connected once. In an emergency, call your local emergency number.",
+  "noPhones": "Phone numbers appear after the app has connected once. In an emergency, call 112.",
   "contact": {
     "heading": "Talk to a person",
     "description": "A psychologist on duty will contact you as soon as possible.",
@@ -12,7 +14,8 @@
   "status": {
     "sent": "Request sent. A person on duty will contact you.",
     "queued": "No connection. Your request is saved and will be sent automatically when you are back online.",
-    "signedOut": "Sign in so that a person on duty can contact you. The phone numbers above work without signing in.",
+    "signedOut": "Sending a request to a moderator needs sign-in. The phones and 112 work without it.",
+    "signIn": "Sign in",
     "failed": "The request could not be sent. Please call one of the numbers above."
   }
 }

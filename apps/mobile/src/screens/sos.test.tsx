@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 
 import { outbox } from '@/lib/help-outbox';
 import { storage } from '@/lib/storage';
@@ -10,6 +11,9 @@ import { SosScreen } from './sos';
 jest.mock('expo-constants', () => require('@/test-mocks').expoConstants());
 jest.mock('@/lib/storage', () => require('@/test-mocks').memoryStorage());
 jest.mock('@/lib/platform-crypto', () => require('@/test-mocks').platformCrypto());
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() },
+}));
 
 const mockFetch = jest.fn<typeof fetch>();
 jest.mock('@/lib/api', () => {
@@ -53,20 +57,40 @@ afterEach(() => {
 });
 
 describe('SosScreen', () => {
-  it('render: shows crisis phones at once without waiting for the network', async () => {
+  it('render: shows 112 and crisis phones at once without waiting for the network', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
     mockFetch.mockImplementation(() => new Promise(() => undefined));
     await renderSos();
     expect(screen.getByRole('header', { name: 'SOS' })).toBeTruthy();
-    expect(screen.getByText(/threat to life/)).toBeTruthy();
+    expect(screen.getByText(/threat to life — call 112/)).toBeTruthy();
     expect(screen.getByLabelText('Call Example crisis line, +70000000000')).toBeTruthy();
     expect(mockFetch).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByTestId('call-112'));
+    expect(openURL).toHaveBeenCalledWith('tel:112');
+    openURL.mockRestore();
   });
 
-  it('empty / signed out: type actions ask to sign in; phones stay', async () => {
+  it('signed out: explains sign-in is needed for requests; 112 and phones stay', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
     await renderSos();
-    await fireEvent.press(screen.getByRole('button', { name: 'Other' }));
-    expect(await screen.findByText(/Sign in to send an SOS/)).toBeTruthy();
+    expect(await screen.findByText(/Sending an SOS or contacting a moderator needs sign-in/)).toBeTruthy();
+    expect(screen.getByTestId('sos-sign-in')).toBeTruthy();
+    expect(screen.queryByTestId('sos-type-other')).toBeNull();
     expect(screen.getByLabelText('Call Example crisis line, +70000000000')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Call 112' }));
+    expect(openURL).toHaveBeenCalledWith('tel:112');
+    openURL.mockRestore();
+  });
+
+  it('signed out offline: still shows 112 and dials it without the network', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined as never);
+    mockFetch.mockRejectedValue(new TypeError('Network request failed'));
+    await renderSos();
+    expect(screen.getByText(/threat to life — call 112/)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('call-112'));
+    expect(openURL).toHaveBeenCalledWith('tel:112');
+    expect(mockFetch).not.toHaveBeenCalled();
+    openURL.mockRestore();
   });
 
   it('error: raise failure shows a danger banner; phones stay', async () => {
@@ -86,6 +110,7 @@ describe('SosScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Send SOS' }));
     expect(await screen.findByText(/Could not send the SOS/)).toBeTruthy();
     expect(screen.getByLabelText('Call Example crisis line, +70000000000')).toBeTruthy();
+    expect(screen.getByTestId('call-112')).toBeTruthy();
   });
 
   it('main action: raises an SOS when signed in', async () => {

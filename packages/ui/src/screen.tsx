@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cn } from './cn';
@@ -16,6 +16,7 @@ export interface ScreenProps {
   /**
    * scroll wraps the content in a ScrollView. Turn it off when the content is
    * a List, which scrolls itself (nesting virtualized lists breaks them).
+   * Ignored when layout is "form" (the form group always scrolls if needed).
    */
   scroll?: boolean;
   /**
@@ -23,7 +24,13 @@ export interface ScreenProps {
    * inside, and no SOS entry (the screen is the destination).
    */
   variant?: 'default' | 'crisis';
-  /** footer stays below the content, above the home indicator: the screen's one primary action. */
+  /**
+   * layout "form" vertically centres the title, body and primary action as one
+   * keyboard-aware group (sign-in and similar short forms). Default keeps the
+   * title in the top bar and the footer pinned below the content.
+   */
+  layout?: 'default' | 'form';
+  /** footer stays with the content: the screen's one primary action. */
   footer?: ReactNode;
   testID?: string;
 }
@@ -32,16 +39,62 @@ export interface ScreenProps {
  * Screen gives every screen safe-area padding, the background, the title row
  * with the SOS entry, and optional scrolling and footer.
  */
-export function Screen({ children, title, scroll = true, variant = 'default', footer, testID }: ScreenProps) {
+export function Screen({
+  children,
+  title,
+  scroll = true,
+  variant = 'default',
+  layout = 'default',
+  footer,
+  testID,
+}: ScreenProps) {
   const insets = useSafeAreaInsets();
   const crisis = variant === 'crisis';
-  const content = scroll ? (
+  const form = layout === 'form';
+  const bottomPad = Math.max(insets.bottom, tokens.spacing[3]);
+
+  const header = (
+    <View
+      className={cn(
+        'min-h-touch flex-row items-center gap-3 px-4 py-2',
+        title && !form ? 'justify-between' : 'justify-end',
+      )}
+    >
+      {title && !form ? (
+        <View className="flex-1">
+          <Heading level={1}>{title}</Heading>
+        </View>
+      ) : null}
+      {crisis ? null : <SosButton />}
+    </View>
+  );
+
+  const formBody = (
+    <KeyboardAvoidingView
+      className="flex-1"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={insets.top}
+    >
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="flex-grow justify-center gap-4 px-4 py-6"
+        keyboardShouldPersistTaps="handled"
+      >
+        {title ? <Heading level={1}>{title}</Heading> : null}
+        {children}
+        {footer ? <View className="gap-2 pt-2">{footer}</View> : null}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+
+  const defaultContent = scroll ? (
     <ScrollView className="flex-1" contentContainerClassName="gap-4 px-4 pb-6" keyboardShouldPersistTaps="handled">
       {children}
     </ScrollView>
   ) : (
     <View className="flex-1 gap-4 px-4">{children}</View>
   );
+
   const frame = (
     <View
       className="flex-1 bg-background"
@@ -49,25 +102,20 @@ export function Screen({ children, title, scroll = true, variant = 'default', fo
       style={{ paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }}
       testID={testID}
     >
-      <View
-        className={cn('min-h-touch flex-row items-center gap-3 px-4 py-2', title ? 'justify-between' : 'justify-end')}
-      >
-        {title ? (
-          <View className="flex-1">
-            <Heading level={1}>{title}</Heading>
-          </View>
-        ) : null}
-        {crisis ? null : <SosButton />}
-      </View>
-      {content}
-      {footer ? (
-        <View
-          className="gap-2 border-t border-separator px-4 pt-3"
-          style={{ paddingBottom: Math.max(insets.bottom, tokens.spacing[3]) }}
-        >
-          {footer}
-        </View>
-      ) : null}
+      {header}
+      {form ? (
+        formBody
+      ) : (
+        <>
+          {defaultContent}
+          {footer ? (
+            <View className="gap-2 border-t border-separator px-4 pt-3" style={{ paddingBottom: bottomPad }}>
+              {footer}
+            </View>
+          ) : null}
+        </>
+      )}
+      {form ? <View style={{ height: bottomPad }} /> : null}
     </View>
   );
   return crisis ? <NoMotion>{frame}</NoMotion> : frame;

@@ -1,9 +1,8 @@
 {
   "title": "SOS",
-  "lifeThreat": "If there is a threat to life, call emergency services now.",
   "phonesHeading": "Crisis phone numbers",
   "call": "Call {{label}}, {{number}}",
-  "noPhones": "Phone numbers appear after the app has connected once. In an emergency, call your local emergency number.",
+  "noPhones": "Phone numbers appear after the app has connected once. In an emergency, call 112.",
   "types": {
     "heading": "What do you need?",
     "childcare": "No one to leave the child with",
@@ -32,8 +31,9 @@
     "failed": "Could not send the SOS. Check your connection or call a number above.",
     "queued": "No connection. Your request to a person on duty is saved and will be sent automatically.",
     "sentHelp": "Request sent. A person on duty will contact you.",
-    "signedOut": "Sign in to send an SOS or contact a person on duty. The phone numbers above work without signing in."
+    "signedOut": "Sending an SOS or contacting a moderator needs sign-in. The phones and 112 work without it."
   },
+
   "open": {
     "heading": "Your open SOS",
     "emptyTitle": "No open SOS",

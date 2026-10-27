@@ -75,7 +75,11 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
 
   if (!pending) {
     return (
-      <Screen title={t('title')} footer={<Button title={t('sendCode')} onPress={sendCode} loading={busy} />}>
+      <Screen
+        title={t('title')}
+        layout="form"
+        footer={<Button title={t('sendCode')} onPress={sendCode} loading={busy} />}
+      >
         <Text>{t('intro')}</Text>
         <TextField
           label={t('phone.label')}
@@ -98,6 +102,7 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
   return (
     <Screen
       title={t('title')}
+      layout="form"
       footer={
         <>
           <Button title={t('verify')} onPress={verify} loading={busy} />

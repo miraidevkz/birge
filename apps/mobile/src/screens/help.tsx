@@ -1,13 +1,17 @@
 // The crisis help screen (ADR-0023). Rules this screen must keep:
 //   - The fixed text and the phone numbers render immediately from bundled
 //     locale files and the last known list; nothing here waits for the network.
+//   - "Call 112" is always shown and dials tel:112 from locale copy; it does
+//     not depend on the crisis phone list or the network (non-negotiable 1).
 //   - "Contact a person now" is written to the outbox before it is sent, so a
 //     press offline is delivered later (ADR-0018) and never lost.
 //   - No animation (Screen variant "crisis").
-//   - Works signed out: the numbers are shown; only the request needs a session.
+//   - Works signed out: 112 and the numbers are shown; only the request needs
+//     a session (and then links to sign-in).
 import { unwrap, type Schemas } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
 import { Banner, Button, Heading, List, ListItem, Screen, Text } from '@birge/ui';
+import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking } from 'react-native';
 
@@ -18,6 +22,9 @@ import { useSession } from '@/lib/session';
 
 type Source = Schemas['EscalationSource'];
 type Status = 'idle' | 'sending' | 'sent' | 'queued' | 'failed';
+
+/** LIFE_THREAT_NUMBER is fixed and independent of CRISIS_PHONES / the network. */
+const LIFE_THREAT_NUMBER = '112';
 
 const bannerFor = {
   sent: { tone: 'success', key: 'status.sent' },
@@ -96,7 +103,19 @@ export function HelpScreen({ source }: { source: Source }) {
             />
           </>
         ) : (
-          <Banner tone="info">{t('status.signedOut')}</Banner>
+          <Banner
+            tone="info"
+            action={
+              <Button
+                title={t('status.signIn')}
+                variant="secondary"
+                onPress={() => router.push('/sign-in')}
+                testID="help-sign-in"
+              />
+            }
+          >
+            {t('status.signedOut')}
+          </Banner>
         )
       }
     >
@@ -114,6 +133,19 @@ export function HelpScreen({ source }: { source: Source }) {
         empty={{ title: t('phonesHeading'), description: t('noPhones') }}
         header={
           <>
+            <Banner
+              tone="danger"
+              action={
+                <Button
+                  title={t('call112')}
+                  variant="destructive"
+                  onPress={() => void Linking.openURL(`tel:${LIFE_THREAT_NUMBER}`)}
+                  testID="call-112"
+                />
+              }
+            >
+              {t('lifeThreat')}
+            </Banner>
             <Text variant="label">{t('intro')}</Text>
             {banner ? <Banner tone={banner.tone}>{t(banner.key)}</Banner> : null}
             {phones.length > 0 ? <Heading>{t('phonesHeading')}</Heading> : null}

@@ -57,6 +57,20 @@ describe('Screen', () => {
     expect(screen.queryAllByTestId('button-spinner', { includeHiddenElements: true })).toHaveLength(0);
     expect(screen.getByRole('button', { name: 'Contact a person now' })).toBeBusy();
   });
+
+  it('form layout: title, body and footer stay in one centred group', async () => {
+    await render(
+      <SosProvider onPress={() => undefined}>
+        <Screen title="Sign in" layout="form" footer={<Button title="Send code" onPress={() => undefined} />}>
+          <Text>Enter your mobile number.</Text>
+        </Screen>
+      </SosProvider>,
+    );
+    expect(screen.getByRole('header', { name: 'Sign in' })).toBeTruthy();
+    expect(screen.getByText('Enter your mobile number.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Send code' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'SOS' })).toBeTruthy();
+  });
 });
 
 describe('TextField', () => {
