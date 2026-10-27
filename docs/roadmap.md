@@ -4,8 +4,9 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 
 ## Wave 0: foundation (critical path, done by the tech lead)
 
-- [ ] Threat model (`docs/threat-model.md`, STRIDE over crisis path, auth, SOS, personal data) and ASVS checklist
-- [ ] `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`
+- [x] Threat model (`docs/threat-model.md`)
+- [ ] ASVS checklist
+- [x] `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`
 - [ ] Go module and `cmd/birge` skeleton (`api`, `worker`, `migrate`), `internal/platform` (config, db, outbox, timers, crypto interface, telemetry)
 - [ ] `contracts/`: OpenAPI 3.1 skeleton, event envelope schema, codegen (Go server, TS client)
 - [ ] `db/schema.sql` for platform tables (outbox, timers, audit), `make migration`, `make db-check` with the destructive-operation gate
