@@ -14,3 +14,16 @@
 		file_server
 	}
 }
+
+# The staff admin (apps/admin/dist) on its own origin; it signs in at the
+# development Hydra (http://localhost:4444/) and calls the API here.
+:8082 {
+	handle /v1/* {
+		reverse_proxy api:8080
+	}
+	handle {
+		root * /srv-admin
+		try_files {path} /index.html
+		file_server
+	}
+}

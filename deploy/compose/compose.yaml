@@ -206,7 +206,8 @@ services:
     depends_on:
       hydra: { condition: service_started }
 
-  # The exported web app (./up.sh web builds it) on 127.0.0.1:8081. Browsers
+  # The exported web apps (./up.sh web builds both): the member app on
+  # 127.0.0.1:8081 and the staff admin on 127.0.0.1:8082. Browsers
   # need a secure context for the sign-in proof-of-work (WebCrypto), and
   # localhost is one: from another machine use `ssh -L 8081:localhost:8081`.
   # Recreated after every export: the export replaces the dist directory.
@@ -216,8 +217,10 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ../../apps/mobile/dist:/srv:ro
+      - ../../apps/admin/dist:/srv-admin:ro
     ports:
       - "127.0.0.1:8081:8081"
+      - "127.0.0.1:8082:8082"
     depends_on:
       api: { condition: service_started }
 
