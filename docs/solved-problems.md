@@ -20,6 +20,7 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 - **Never drop a critical notification silently.** A budget or guard that blocks a crisis SMS fails loudly (`failed`, Error log with an event name for alerting), and the daily budget does not apply to critical messages. (190cb6e)
 - **A log line never joins a person to health data.** Log a record ID (check-in, escalation), not the member ID next to a flag, score or category. (d183550)
 - **Bind ciphertexts and wrapped keys to their owner.** Associated data names the field and the row (`<context>.<table>.<column>|<id>`); a wrapped data key is bound to its member and KEK, so a copied value fails to open. (23756ea)
+- **A restriction on a member never closes her crisis path.** Suspension, blocks or limits stop her reaching others; the help request, her SOS, the emergency plan and her own-data routes stay open, with an e2e test. (moderation review: suspension first answered 403 on every route.)
 - **Documentation claims only what the mechanism guarantees.** Crypto-shredding does not reach backups until they expire. (93c3266)
 
 ## Contracts and code generation
