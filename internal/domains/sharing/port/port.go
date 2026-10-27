@@ -27,11 +27,12 @@ type Blocks interface {
 }
 
 // ObjectStore is the S3-compatible object storage port (ADR-0015). The
-// production adapter is wired later; tests use an in-memory fake.
+// production adapter is platform/objectstore; tests use an in-memory fake.
 type ObjectStore interface {
 	// PresignPut returns a temporary URL the client may PUT the raw bytes to.
-	PresignPut(ctx context.Context, key, contentType string, expires time.Duration) (url string, err error)
-	// PresignGet returns a temporary URL for reading a processed object.
+	// contentLength is required so the signature can bind Content-Length.
+	PresignPut(ctx context.Context, key, contentType string, contentLength int64, expires time.Duration) (url string, err error)
+	// PresignGet returns a temporary (or public) URL for reading a processed object.
 	PresignGet(ctx context.Context, key string, expires time.Duration) (url string, err error)
 	// Get returns the object bytes.
 	Get(ctx context.Context, key string) ([]byte, error)

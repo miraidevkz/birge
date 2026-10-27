@@ -20,8 +20,12 @@ import (
 	birgedb "birge/db"
 	assistantadapter "birge/internal/domains/assistant/adapter"
 	assistantservice "birge/internal/domains/assistant/service"
+	chatadapter "birge/internal/domains/chat/adapter"
+	chatservice "birge/internal/domains/chat/service"
 	circleadapter "birge/internal/domains/circle/adapter"
 	circleservice "birge/internal/domains/circle/service"
+	directoryadapter "birge/internal/domains/directory/adapter"
+	directoryservice "birge/internal/domains/directory/service"
 	emergencyadapter "birge/internal/domains/emergency/adapter"
 	emergencyservice "birge/internal/domains/emergency/service"
 	knowledgeadapter "birge/internal/domains/knowledge/adapter"
@@ -36,6 +40,9 @@ import (
 	privacyservice "birge/internal/domains/privacy/service"
 	safetyadapter "birge/internal/domains/safety/adapter"
 	safetyservice "birge/internal/domains/safety/service"
+	sharingadapter "birge/internal/domains/sharing/adapter"
+	"birge/internal/domains/sharing/imageproc"
+	sharingservice "birge/internal/domains/sharing/service"
 	wellbeingadapter "birge/internal/domains/wellbeing/adapter"
 	wellbeingservice "birge/internal/domains/wellbeing/service"
 	"birge/internal/platform/clock"
@@ -213,7 +220,19 @@ func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	h, err := NewAPIHandler(ctx, APIDeps{Config: cfg, Pool: pool, Envelope: env, Clock: clk, Logger: logger})
+	nc, err := nats.Connect(cfg.NATSURL, nats.Name("birge-api"), nats.MaxReconnects(-1))
+	if err != nil {
+		return fmt.Errorf("api: nats connect: %w", err)
+	}
+	defer nc.Close()
+	objects, err := NewObjectStore(cfg, logger)
+	if err != nil {
+		return err
+	}
+	h, err := NewAPIHandler(ctx, APIDeps{
+		Config: cfg, Pool: pool, Envelope: env, Clock: clk, Logger: logger,
+		NATS: nc, Objects: objects,
+	})
 	if err != nil {
 		return err
 	}
@@ -341,6 +360,39 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 			PurgeBatchSize: assistantservice.DefaultPurgeBatchSize,
 		},
 	}
+	objects, err := NewObjectStore(cfg, logger)
+	if err != nil {
+		return err
+	}
+	chat := &chatservice.Service{
+		Store:   &chatadapter.PostgresStore{Pool: pool},
+		Sealer:  env,
+		Members: &ChatMembers{Members: members},
+		Blocks:  &EmergencyBlocks{Members: members},
+		Mentors: &ChatMentors{Members: members},
+		Crisis:  &ChatCrisis{Safety: safety},
+		Fanout:  &chatadapter.NATSFanout{Conn: nc, Logger: logger},
+		Clock:   clk,
+		Logger:  logger,
+	}
+	if err := chat.EnsureRetentionTimer(ctx); err != nil {
+		return fmt.Errorf("worker: chat retention: %w", err)
+	}
+	sharing := &sharingservice.Service{
+		Store:   &sharingadapter.PostgresStore{Pool: pool},
+		Members: &SharingMembers{Members: members},
+		Blocks:  &EmergencyBlocks{Members: members},
+		Objects: objects,
+		Images:  imageproc.Processor{},
+		Clock:   clk,
+		Logger:  logger,
+	}
+	directory := &directoryservice.Service{
+		Store:   &directoryadapter.PostgresStore{Pool: pool},
+		Members: &DirectoryMembers{Members: members},
+		Clock:   clk,
+		Logger:  logger,
+	}
 	handlers, err := mergeHandlers(
 		(&notifyadapter.TimerHandlers{Service: notify}).Handlers(),
 		(&privacyadapter.TimerHandlers{Service: privacy}).Handlers(),
@@ -350,6 +402,8 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		(&assistantadapter.TimerHandlers{Service: assistant}).Handlers(),
 		(&knowledgeadapter.TimerHandlers{Service: knowledge}).Handlers(),
 		(&circleadapter.TimerHandlers{Service: circle}).Handlers(),
+		(&chatadapter.TimerHandlers{Service: chat}).Handlers(),
+		(&sharingadapter.TimerHandlers{Service: sharing}).Handlers(),
 	)
 	if err != nil {
 		return err
@@ -363,6 +417,9 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	sosShared := &SosSharedConsumer{
 		JS: js, Pool: pool, Members: members, Emergency: emergency, Clock: clk, Logger: logger,
 	}
+	roomOpener := &chatadapter.RoomOpenerConsumer{JS: js, Stream: StreamName, Service: chat, Logger: logger}
+	sharingMod := &sharingadapter.ModerationConsumer{JS: js, Service: sharing, Logger: logger}
+	directoryMod := &directoryadapter.ModerationConsumer{JS: js, Service: directory, Logger: logger}
 	timerWorker := &timers.Worker{Pool: pool, Clock: clk, Logger: logger, Handlers: handlers, Interval: timersInterval}
 
 	health := http.NewServeMux()
@@ -370,11 +427,14 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	health.Handle("GET /readyz", readiness(logger, poolCheck(pool), natsCheck(nc)))
 
 	loops := map[string]func(context.Context) error{
-		"outbox relay":     relay.Run,
-		"notify consumer":  consumer.Run,
-		"sos shared":       sosShared.Run,
-		"timers":           timerWorker.Run,
-		"health endpoints": func(ctx context.Context) error { return serve(ctx, logger, cfg.HTTPAddr, health) },
+		"outbox relay":         relay.Run,
+		"notify consumer":      consumer.Run,
+		"sos shared":           sosShared.Run,
+		"chat room opener":     roomOpener.Run,
+		"sharing moderation":   sharingMod.Run,
+		"directory moderation": directoryMod.Run,
+		"timers":               timerWorker.Run,
+		"health endpoints":     func(ctx context.Context) error { return serve(ctx, logger, cfg.HTTPAddr, health) },
 	}
 	if !cfg.RetrievalEnabled {
 		logger.Warn("retrieval disabled: TEI or Qdrant not configured", "event", "RetrievalDisabled")

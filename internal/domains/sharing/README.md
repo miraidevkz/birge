@@ -16,7 +16,7 @@ Operations of tag `sharing` in `contracts/openapi/birge.yaml`. All are member-on
 
 | Operation | Rules not in the contract |
 |---|---|
-| `POST /listings/photo-uploads` | Verified only (403). JPEG/PNG ≤ 5 MB. Returns a 10-minute presigned PUT URL (`ObjectStore`). |
+| `POST /listings/photo-uploads` | Verified only (403). JPEG/PNG ≤ 5 MB. Returns a 10-minute presigned PUT URL (`ObjectStore`). When object storage is unset: 503 `storage_not_configured`. |
 | `POST /listings` | Verified only; `acceptRules` must be true. Idempotent per `Idempotency-Key`. Status `pending`; emits `sharing.ListingSubmitted`. With a photo, schedules `sharing.ProcessPhoto`; stays pending until the photo is processed and moderation approves. |
 | `GET /listings` | Active only, newest first, 5 per page, keyset cursor; filters by type/category/district; never the viewer's own; blocked members excluded both ways (ADR-0019). |
 | `GET /me/listings` | Caller's listings in every status (≤ 100). |
@@ -47,7 +47,7 @@ Operations of tag `sharing` in `contracts/openapi/birge.yaml`. All are member-on
 | `Service.ApplyModerationDecided` | Applies `moderation.Decided` for kind listing (wiring later). |
 | `Service.HandleProcessPhoto` / `HandleAutoClose` | Timer handlers; used by `adapter.TimerHandlers`. |
 
-Ports used by this context (wired later): `MemberInfo`, `Blocks`, `ObjectStore` (S3 API), `ImageProcessor` (stdlib implementation in `imageproc`), `Store` (PostgreSQL adapter).
+Ports used by this context: `MemberInfo`, `Blocks`, `ObjectStore` (`internal/platform/objectstore`), `ImageProcessor` (`imageproc`), `Store` (PostgreSQL adapter).
 
 ## Configuration
 

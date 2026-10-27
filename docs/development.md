@@ -75,7 +75,7 @@ A fresh deployment can start with no configuration or reference data files: when
 | `BIRGE_QUESTIONNAIRE_FILE` | api | EXAMPLE preset | path to the wellbeing questionnaire JSON (version, questions with locale keys, reverse-score ids, crisis item, thresholds, feedback). Unset → `presets/demo/questionnaire.json` (thresholds are placeholders for the psychologist) |
 | `BIRGE_TIME_ZONE` | api, worker | `Asia/Almaty` | deployment IANA zone for check-in reminder schedules; hosts must ship current tzdata |
 | `BIRGE_PRACTICES_BASE_URL` | api | required | in-jurisdiction object-storage base URL for practice audio (`https://…`) |
-| `NATS_URL` | worker | required | `nats://` or `tls://` URLs, comma-separated |
+| `NATS_URL` | api, worker | required | `nats://` or `tls://` URLs, comma-separated; the API uses NATS core for chat room fan-out, the worker uses JetStream for domain events |
 | `BIRGE_KEK_ID` | api, worker | required | id of the key-encryption key, stored with every wrapped member key; never reuse an id for other key material |
 | `BIRGE_KEK_KEYSET_FILE` | api, worker | required | file with the KEK as a cleartext Tink AES256-GCM keyset in JSON (development and first deployments; production moves to OpenBao, ADR-0009) |
 | `BIRGE_BLIND_INDEX_KEY_FILE` | api, worker | optional | key for blind indexes; validated when set, not used by any context yet |
@@ -109,10 +109,16 @@ A fresh deployment can start with no configuration or reference data files: when
 | `BIRGE_QDRANT_URL` | api, worker, kb-reindex | unset | Qdrant REST base URL |
 | `BIRGE_QDRANT_ALIAS` | api, worker, kb-reindex | `birge-kb` | Qdrant alias Search uses; physical collection includes the model id |
 | `BIRGE_QDRANT_SCORE_THRESHOLD` | api, worker, kb-reindex | `0.3` | minimum cosine score for a retrieval hit (0..1) |
+| `BIRGE_CHAT_WS_ORIGINS` | api | unset | comma-separated WebSocket `Origin` patterns for `GET /v1/chat/ws` (coder/websocket); unset allows native clients that send no Origin |
+| `BIRGE_S3_ENDPOINT` | api, worker | unset | S3-compatible API host (`host:port` or `http(s)://…`) for item photos (ADR-0015; Garage and peers). Unset → Warn `ObjectStorageDisabled`; photo uploads answer 503 `storage_not_configured` |
+| `BIRGE_S3_BUCKET` | api, worker | required with S3 | bucket name |
+| `BIRGE_S3_REGION` | api, worker | `garage` | S3 region string (any value the provider accepts) |
+| `BIRGE_S3_ACCESS_KEY_FILE`, `BIRGE_S3_SECRET_KEY_FILE` | api, worker | required with S3 | paths to the access key and secret (trailing whitespace removed); never put keys in the environment |
+| `BIRGE_S3_PUBLIC_BASE_URL` | api, worker | required with S3 | public origin for processed photo URLs (`https://objects.example.invalid`); `PresignGet` returns `{base}/{key}` |
 
 `birge kb-reindex` rebuilds the current model's Qdrant collection from every published, non-expired knowledge fragment. It requires `DATABASE_URL`, `BIRGE_TEI_URL`, `BIRGE_QDRANT_URL` and `BIRGE_EMBEDDING_MODEL_ID`.
 
-Health: `GET /healthz` answers 204 while the process runs; `GET /readyz` answers 204 when the database (and, for the worker, NATS) is reachable and 503 otherwise.
+Health: `GET /healthz` answers 204 while the process runs; `GET /readyz` answers 204 when the database (and NATS for the API and the worker) is reachable and 503 otherwise.
 
 ## Running locally
 

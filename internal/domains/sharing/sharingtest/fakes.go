@@ -98,7 +98,7 @@ func NewMemoryObjects() *MemoryObjects {
 }
 
 // PresignPut implements port.ObjectStore.
-func (o *MemoryObjects) PresignPut(_ context.Context, key, _ string, _ time.Duration) (string, error) {
+func (o *MemoryObjects) PresignPut(_ context.Context, key, _ string, _ int64, _ time.Duration) (string, error) {
 	if o.Fail != nil {
 		return "", o.Fail
 	}

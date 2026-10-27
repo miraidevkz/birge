@@ -25,6 +25,7 @@ import (
 	wellbeingservice "birge/internal/domains/wellbeing/service"
 	"birge/internal/platform/config"
 	"birge/internal/platform/crypto"
+	"birge/internal/platform/objectstore"
 	"birge/internal/platform/ratelimit"
 	"birge/internal/platform/staffauth"
 	"birge/presets"
@@ -167,6 +168,16 @@ type Config struct {
 	QdrantAlias          string
 	QdrantScoreThreshold float32
 	RetrievalEnabled     bool
+
+	// ObjectStore is S3-compatible storage for item photos (ADR-0015). Nil
+	// config fields mean Disabled: photo uploads answer 503.
+	ObjectStore objectstore.Config
+	// ObjectStoreEnabled is true when BIRGE_S3_ENDPOINT is set.
+	ObjectStoreEnabled bool
+
+	// ChatWSOrigins are the WebSocket OriginPatterns for GET /v1/chat/ws
+	// (comma-separated; empty allows non-browser clients with no Origin).
+	ChatWSOrigins []string
 }
 
 // String redacts the configuration so that an accidental %v cannot print secrets.
@@ -219,6 +230,7 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 
 	if api {
 		cfg.KratosPublicURL = l.httpURL("KRATOS_PUBLIC_URL", true)
+		cfg.NATSURL = l.natsURL("NATS_URL") // chat WebSocket fan-out (NATS core)
 		cfg.PoWKey = l.keyFile("BIRGE_POW_KEY_FILE", true)
 		cfg.HashKey = l.keyFile("BIRGE_HASH_KEY_FILE", true)
 		if cfg.PoWKey != nil && bytes.Equal(cfg.PoWKey, cfg.HashKey) {
@@ -237,11 +249,14 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		cfg.Wellbeing.TimeZone = cfg.TimeZone
 		cfg.Wellbeing.CrisisPhones = wellbeingCrisisPhones(cfg.CrisisPhones)
 		cfg.StaffAuth = l.staffAuth()
+		cfg.ChatWSOrigins = l.list("BIRGE_CHAT_WS_ORIGINS")
 		l.assistant(&cfg)
 		l.retrieval(&cfg, false)
+		l.objectStore(&cfg)
 	}
 	if worker {
 		cfg.NATSURL = l.natsURL("NATS_URL")
+		l.objectStore(&cfg)
 		cfg.SMSGuard = guard.Config{
 			AllowedPrefixes: cfg.SMSPrefixes,
 			PerNumberLimit:  l.positiveInt("BIRGE_SMS_PER_NUMBER_LIMIT", 5),
@@ -375,6 +390,49 @@ func (l *loader) retrieval(cfg *Config, required bool) {
 // QdrantCollection is the physical collection name for the configured model.
 func (c Config) QdrantCollection() string {
 	return retrieval.CollectionName(c.QdrantAlias, c.EmbeddingModelID)
+}
+
+// objectStore loads optional S3 settings. Unset BIRGE_S3_ENDPOINT → disabled
+// (photo uploads 503). Any one of the other S3 variables set alone fails.
+func (l *loader) objectStore(cfg *Config) {
+	endpoint := strings.TrimSpace(l.getenv("BIRGE_S3_ENDPOINT"))
+	bucket := strings.TrimSpace(l.getenv("BIRGE_S3_BUCKET"))
+	region := strings.TrimSpace(l.getenv("BIRGE_S3_REGION"))
+	public := strings.TrimSpace(l.getenv("BIRGE_S3_PUBLIC_BASE_URL"))
+	accessPath := strings.TrimSpace(l.getenv("BIRGE_S3_ACCESS_KEY_FILE"))
+	secretPath := strings.TrimSpace(l.getenv("BIRGE_S3_SECRET_KEY_FILE"))
+	any := endpoint != "" || bucket != "" || region != "" || public != "" || accessPath != "" || secretPath != ""
+	if !any {
+		return
+	}
+	if endpoint == "" {
+		l.fail("BIRGE_S3_ENDPOINT is required when any BIRGE_S3_* variable is set")
+		return
+	}
+	cfg.ObjectStoreEnabled = true
+	cfg.ObjectStore.Endpoint = endpoint
+	cfg.ObjectStore.Bucket = l.required("BIRGE_S3_BUCKET")
+	cfg.ObjectStore.Region = strings.TrimSpace(l.getenv("BIRGE_S3_REGION"))
+	if cfg.ObjectStore.Region == "" {
+		cfg.ObjectStore.Region = "garage"
+	}
+	cfg.ObjectStore.PublicBaseURL = l.httpURL("BIRGE_S3_PUBLIC_BASE_URL", true)
+	cfg.ObjectStore.AccessKey = l.secretFile("BIRGE_S3_ACCESS_KEY_FILE")
+	cfg.ObjectStore.SecretKey = l.secretFile("BIRGE_S3_SECRET_KEY_FILE")
+}
+
+// NewObjectStore builds the S3 store or Disabled when unset. Call once at
+// start; log Warn ObjectStorageDisabled when disabled.
+func NewObjectStore(cfg Config, logger *slog.Logger) (objectstore.Store, error) {
+	if !cfg.ObjectStoreEnabled {
+		logger.Warn("object storage disabled: photo uploads unavailable", "event", "ObjectStorageDisabled")
+		return objectstore.Disabled{}, nil
+	}
+	store, err := objectstore.NewS3(cfg.ObjectStore)
+	if err != nil {
+		return nil, fmt.Errorf("wiring: object store: %w", err)
+	}
+	return store, nil
 }
 
 // secretFileOptional reads a secret from the file named by name; empty path

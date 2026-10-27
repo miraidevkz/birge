@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 
 	"birge/contracts/openapi"
 	assistantadapter "birge/internal/domains/assistant/adapter"
@@ -16,9 +18,18 @@ import (
 	assistantapi "birge/internal/domains/assistant/api"
 	assistantmodel "birge/internal/domains/assistant/model"
 	assistantservice "birge/internal/domains/assistant/service"
+	chatadapter "birge/internal/domains/chat/adapter"
+	chatapi "birge/internal/domains/chat/api"
+	"birge/internal/domains/chat/gateway"
+	chatmodel "birge/internal/domains/chat/model"
+	chatport "birge/internal/domains/chat/port"
+	chatservice "birge/internal/domains/chat/service"
 	circleadapter "birge/internal/domains/circle/adapter"
 	circleapi "birge/internal/domains/circle/api"
 	circleservice "birge/internal/domains/circle/service"
+	directoryadapter "birge/internal/domains/directory/adapter"
+	directoryapi "birge/internal/domains/directory/api"
+	directoryservice "birge/internal/domains/directory/service"
 	emergencyadapter "birge/internal/domains/emergency/adapter"
 	emergencyapi "birge/internal/domains/emergency/api"
 	emergencyservice "birge/internal/domains/emergency/service"
@@ -38,6 +49,10 @@ import (
 	safetyadapter "birge/internal/domains/safety/adapter"
 	safetyapi "birge/internal/domains/safety/api"
 	safetyservice "birge/internal/domains/safety/service"
+	sharingadapter "birge/internal/domains/sharing/adapter"
+	sharingapi "birge/internal/domains/sharing/api"
+	"birge/internal/domains/sharing/imageproc"
+	sharingservice "birge/internal/domains/sharing/service"
 	wellbeingadapter "birge/internal/domains/wellbeing/adapter"
 	wellbeingapi "birge/internal/domains/wellbeing/api"
 	wellbeingservice "birge/internal/domains/wellbeing/service"
@@ -47,6 +62,7 @@ import (
 	"birge/internal/platform/crypto"
 	"birge/internal/platform/httpapi"
 	"birge/internal/platform/meta"
+	"birge/internal/platform/objectstore"
 	"birge/internal/platform/ratelimit"
 	"birge/internal/platform/session"
 	"birge/internal/platform/staffauth"
@@ -67,6 +83,11 @@ type APIDeps struct {
 	Envelope *crypto.Envelope
 	Clock    clock.Clock
 	Logger   *slog.Logger
+	// NATS carries chat room fan-out (core, not JetStream). Nil disables
+	// live delivery (unit tests that do not exercise the WebSocket).
+	NATS *nats.Conn
+	// Objects is S3-compatible storage for sharing photos; nil uses Disabled.
+	Objects objectstore.Store
 	// KratosTransport reaches Kratos for the gateway; optional (tests).
 	KratosTransport http.RoundTripper
 }
@@ -212,8 +233,53 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 		return nil, fmt.Errorf("wiring: assistant retention: %w", err)
 	}
 
+	objects := d.Objects
+	if objects == nil {
+		objects, err = NewObjectStore(cfg, d.Logger)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var fanout chatport.Fanout = noopFanout{}
+	var bus chatport.Bus = noopFanout{}
+	if d.NATS != nil {
+		n := &chatadapter.NATSFanout{Conn: d.NATS, Logger: d.Logger}
+		fanout, bus = n, n
+	}
+	chatSvc := &chatservice.Service{
+		Store:   &chatadapter.PostgresStore{Pool: d.Pool},
+		Sealer:  d.Envelope,
+		Members: &ChatMembers{Members: members},
+		Blocks:  &EmergencyBlocks{Members: members},
+		Mentors: &ChatMentors{Members: members},
+		Crisis:  &ChatCrisis{Safety: safety},
+		Fanout:  fanout,
+		Clock:   d.Clock,
+		Logger:  d.Logger,
+	}
+	sharingSvc := &sharingservice.Service{
+		Store:   &sharingadapter.PostgresStore{Pool: d.Pool},
+		Members: &SharingMembers{Members: members},
+		Blocks:  &EmergencyBlocks{Members: members},
+		Objects: objects,
+		Images:  imageproc.Processor{},
+		Clock:   d.Clock,
+		Logger:  d.Logger,
+	}
+	directorySvc := &directoryservice.Service{
+		Store:   &directoryadapter.PostgresStore{Pool: d.Pool},
+		Members: &DirectoryMembers{Members: members},
+		Clock:   d.Clock,
+		Logger:  d.Logger,
+	}
+
 	api := http.NewServeMux()
-	mountAPI(api, cfg, members, privacy, notify, safety, wellbeing, emergency, assistantSvc, knowledge, circle, d.Logger)
+	mountAPI(api, cfg, members, privacy, notify, safety, wellbeing, emergency, assistantSvc, knowledge, circle, chatSvc, sharingSvc, directorySvc, d.Logger)
+
+	chatGW := &gateway.Gateway{
+		Chat: chatSvc, Auth: &ChatAuthenticator{Sessions: sessions, Members: members},
+		Bus: bus, Logger: d.Logger, Options: gateway.Options{OriginPatterns: cfg.ChatWSOrigins},
+	}
 
 	// Validation runs after the session (anonymous callers cannot probe the
 	// validator) and before the generated handlers, which do not enforce the
@@ -236,7 +302,10 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	// The split uses a ServeMux like the API mux, so both read the path the
 	// same way (cleaning, escaped slashes): a request cannot be routed to a
 	// staff handler while being authenticated as a member route.
+	// The chat WebSocket authenticates in its first frame (never the header),
+	// so it sits outside the session middleware and the OpenAPI validator.
 	byAudience := http.NewServeMux()
+	byAudience.Handle("GET /v1/chat/ws", chatGW)
 	byAudience.Handle("/v1/staff/", staff)
 	byAudience.Handle("/v1/", sessions.Wrap(validated))
 	v1 := ratelimit.Middleware(limiter, clientIP)(byAudience)
@@ -247,6 +316,18 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	root.Handle("GET /readyz", readiness(d.Logger, poolCheck(d.Pool)))
 	return logRequests(d.Logger, root, api), nil
+}
+
+// noopFanout disables live chat delivery when the API has no NATS connection
+// (tests that only exercise HTTP).
+type noopFanout struct{}
+
+// Publish implements chatport.Fanout and drops the notice.
+func (noopFanout) Publish(context.Context, chatmodel.Notice) error { return nil }
+
+// Subscribe implements chatport.Bus and never delivers notices.
+func (noopFanout) Subscribe(_ uuid.UUID, _ func(chatmodel.Notice)) (func(), error) {
+	return func() {}, nil
 }
 
 // newAssistantService builds the assistant service and its LLM (or leaves LLM
@@ -302,6 +383,7 @@ func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service
 	safety *safetyservice.Service, wellbeing *wellbeingservice.Service,
 	emergency *emergencyservice.Service, assistant *assistantservice.Service,
 	knowledge *knowledgeservice.Service, circle *circleservice.Service,
+	chat *chatservice.Service, sharing *sharingservice.Service, directory *directoryservice.Service,
 	logger *slog.Logger,
 ) {
 	const base = "/v1"
@@ -396,6 +478,33 @@ func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service
 		circleapi.StdHTTPServerOptions{
 			BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler,
 			Middlewares: []circleapi.MiddlewareFunc{toMember},
+		},
+	)
+	chatapi.HandlerWithOptions(
+		chatapi.NewStrictHandlerWithOptions(&chatapi.Server{Service: chat}, nil, chatapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
+		}),
+		chatapi.StdHTTPServerOptions{
+			BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler,
+			Middlewares: []chatapi.MiddlewareFunc{toMember},
+		},
+	)
+	sharingapi.HandlerWithOptions(
+		sharingapi.NewStrictHandlerWithOptions(&sharingapi.Server{Service: sharing}, nil, sharingapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
+		}),
+		sharingapi.StdHTTPServerOptions{
+			BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler,
+			Middlewares: []sharingapi.MiddlewareFunc{toMember},
+		},
+	)
+	directoryapi.HandlerWithOptions(
+		directoryapi.NewStrictHandlerWithOptions(&directoryapi.Server{Service: directory}, nil, directoryapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
+		}),
+		directoryapi.StdHTTPServerOptions{
+			BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler,
+			Middlewares: []directoryapi.MiddlewareFunc{toMember},
 		},
 	)
 }
@@ -526,9 +635,11 @@ func serve(ctx context.Context, logger *slog.Logger, addr string, handler http.H
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		MaxHeaderBytes:    16 << 10,
+		// WriteTimeout is 0 so long-lived WebSocket connections (chat) are not
+		// killed by the server; per-write deadlines live in the gateway.
+		WriteTimeout:   0,
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 16 << 10,
 	}
 	errCh := make(chan error, 1)
 	go func() {

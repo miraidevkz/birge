@@ -14,6 +14,7 @@ Shared infrastructure used by bounded contexts. Contexts must not import each ot
 | `httpapi` | RFC 9457 problem+json helpers shared by generated HTTP servers. | [0005](../../../docs/adr/0005-contracts-first.md) |
 | `httpserver` | Root mux (`/v1/`, liveness, readiness) and graceful shutdown. | — |
 | `meta` | Unauthenticated client config: min/latest app version, crisis phones. | [0018](../../../docs/adr/0018-client-compatibility.md) |
+| `objectstore` | S3-compatible put/get/delete and presigned PUT/GET (Garage and peers); Disabled when unset. | [0015](../../../docs/adr/0015-object-storage.md) |
 | `outbox` | Transactional outbox enqueue + NATS JetStream relay. | [0007](../../../docs/adr/0007-messaging-outbox-nats.md) |
 | `pgtemp` | Throwaway PostgreSQL clusters for tools/tests (dev tooling). | [0006](../../../docs/adr/0006-database-and-migrations.md) |
 | `session` | Bearer session validation against Kratos `whoami` with short LRU cache. | [0008](../../../docs/adr/0008-identity.md) |

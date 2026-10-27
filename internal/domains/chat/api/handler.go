@@ -80,6 +80,23 @@ func toAPIMessage(v model.MessageView) ChatMessage {
 	}
 }
 
+func toAPIMessageWithCrisis(res model.SendResult) ChatMessage {
+	msg := toAPIMessage(res.Message)
+	if res.Crisis == nil {
+		return msg
+	}
+	phones := make([]CrisisPhone, 0, len(res.Crisis.Phones))
+	for _, p := range res.Crisis.Phones {
+		phones = append(phones, CrisisPhone{Number: p.Number, Label: p.Label})
+	}
+	msg.CrisisPhones = &phones
+	if res.Crisis.EscalationID != nil {
+		id := *res.Crisis.EscalationID
+		msg.EscalationId = &id
+	}
+	return msg
+}
+
 // ListRooms returns the caller's rooms and/or the group rooms she may join.
 func (s *Server) ListRooms(ctx context.Context, req ListRoomsRequestObject) (ListRoomsResponseObject, error) {
 	kind := ""
@@ -176,9 +193,8 @@ func (s *Server) ListMessages(ctx context.Context, req ListMessagesRequestObject
 }
 
 // SendMessage stores a message; repeats of clientId return the stored one.
-// The response has no crisis field yet (contract gap): when the crisis
-// lexicon fires the message is returned as held and the crisis notice
-// reaches the author only over the WebSocket.
+// When the crisis lexicon fires, crisisPhones and escalationId are set for
+// the author only (the message stays held and invisible to others).
 func (s *Server) SendMessage(ctx context.Context, req SendMessageRequestObject) (SendMessageResponseObject, error) {
 	if req.Body == nil {
 		st, c, t := invalid()
@@ -194,7 +210,7 @@ func (s *Server) SendMessage(ctx context.Context, req SendMessageRequestObject) 
 		}
 		return nil, err
 	}
-	return SendMessage201JSONResponse(toAPIMessage(res.Message)), nil
+	return SendMessage201JSONResponse(toAPIMessageWithCrisis(res)), nil
 }
 
 // ReportMessage records the caller's report of a message she can see.

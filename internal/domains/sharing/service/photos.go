@@ -10,6 +10,7 @@ import (
 	"birge/internal/domains/sharing/model"
 	"birge/internal/domains/sharing/port"
 	"birge/internal/platform/auth"
+	"birge/internal/platform/objectstore"
 )
 
 // CreatePhotoUpload reserves a presigned PUT slot for one item photo
@@ -34,7 +35,7 @@ func (s *Service) CreatePhotoUpload(
 		return model.PhotoUploadSlot{}, err
 	}
 	if s.Objects == nil {
-		return model.PhotoUploadSlot{}, errors.New("sharing: object store not configured")
+		return model.PhotoUploadSlot{}, model.ErrStorageNotConfigured
 	}
 
 	now := s.now()
@@ -44,8 +45,11 @@ func (s *Service) CreatePhotoUpload(
 	}
 	key := model.UploadObjectKey(id)
 	expires := now.Add(model.PhotoUploadTTL)
-	url, err := s.Objects.PresignPut(ctx, key, contentType, model.PhotoUploadTTL)
+	url, err := s.Objects.PresignPut(ctx, key, contentType, int64(sizeBytes), model.PhotoUploadTTL)
 	if err != nil {
+		if errors.Is(err, objectstore.ErrNotConfigured) || errors.Is(err, model.ErrStorageNotConfigured) {
+			return model.PhotoUploadSlot{}, model.ErrStorageNotConfigured
+		}
 		return model.PhotoUploadSlot{}, fmt.Errorf("sharing: presign put: %w", err)
 	}
 

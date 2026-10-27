@@ -111,8 +111,6 @@ Gateway (`gateway.Options`): `QueueSize` 256, `AuthTimeout` 10 s, `IdleTimeout` 
 
 ## Open questions
 
-- **Crisis over HTTP:** `ChatMessage` (the `sendMessage` response) has no crisis field; over HTTP the author only sees `held`. The `crisis` frame exists only on the WebSocket.
-- **Escalation source `chat`:** used through the port (safety model `SourceChat` on main since 117e099); this branch predates it.
 - **Missing operations:** assigning mentors, closing reports and legal hold exist only as service methods.
 - **Muted vs banned:** a `mute_1h` member gets `banned` (no `muted` code in the contract).
 - **Partitioning:** ADR-0016 names a time-partitioned message table; this version uses one table with a retention index.

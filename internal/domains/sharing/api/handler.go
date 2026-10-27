@@ -38,6 +38,8 @@ func problemFor(err error) (status int, code, title string, ok bool) {
 		return http.StatusBadRequest, "invalid_request", "The request is invalid.", true
 	case errors.Is(err, model.ErrConflict):
 		return http.StatusConflict, "conflict", "The current state does not allow this.", true
+	case errors.Is(err, model.ErrStorageNotConfigured):
+		return http.StatusServiceUnavailable, "storage_not_configured", "Photo uploads are not available.", true
 	}
 	return 0, "", "", false
 }

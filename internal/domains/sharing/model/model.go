@@ -109,6 +109,9 @@ var (
 	ErrConflict = errors.New("sharing: conflict")
 	// ErrPhoto means the uploaded bytes could not be decoded as an image.
 	ErrPhoto = errors.New("sharing: photo")
+	// ErrStorageNotConfigured means object storage is unset; photo uploads
+	// answer 503 storage_not_configured.
+	ErrStorageNotConfigured = errors.New("sharing: storage not configured")
 )
 
 var codeRe = regexp.MustCompile(`^[a-z_]{2,40}$`)

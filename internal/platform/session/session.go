@@ -178,6 +178,18 @@ type whoamiResponse struct {
 	} `json:"identity"`
 }
 
+// Authenticate validates a raw session token (for the chat WebSocket's first
+// frame). It returns a principal with IdentityID set; the caller resolves
+// MemberID. Invalid tokens return an error that errors.Is can match with
+// ErrInvalidSession.
+func (m *Middleware) Authenticate(ctx context.Context, token string) (auth.Principal, error) {
+	return m.authenticate(ctx, token)
+}
+
+// ErrInvalidSession is returned by Authenticate when the token is unknown,
+// inactive or expired.
+var ErrInvalidSession = errInvalidSession
+
 func (m *Middleware) authenticate(ctx context.Context, token string) (auth.Principal, error) {
 	now := m.clock.Now()
 	if p, ok := m.cache.Get(token, now); ok {
