@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { Button } from './button';
+import { ChoiceGroup } from './choice-group';
 import { List } from './list';
 import { ListItem } from './list-item';
 import { Screen } from './screen';
@@ -63,6 +64,27 @@ describe('TextField', () => {
     await render(<TextField label="Mobile number" value="" error="Enter a valid mobile number." />);
     expect(screen.getByLabelText('Mobile number')).toBeTruthy();
     expect(screen.getByRole('alert')).toHaveTextContent('Enter a valid mobile number.');
+  });
+});
+
+describe('ChoiceGroup', () => {
+  it('marks the selected option and reports a change', async () => {
+    const onChange = jest.fn();
+    await render(
+      <ChoiceGroup
+        label="Language"
+        value="en"
+        onChange={onChange}
+        options={[
+          { value: 'kk', label: 'Kazakh' },
+          { value: 'en', label: 'English' },
+        ]}
+        testID="lang"
+      />,
+    );
+    expect(screen.getByRole('radio', { name: 'English' })).toBeSelected();
+    await fireEvent.press(screen.getByRole('radio', { name: 'Kazakh' }));
+    expect(onChange).toHaveBeenCalledWith('kk');
   });
 });
 

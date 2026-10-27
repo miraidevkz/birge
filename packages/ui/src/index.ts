@@ -6,6 +6,8 @@ export { Button } from './button';
 export type { ButtonProps, ButtonVariant } from './button';
 export { Card } from './card';
 export type { CardProps } from './card';
+export { ChoiceGroup } from './choice-group';
+export type { ChoiceGroupProps, ChoiceOption } from './choice-group';
 export { cn } from './cn';
 export { fonts } from './fonts';
 export { List } from './list';

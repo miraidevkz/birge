@@ -1,0 +1,31 @@
+{
+  "title": "Assistant",
+  "back": "Back",
+  "intro": "I am a bot and an AI assistant, not a doctor and not a psychologist.",
+  "placeholder": "Write your message",
+  "send": "Send",
+  "emptyTitle": "Ask a question",
+  "emptyDescription": "Answers are grounded in the reviewed knowledge base.",
+  "scope": {
+    "heading": "Topic",
+    "general": "General",
+    "rights": "My rights"
+  },
+  "crisis": {
+    "heading": "Please get help now",
+    "openHelp": "Open Help"
+  },
+  "degraded": {
+    "body": "The assistant is temporarily unavailable. You can contact a person on duty.",
+    "contact": "Contact a person"
+  },
+  "errors": {
+    "consent_required": "To use the assistant, grant the cross-border AI consent in Privacy.",
+    "daily_limit": "Daily message limit reached. Try again tomorrow.",
+    "unknown": "Could not send. Try again."
+  },
+  "openPrivacy": "Open Privacy",
+  "remaining": "{{count}} messages left today",
+  "you": "You",
+  "assistant": "Assistant"
+}

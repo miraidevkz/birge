@@ -1,4 +1,28 @@
 {
   "title": "Profile",
-  "signOut": "Sign out"
+  "signOut": "Sign out",
+  "displayName": {
+    "label": "Display name",
+    "hint": "Shown to other members.",
+    "save": "Save name"
+  },
+  "language": {
+    "heading": "Language",
+    "kk": "Kazakh",
+    "ru": "Russian",
+    "en": "English"
+  },
+  "verification": {
+    "heading": "Verification",
+    "new": "Not verified",
+    "pending": "Verification pending",
+    "verified": "Verified"
+  },
+  "links": {
+    "privacy": "Privacy and data",
+    "knowledge": "Knowledge base",
+    "assistant": "AI assistant"
+  },
+  "saveFailed": "Could not save. Try again.",
+  "saved": "Saved."
 }

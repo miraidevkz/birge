@@ -1,0 +1,28 @@
+{
+  "title": "Knowledge",
+  "kinds": {
+    "heading": "Section",
+    "rights": "My rights",
+    "selfhelp": "Self-help"
+  },
+  "topics": {
+    "heading": "Topics",
+    "emptyTitle": "No topics",
+    "emptyDescription": "Published topics will appear here.",
+    "back": "All topics"
+  },
+  "articles": {
+    "heading": "Articles",
+    "emptyTitle": "No articles",
+    "emptyDescription": "Published articles will appear here.",
+    "rechecking": "Being rechecked"
+  },
+  "article": {
+    "title": "Article",
+    "source": "Open source",
+    "reviewed": "Reviewed {{date}}",
+    "rechecking": "This article is being rechecked and may be outdated.",
+    "back": "Back",
+    "notFound": "Article not found."
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "title": "Privacy",
+  "back": "Back",
+  "consents": {
+    "heading": "Consents",
+    "emptyTitle": "No consents",
+    "emptyDescription": "Consent options will appear here.",
+    "granted": "Granted",
+    "revoked": "Not granted",
+    "grant": "Grant",
+    "revoke": "Withdraw",
+    "types": {
+      "data_processing": "Processing of personal data",
+      "ai_crossborder": "Sending anonymized text to the AI abroad",
+      "research": "Use of anonymized data for research"
+    }
+  },
+  "deletion": {
+    "heading": "Delete my data",
+    "description": "Request deletion of all your data. It will be removed within 24 hours.",
+    "action": "Delete my data",
+    "sheetTitle": "Confirm deletion",
+    "sheetBody": "This cannot be undone. Your account and all data will be deleted within 24 hours.",
+    "confirm": "Yes, delete everything",
+    "failed": "Could not schedule deletion. Try again."
+  }
+}

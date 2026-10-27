@@ -38,8 +38,8 @@ All configuration comes from the environment at build time ([`app.config.ts`](ap
 ## Structure
 
 ```
-src/app/            routes only (Expo Router): _layout, (tabs)/{index,circle,help,profile}, sign-in, sos
-src/screens/        screen bodies: sign-in, home, help (crisis), placeholder
+src/app/            routes only (Expo Router): _layout, (tabs)/{index,circle,help,profile}, sign-in, sos, privacy, knowledge, knowledge-article/[articleId], assistant
+src/screens/        screen bodies: sign-in, home, help (crisis), profile, privacy, knowledge, knowledge-article, assistant, placeholder
 src/lib/            app services: config, session, api, storage (.web), crisis-phones, help-outbox, query
 public/             web shell: index.html (links the manifest), manifest.webmanifest, icon
 scripts/            check-web-build.mjs

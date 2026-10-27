@@ -62,6 +62,10 @@ export default function RootLayout() {
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="sign-in" />
+              <Stack.Screen name="privacy" />
+              <Stack.Screen name="knowledge" />
+              <Stack.Screen name="knowledge-article/[articleId]" />
+              <Stack.Screen name="assistant" />
               {/* Crisis screen: no transition animation (ADR-0014). */}
               <Stack.Screen name="sos" options={{ animation: 'none', presentation: 'fullScreenModal' }} />
             </Stack>
