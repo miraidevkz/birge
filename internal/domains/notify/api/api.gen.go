@@ -102,6 +102,9 @@ type Problem struct {
 // EscalationId defines model for EscalationId.
 type EscalationId = openapi_types.UUID
 
+// SosId defines model for SosId.
+type SosId = openapi_types.UUID
+
 // ListInboxParams defines parameters for ListInbox.
 type ListInboxParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:emergency.SosShared.v1",
+  "title": "emergency.SosShared",
+  "description": "An SOS was shared to the district feed; verified members of the district get a neutral push.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sos_id",
+    "district_id"
+  ],
+  "properties": {
+    "sos_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "district_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

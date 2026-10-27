@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:emergency.SosResponseAccepted.v1",
+  "title": "emergency.SosResponseAccepted",
+  "description": "The author accepted a responder; chat opens a private room for the two members.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sos_id",
+    "author_id",
+    "responder_id"
+  ],
+  "properties": {
+    "sos_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "author_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "responder_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

@@ -314,6 +314,9 @@ type EscalationId = openapi_types.UUID
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = openapi_types.UUID
 
+// SosId defines model for SosId.
+type SosId = openapi_types.UUID
+
 // RequestHumanHelpJSONBody defines parameters for RequestHumanHelp.
 type RequestHumanHelpJSONBody struct {
 	// Source Where the member pressed the button.

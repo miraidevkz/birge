@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:emergency.SosClosed.v1",
+  "title": "emergency.SosClosed",
+  "description": "An SOS was closed by its author or automatically.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sos_id"
+  ],
+  "properties": {
+    "sos_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

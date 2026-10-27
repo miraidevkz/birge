@@ -97,6 +97,9 @@ type AppVersion = string
 // EscalationId defines model for EscalationId.
 type EscalationId = openapi_types.UUID
 
+// SosId defines model for SosId.
+type SosId = openapi_types.UUID
+
 // GetClientConfigParams defines parameters for GetClientConfig.
 type GetClientConfigParams struct {
 	XAppVersion  AppVersion                        `json:"X-App-Version"`

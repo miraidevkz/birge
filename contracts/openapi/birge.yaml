@@ -23,6 +23,8 @@ tags:
     description: Crisis help requests (members) and the escalation queue and duty roster (staff).
   - name: wellbeing
     description: Weekly check-ins, history and audio practices.
+  - name: emergency
+    description: SOS requests, the district SOS feed and the emergency plan (child card, trusted contacts).
 security:
   - memberSession: []
 paths:
@@ -599,6 +601,254 @@ paths:
                 maxItems: 50
                 items: {$ref: '#/components/schemas/Practice'}
         default: {$ref: '#/components/responses/Problem'}
+
+  /me/sos:
+    get:
+      operationId: listMySos
+      tags: [emergency]
+      summary: My open and recent SOS requests.
+      responses:
+        '200':
+          description: Newest first, at most the last 20.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 20
+                items: {$ref: '#/components/schemas/SosRequest'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: raiseSos
+      tags: [emergency]
+      summary: Raise an SOS (not "I feel very bad", which is requestHumanHelp with source sos).
+      description: |
+        Goes at once to the moderators and to the member's confirmed trusted contacts
+        (external contacts by SMS without content). Never to the district feed unless
+        the member shares it. At most 3 per hour.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SosInput'}
+      responses:
+        '201':
+          description: Raised.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SosRequest'}
+        '429': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/sos/{sosId}/share:
+    parameters:
+      - $ref: '#/components/parameters/SosId'
+    post:
+      operationId: shareSosToDistrict
+      tags: [emergency]
+      summary: Put my SOS into my district feed (verified members only; never for childcare).
+      responses:
+        '200':
+          description: Shared.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SosRequest'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/sos/{sosId}/close:
+    parameters:
+      - $ref: '#/components/parameters/SosId'
+    post:
+      operationId: closeSos
+      tags: [emergency]
+      responses:
+        '200':
+          description: Closed (idempotent).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SosRequest'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/sos/{sosId}/responses:
+    parameters:
+      - $ref: '#/components/parameters/SosId'
+    get:
+      operationId: listSosResponses
+      tags: [emergency]
+      summary: Members who pressed "I can help" on my SOS.
+      responses:
+        '200':
+          description: Oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items: {$ref: '#/components/schemas/SosResponse'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/sos/{sosId}/responses/{responseId}/accept:
+    parameters:
+      - $ref: '#/components/parameters/SosId'
+      - name: responseId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: acceptSosResponse
+      tags: [emergency]
+      summary: Open a private chat with this responder. Contacts are never revealed.
+      responses:
+        '202': {description: Accepted; the chat appears in the chat list.}
+        default: {$ref: '#/components/responses/Problem'}
+  /sos/feed:
+    get:
+      operationId: getSosFeed
+      tags: [emergency]
+      summary: Open SOS requests shared to my district (verified members; blocked members excluded both ways).
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema: {type: string, maxLength: 128}
+      responses:
+        '200':
+          description: Newest first.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SosFeedPage'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /sos/{sosId}/respond:
+    parameters:
+      - $ref: '#/components/parameters/SosId'
+    post:
+      operationId: respondToSos
+      tags: [emergency]
+      summary: '"I can help" on an SOS in my district feed (idempotent).'
+      responses:
+        '204': {description: Recorded; the author is notified.}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/emergency-plan:
+    get:
+      operationId: getEmergencyPlan
+      tags: [emergency]
+      responses:
+        '200':
+          description: My plan.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EmergencyPlan'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/emergency-plan/child-card:
+    put:
+      operationId: setChildCard
+      tags: [emergency]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  maxLength: 2000
+                  description: Free text from the template (needs, medicines, how to calm, fears). Stored encrypted.
+      responses:
+        '204': {description: Saved.}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/trusted-contacts:
+    post:
+      operationId: addTrustedContact
+      tags: [emergency]
+      summary: Add an external contact, or invite a member I met in person (she must accept).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TrustedContactInput'}
+      responses:
+        '201':
+          description: Added (external) or invited (member).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TrustedContact'}
+        '409': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/trusted-contacts/{contactId}:
+    parameters:
+      - name: contactId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    delete:
+      operationId: removeTrustedContact
+      tags: [emergency]
+      responses:
+        '204': {description: Removed (idempotent).}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/trusted-invitations/{contactId}/accept:
+    parameters:
+      - name: contactId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: acceptTrustedInvitation
+      tags: [emergency]
+      summary: Accept being another member's trusted contact.
+      responses:
+        '204': {description: Accepted.}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/emergency-plan/send:
+    post:
+      operationId: sendEmergencyPlan
+      tags: [emergency]
+      summary: Send the child card to my confirmed trusted contacts.
+      description: |
+        Members see it in the app (getSharedPlan). External contacts get an SMS without
+        content and a one-time link valid for 24 hours to a page served from the deployment.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirm]
+              properties:
+                confirm: {type: string, enum: [SEND]}
+      responses:
+        '202': {description: Sending.}
+        default: {$ref: '#/components/responses/Problem'}
+  /trusted/plans/{ownerId}:
+    parameters:
+      - name: ownerId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getSharedPlan
+      tags: [emergency]
+      summary: The child card a member sent me, while I am her confirmed trusted contact. Audited.
+      responses:
+        '200':
+          description: Shared plan.
+          headers:
+            Cache-Control:
+              schema: {type: string, enum: [no-store]}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SharedPlan'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     memberSession:
@@ -610,6 +860,11 @@ components:
       openIdConnectUrl: /.well-known/openid-configuration
       description: Staff sign-in through any OIDC provider (ADR-0008).
   parameters:
+    SosId:
+      name: sosId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     EscalationId:
       name: escalationId
       in: path
@@ -1030,3 +1285,106 @@ components:
         titleKey: {type: string, maxLength: 80}
         durationSeconds: {type: integer, minimum: 1, maximum: 3600}
         url: {type: string, format: uri, maxLength: 2048, description: In-jurisdiction object storage.}
+
+    SosType:
+      type: string
+      enum: [childcare, item_or_medicine, other]
+    SosInput:
+      type: object
+      additionalProperties: false
+      required: [type, text]
+      properties:
+        type: {$ref: '#/components/schemas/SosType'}
+        text: {type: string, minLength: 1, maxLength: 300}
+    SosRequest:
+      type: object
+      additionalProperties: false
+      required: [id, type, text, status, sharedToDistrict, createdAt, responseCount]
+      properties:
+        id: {type: string, format: uuid}
+        type: {$ref: '#/components/schemas/SosType'}
+        text: {type: string, maxLength: 300}
+        status:
+          type: string
+          enum: [open, closed]
+        sharedToDistrict: {type: boolean}
+        createdAt: {type: string, format: date-time}
+        closesAt: {type: string, format: date-time, description: Automatic closing time.}
+        responseCount: {type: integer, minimum: 0}
+    SosResponse:
+      type: object
+      additionalProperties: false
+      required: [id, memberId, displayName, metInPerson, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        memberId: {type: string, format: uuid}
+        displayName: {type: string, maxLength: 40}
+        metInPerson: {type: boolean, description: True when we confirmed we met in person (tea).}
+        createdAt: {type: string, format: date-time}
+    SosFeedItem:
+      type: object
+      additionalProperties: false
+      required: [id, type, text, displayName, createdAt, respondedByMe]
+      properties:
+        id: {type: string, format: uuid}
+        type:
+          type: string
+          enum: [item_or_medicine, other]
+        text: {type: string, maxLength: 300}
+        displayName: {type: string, maxLength: 40, description: First name only; never address or location.}
+        createdAt: {type: string, format: date-time}
+        respondedByMe: {type: boolean}
+    SosFeedPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: {$ref: '#/components/schemas/SosFeedItem'}
+        nextCursor: {type: string, maxLength: 128}
+    EmergencyPlan:
+      type: object
+      additionalProperties: false
+      required: [childCard, contacts]
+      properties:
+        childCard: {type: string, maxLength: 2000}
+        contacts:
+          type: array
+          maxItems: 3
+          items: {$ref: '#/components/schemas/TrustedContact'}
+        lastSentAt: {type: string, format: date-time}
+    TrustedContactInput:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [member, external]
+        memberId: {type: string, format: uuid, description: Required for kind member; must be a member I met in person.}
+        name: {type: string, minLength: 1, maxLength: 60, description: Required for kind external.}
+        phone: {type: string, pattern: '^\+[1-9][0-9]{7,14}$', description: Required for kind external.}
+    TrustedContact:
+      type: object
+      additionalProperties: false
+      required: [id, kind, displayName, status]
+      properties:
+        id: {type: string, format: uuid}
+        kind:
+          type: string
+          enum: [member, external]
+        displayName: {type: string, maxLength: 60}
+        phoneMasked: {type: string, maxLength: 20, description: "For external contacts, e.g. +7 *** *** 12 34; the full number is never returned."}
+        status:
+          type: string
+          enum: [invited, confirmed]
+    SharedPlan:
+      type: object
+      additionalProperties: false
+      required: [ownerDisplayName, childCard, sentAt]
+      properties:
+        ownerDisplayName: {type: string, maxLength: 40}
+        childCard: {type: string, maxLength: 2000}
+        sentAt: {type: string, format: date-time}

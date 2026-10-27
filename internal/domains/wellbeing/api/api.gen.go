@@ -202,6 +202,9 @@ type EscalationId = openapi_types.UUID
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = openapi_types.UUID
 
+// SosId defines model for SosId.
+type SosId = openapi_types.UUID
+
 // SubmitCheckinParams defines parameters for SubmitCheckin.
 type SubmitCheckinParams struct {
 	// IdempotencyKey Client-generated UUIDv7; repeated requests with the same key have one effect.

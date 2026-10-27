@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:emergency.PlanSent.v1",
+  "title": "emergency.PlanSent",
+  "description": "The emergency plan was sent to the confirmed trusted contacts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "member_id"
+  ],
+  "properties": {
+    "member_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

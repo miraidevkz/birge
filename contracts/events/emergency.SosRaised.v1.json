@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:emergency.SosRaised.v1",
+  "title": "emergency.SosRaised",
+  "description": "An SOS was raised; moderators and trusted contacts are alerted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sos_id",
+    "member_id",
+    "type"
+  ],
+  "properties": {
+    "sos_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "member_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "childcare",
+        "item_or_medicine",
+        "other"
+      ]
+    }
+  }
+}
