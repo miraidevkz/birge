@@ -56,3 +56,17 @@ CREATE TABLE platform.audit_log (
 
 CREATE INDEX audit_log_object_idx ON platform.audit_log (object_type, object_id, occurred_at);
 CREATE INDEX audit_log_actor_idx ON platform.audit_log (actor_id, occurred_at);
+
+-- Per-member data keys (ADR-0009): a Tink AEAD keyset per member, wrapped by the
+-- key-encryption key named in kek_id. Crypto-shredding clears wrapped_dek and sets
+-- destroyed_at; the row stays as a tombstone so the member's key is never
+-- re-created and later writes are refused. Rows are never deleted.
+CREATE TABLE platform.member_keys (
+    member_id    uuid        PRIMARY KEY,
+    wrapped_dek  bytea       NOT NULL,
+    kek_id       text        NOT NULL,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    destroyed_at timestamptz,
+    CONSTRAINT member_keys_tombstone_check
+        CHECK ((destroyed_at IS NULL) = (octet_length(wrapped_dek) > 0))
+);

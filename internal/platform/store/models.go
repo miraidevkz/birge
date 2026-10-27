@@ -21,6 +21,14 @@ type PlatformAuditLog struct {
 	Reason     *string
 }
 
+type PlatformMemberKey struct {
+	MemberID    uuid.UUID
+	WrappedDek  []byte
+	KekID       string
+	CreatedAt   time.Time
+	DestroyedAt *time.Time
+}
+
 type PlatformOutbox struct {
 	ID           uuid.UUID
 	EventType    string

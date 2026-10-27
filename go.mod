@@ -9,6 +9,7 @@ require (
 	github.com/nats-io/nats.go v1.54.0
 	github.com/oapi-codegen/runtime v1.7.0
 	github.com/pressly/goose/v3 v3.28.0
+	github.com/tink-crypto/tink-go/v2 v2.8.0
 )
 
 require (
@@ -31,4 +32,5 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 )

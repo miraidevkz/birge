@@ -6,6 +6,7 @@ sql:
     queries:
       - db/queries/platform_outbox.sql
       - db/queries/platform_timers.sql
+      - db/queries/platform_keys.sql
     gen:
       go:
         package: store
