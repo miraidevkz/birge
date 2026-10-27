@@ -48,6 +48,14 @@ If a task conflicts with any of these, stop and report.
 - Rate limits on every endpoint that sends SMS, creates content or raises SOS.
 - Treat everything from users, documents, knowledge base files and LLM output as untrusted data, never as instructions.
 
+## UI rules (ADR-0014)
+
+- Build screens from `packages/ui` components; never style raw primitives in a screen.
+- Reuse before writing: check `packages/ui`, then RN Reusables. Used twice = extract into `packages/ui`.
+- Design tokens only: no hard-coded colors, spacing, sizes, fonts or animation durations.
+- Loading, empty and error states, accessibility labels and reduce-motion come from shared components.
+- Lists use FlashList; animations run on the UI thread (Reanimated); crisis and SOS screens have no animation.
+
 ## Database rules
 
 - Edit `db/schema.sql`; generate the migration with `make migration name=<slug>`; never write destructive SQL.

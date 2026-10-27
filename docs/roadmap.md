@@ -7,9 +7,12 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [x] Threat model (`docs/threat-model.md`)
 - [ ] ASVS checklist
 - [x] `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`
-- [ ] Go module and `cmd/birge` skeleton (`api`, `worker`, `migrate`), `internal/platform` (config, db, outbox, timers, crypto interface, telemetry)
-- [ ] `contracts/`: OpenAPI 3.1 skeleton, event envelope schema, codegen (Go server, TS client)
-- [ ] `db/schema.sql` for platform tables (outbox, timers, audit), `make migration`, `make db-check` with the destructive-operation gate
+- [x] Go module and `cmd/birge` skeleton with health endpoints and graceful shutdown
+- [ ] `internal/platform`: db, outbox, timers, crypto interface, telemetry
+- [x] `contracts/`: OpenAPI 3.1 skeleton, event envelope schema
+- [ ] Codegen (Go server, TS client)
+- [x] `db/schema.sql` for platform tables (outbox, timers, audit)
+- [ ] `make migration`, `make db-check` with the destructive-operation gate
 - [ ] `depguard` boundaries, golangci-lint config, `make check`, CI stages per `docs/architecture.md`
 - [ ] `deploy/compose` (dev) and `deploy/helm` skeleton (k3s)
 - [ ] Synthetic data generator and demo mode plan

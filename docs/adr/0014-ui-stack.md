@@ -13,6 +13,13 @@ Users are tired, stressed parents, often on low-end Android phones and slow netw
 - Accessibility: WCAG 2.2 AA contrast, system font scaling, VoiceOver/TalkBack labels, one primary action per screen, SOS reachable from every screen.
 - Design source: Penpot.
 
+## Reuse rule
+- Screens are composed from `packages/ui` components only; a screen never styles raw primitives itself.
+- A pattern used twice becomes a shared component; before writing a component, check `packages/ui` and RN Reusables first.
+- Styling only through design tokens (NativeWind theme): no hard-coded colors, sizes, spacing, fonts or durations.
+- Shared components own loading, empty and error states, accessibility labels and reduce-motion behaviour, so every screen gets them for free.
+- Performance defaults live in the shared components: FlashList for lists, memoized rows, Reanimated on the UI thread, sized and cached images.
+
 ## Alternatives
 - Tamagui: faster runtime styling, harder to configure, more errors in agent-written code.
 - Flutter: rejected; non-native look erodes trust.
