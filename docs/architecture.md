@@ -2,6 +2,8 @@
 
 Status: draft, wave 0. Decisions are recorded in [`adr/`](adr/); requirements are in [`requirements/mvp.md`](requirements/mvp.md).
 
+For people who run or maintain Birge without living in the code: [overview.md](overview.md) (who uses what, component diagram), [scenarios.md](scenarios.md) (end-to-end flows), [handbook/staff.md](handbook/staff.md) (staff admin). Remaining work: [roadmap.md](roadmap.md).
+
 ## Principles
 
 1. **Data first.** Losing or corrupting data is worse than downtime. Every write path is designed to survive service degradation.
@@ -55,6 +57,8 @@ Rules:
 - Inside a context: `model` (types, invariants) → `service` (use cases) → ports (interfaces) → adapters (Postgres, NATS, providers). Keep it light: no repository-per-entity ceremony.
 
 ### Critical flows
+
+Sequence diagrams and endpoint names for these flows: [scenarios.md](scenarios.md).
 
 | Flow | Path | Guarantee |
 |---|---|---|

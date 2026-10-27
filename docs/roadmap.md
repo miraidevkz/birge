@@ -96,7 +96,7 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [x] Staff admin app: escalations, moderation, duty roster, knowledge base (web, OIDC PKCE); role matrix and the remaining staff screens later
 
 ### Documentation for people
-- [ ] Overview, end-to-end scenarios with diagrams, moderator handbook
+- [x] Overview, end-to-end scenarios with diagrams, moderator handbook (`docs/overview.md`, `docs/scenarios.md`, `docs/handbook/staff.md`)
 
 ## After the MVP
 

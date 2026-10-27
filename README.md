@@ -2,7 +2,7 @@
 
 **Birge** («Бірге», Kazakh for "together") is an open-source platform of peer support and mental-health help for mothers and other caregivers of children with special educational needs. It starts in Kazakhstan, in Kazakh and Russian.
 
-> Status: pre-alpha. Architecture and contracts are being written; there is no runnable code yet.
+> Status: pre-alpha. Core backend domains and the staff admin exist; see [docs/overview.md](docs/overview.md) and [docs/roadmap.md](docs/roadmap.md) for what is still open.
 
 ## The problem
 
@@ -25,6 +25,9 @@ Caring for a child with special needs often leaves the parent exhausted and isol
 
 ## Documentation
 
+- [Overview](docs/overview.md) — who uses Birge, features, non-negotiables, component diagram
+- [Scenarios](docs/scenarios.md) — end-to-end flows with sequence diagrams (sign-in, check-in, SOS, assistant, moderation, deletion, knowledge)
+- [Staff handbook](docs/handbook/staff.md) — duty, escalations, moderation and knowledge review in `apps/admin`
 - [Architecture](docs/architecture.md)
 - [Development guide](docs/development.md)
 - [Architecture decision records](docs/adr/)
