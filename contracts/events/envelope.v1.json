@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://birge.dev/contracts/events/envelope.v1.json",
+  "$id": "urn:birge:events:envelope.v1",
   "title": "Event envelope",
   "description": "Common envelope for all domain events. Events carry IDs and facts, never message text or decrypted personal data (ADR-0007).",
   "type": "object",

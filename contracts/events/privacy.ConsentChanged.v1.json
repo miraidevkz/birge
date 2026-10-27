@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:privacy.ConsentChanged.v1",
+  "title": "privacy.ConsentChanged",
+  "description": "A consent was granted or revoked.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "member_id",
+    "type",
+    "version",
+    "granted"
+  ],
+  "properties": {
+    "member_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "data_processing",
+        "ai_crossborder",
+        "research"
+      ]
+    },
+    "version": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "granted": {
+      "type": "boolean"
+    }
+  }
+}

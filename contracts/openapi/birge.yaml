@@ -13,6 +13,12 @@ servers:
 tags:
   - name: meta
     description: Client configuration and compatibility.
+  - name: membership
+    description: The member's profile, children, verification, blocks and reference data.
+  - name: privacy
+    description: Consents and account deletion.
+  - name: notify
+    description: In-app inbox and push devices.
 security:
   - memberSession: []
 paths:
@@ -38,6 +44,275 @@ paths:
                 $ref: '#/components/schemas/ClientConfig'
         default:
           $ref: '#/components/responses/Problem'
+
+  /me:
+    get:
+      operationId: getMe
+      tags: [membership]
+      summary: The signed-in member. Created on first call after sign-up.
+      responses:
+        '200':
+          description: Member profile.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Member'}
+        default: {$ref: '#/components/responses/Problem'}
+    patch:
+      operationId: updateMe
+      tags: [membership]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MemberUpdate'}
+      responses:
+        '200':
+          description: Updated profile.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Member'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/children:
+    post:
+      operationId: addChild
+      tags: [membership]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChildInput'}
+      responses:
+        '201':
+          description: Child added.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Child'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/children/{childId}:
+    parameters:
+      - name: childId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    put:
+      operationId: updateChild
+      tags: [membership]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChildInput'}
+      responses:
+        '200':
+          description: Child updated.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Child'}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: deleteChild
+      tags: [membership]
+      responses:
+        '204': {description: Child removed.}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/verification-requests:
+    post:
+      operationId: requestVerification
+      tags: [membership]
+      summary: Ask a moderator for a verification call.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Request queued (or already pending).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Member'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/blocks:
+    get:
+      operationId: listBlocks
+      tags: [membership]
+      responses:
+        '200':
+          description: Members blocked by me (ADR-0019).
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1000
+                items: {$ref: '#/components/schemas/BlockedMember'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/blocks/{memberId}:
+    parameters:
+      - name: memberId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    put:
+      operationId: blockMember
+      tags: [membership]
+      summary: Block a member (mutual invisibility; the other member is not told).
+      responses:
+        '204': {description: Blocked (idempotent).}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: unblockMember
+      tags: [membership]
+      responses:
+        '204': {description: Unblocked (idempotent).}
+        default: {$ref: '#/components/responses/Problem'}
+  /reference/districts:
+    get:
+      operationId: listDistricts
+      tags: [membership]
+      summary: Cities and districts of this deployment.
+      security: []
+      responses:
+        '200':
+          description: Cities with their districts.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 200
+                items: {$ref: '#/components/schemas/City'}
+        default: {$ref: '#/components/responses/Problem'}
+  /reference/needs:
+    get:
+      operationId: listNeeds
+      tags: [membership]
+      summary: Special-needs categories (localized labels come from locale files by code).
+      security: []
+      responses:
+        '200':
+          description: Needs codes.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items: {type: string, pattern: '^[a-z_]{2,40}$'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/consents:
+    get:
+      operationId: listConsents
+      tags: [privacy]
+      responses:
+        '200':
+          description: Current state of every consent type.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 10
+                items: {$ref: '#/components/schemas/Consent'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: setConsent
+      tags: [privacy]
+      summary: Grant or revoke a consent for a specific text version.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConsentChange'}
+      responses:
+        '200':
+          description: New state of that consent.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Consent'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/deletion-request:
+    post:
+      operationId: requestDeletion
+      tags: [privacy]
+      summary: Delete all my data within 24 hours.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [confirm]
+              properties:
+                confirm:
+                  type: string
+                  enum: [DELETE]
+                  description: Explicit confirmation typed or tapped by the member.
+      responses:
+        '202':
+          description: Deletion scheduled.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeletionRequest'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/inbox:
+    get:
+      operationId: listInbox
+      tags: [notify]
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema: {type: string, maxLength: 128}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 50, default: 20}
+      responses:
+        '200':
+          description: Newest first.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InboxPage'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/inbox/{notificationId}/read:
+    parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: markRead
+      tags: [notify]
+      summary: Mark as read; for critical notifications this also acknowledges delivery and stops the SMS fallback.
+      responses:
+        '204': {description: Marked (idempotent).}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/devices/{deviceId}:
+    parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    put:
+      operationId: registerDevice
+      tags: [notify]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeviceRegistration'}
+      responses:
+        '204': {description: Registered or updated.}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: unregisterDevice
+      tags: [notify]
+      responses:
+        '204': {description: Removed (idempotent).}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     memberSession:
@@ -140,3 +415,155 @@ components:
           type: string
           description: Localized label, e.g. "Emergency services".
           maxLength: 120
+
+    Member:
+      type: object
+      additionalProperties: false
+      required: [id, displayName, lang, verification, roles, children]
+      properties:
+        id: {type: string, format: uuid}
+        displayName: {type: string, minLength: 1, maxLength: 40}
+        lang: {$ref: '#/components/schemas/Lang'}
+        cityId: {type: string, format: uuid}
+        districtId: {type: string, format: uuid}
+        verification:
+          type: string
+          enum: [new, pending, verified]
+        roles:
+          type: array
+          maxItems: 6
+          items:
+            type: string
+            enum: [mom, mentor, psychologist, lawyer, moderator, admin]
+        children:
+          type: array
+          maxItems: 10
+          items: {$ref: '#/components/schemas/Child'}
+    MemberUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        displayName: {type: string, minLength: 1, maxLength: 40}
+        lang: {$ref: '#/components/schemas/Lang'}
+        districtId:
+          type: string
+          format: uuid
+          description: The city is derived from the district.
+    Lang:
+      type: string
+      enum: [kk, ru]
+    Child:
+      type: object
+      additionalProperties: false
+      required: [id, birthYear, needs]
+      properties:
+        id: {type: string, format: uuid}
+        birthYear: {type: integer, minimum: 1990, maximum: 2100}
+        needs:
+          type: array
+          maxItems: 10
+          items: {type: string, pattern: '^[a-z_]{2,40}$'}
+          description: Codes from /reference/needs; empty means "prefer not to say".
+    ChildInput:
+      type: object
+      additionalProperties: false
+      required: [birthYear, needs]
+      properties:
+        birthYear: {type: integer, minimum: 1990, maximum: 2100}
+        needs:
+          type: array
+          maxItems: 10
+          items: {type: string, pattern: '^[a-z_]{2,40}$'}
+    BlockedMember:
+      type: object
+      additionalProperties: false
+      required: [memberId, displayName, since]
+      properties:
+        memberId: {type: string, format: uuid}
+        displayName: {type: string, maxLength: 40}
+        since: {type: string, format: date-time}
+    City:
+      type: object
+      additionalProperties: false
+      required: [id, code, districts]
+      properties:
+        id: {type: string, format: uuid}
+        code: {type: string, pattern: '^[a-z_]{2,40}$', description: Locale key for the name.}
+        districts:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, code]
+            properties:
+              id: {type: string, format: uuid}
+              code: {type: string, pattern: '^[a-z_]{2,40}$'}
+    ConsentType:
+      type: string
+      enum: [data_processing, ai_crossborder, research]
+    Consent:
+      type: object
+      additionalProperties: false
+      required: [type, granted, currentVersion]
+      properties:
+        type: {$ref: '#/components/schemas/ConsentType'}
+        granted: {type: boolean, description: True only when granted for the current text version.}
+        grantedVersion: {type: string, maxLength: 32}
+        currentVersion: {type: string, maxLength: 32}
+        changedAt: {type: string, format: date-time}
+    ConsentChange:
+      type: object
+      additionalProperties: false
+      required: [type, version, granted]
+      properties:
+        type: {$ref: '#/components/schemas/ConsentType'}
+        version: {type: string, maxLength: 32, description: Version of the text the member saw.}
+        granted: {type: boolean}
+    DeletionRequest:
+      type: object
+      additionalProperties: false
+      required: [requestedAt, dueAt]
+      properties:
+        requestedAt: {type: string, format: date-time}
+        dueAt: {type: string, format: date-time}
+    InboxPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: {$ref: '#/components/schemas/Notification'}
+        nextCursor: {type: string, maxLength: 128}
+    Notification:
+      type: object
+      additionalProperties: false
+      required: [id, template, params, class, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        template:
+          type: string
+          pattern: '^[a-z]+\.[a-z_]+$'
+          description: Locale key, e.g. emergency.sos_response. Text is rendered by the client.
+        params:
+          type: object
+          maxProperties: 10
+          additionalProperties: {type: string, maxLength: 120}
+          description: IDs and short non-sensitive values only.
+        class:
+          type: string
+          enum: [critical, normal, reminder]
+        createdAt: {type: string, format: date-time}
+        readAt: {type: string, format: date-time}
+    DeviceRegistration:
+      type: object
+      additionalProperties: false
+      required: [platform, pushToken]
+      properties:
+        platform:
+          type: string
+          enum: [ios, android]
+        pushToken: {type: string, minLength: 8, maxLength: 4096}

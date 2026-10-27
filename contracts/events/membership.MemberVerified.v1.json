@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:membership.MemberVerified.v1",
+  "title": "membership.MemberVerified",
+  "description": "A moderator verified a member.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "member_id",
+    "verified_by"
+  ],
+  "properties": {
+    "member_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "verified_by": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

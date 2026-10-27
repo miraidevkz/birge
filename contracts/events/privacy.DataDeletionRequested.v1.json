@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:privacy.DataDeletionRequested.v1",
+  "title": "privacy.DataDeletionRequested",
+  "description": "Every context deletes the member's data before due_at (ADR-0009: the member key is destroyed last).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "member_id",
+    "due_at"
+  ],
+  "properties": {
+    "member_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "due_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

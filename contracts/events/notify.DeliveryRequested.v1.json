@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:notify.DeliveryRequested.v1",
+  "title": "notify.DeliveryRequested",
+  "description": "Another context asks notify to deliver a notification. No message text or personal data: the client renders the template; phone numbers are resolved by notify through the owning context.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "recipient",
+    "class",
+    "template"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "recipient": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "member_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "trusted_contact_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "staff_role": {
+          "type": "string",
+          "enum": [
+            "moderator",
+            "psychologist",
+            "psychologist_backup"
+          ]
+        }
+      }
+    },
+    "class": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "normal",
+        "reminder"
+      ]
+    },
+    "template": {
+      "type": "string",
+      "pattern": "^[a-z]+\\.[a-z_]+$"
+    },
+    "params": {
+      "type": "object",
+      "maxProperties": 10,
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 120
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:membership.MemberRegistered.v1",
+  "title": "membership.MemberRegistered",
+  "description": "A member record was created after first sign-in.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "member_id"
+  ],
+  "properties": {
+    "member_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}
