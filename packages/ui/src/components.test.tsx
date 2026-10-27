@@ -8,6 +8,7 @@ import { ListItem } from './list-item';
 import { Screen } from './screen';
 import { SosProvider } from './sos';
 import { Text } from './text';
+import { PhoneField } from './phone-field';
 import { TextField } from './text-field';
 
 describe('Button', () => {
@@ -78,6 +79,20 @@ describe('TextField', () => {
     await render(<TextField label="Mobile number" value="" error="Enter a valid mobile number." />);
     expect(screen.getByLabelText('Mobile number')).toBeTruthy();
     expect(screen.getByRole('alert')).toHaveTextContent('Enter a valid mobile number.');
+  });
+});
+
+describe('PhoneField', () => {
+  it('is labelled, formats while typing, and reports E.164', async () => {
+    const onChangePhone = jest.fn();
+    await render(<PhoneField label="Mobile number" value="" onChangePhone={onChangePhone} />);
+    await fireEvent.changeText(screen.getByLabelText('Mobile number'), '87000000000');
+    expect(onChangePhone).toHaveBeenCalledWith('+77000000000');
+  });
+
+  it('shows the formatted value from an E.164 prop', async () => {
+    await render(<PhoneField label="Mobile number" value="+77000000000" onChangePhone={() => undefined} />);
+    expect(screen.getByLabelText('Mobile number')).toHaveDisplayValue('+7 (700) 000-00-00');
   });
 });
 

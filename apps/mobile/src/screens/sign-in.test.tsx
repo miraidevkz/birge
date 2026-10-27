@@ -6,7 +6,7 @@ import { kratos } from '@/lib/api';
 import { storage } from '@/lib/storage';
 import { Providers } from '@/test-utils';
 
-import { normalizePhone, SignInScreen } from './sign-in';
+import { SignInScreen } from './sign-in';
 
 jest.mock('expo-constants', () => require('@/test-mocks').expoConstants());
 jest.mock('@/lib/storage', () => require('@/test-mocks').memoryStorage());
@@ -21,12 +21,6 @@ const mocked = kratos as unknown as {
 };
 
 const PHONE = '+70000000000';
-
-describe('normalizePhone', () => {
-  it('drops spaces, dashes and brackets', () => {
-    expect(normalizePhone('+7 (000) 000-00-00')).toBe(PHONE);
-  });
-});
 
 describe('SignInScreen', () => {
   it('rejects a malformed number without calling the server', async () => {

@@ -5,16 +5,11 @@
 // shown from locale texts by code, never with the input echoed.
 import { E164, SignInError, type PendingSignIn, type SignInErrorCode } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
-import { Button, Screen, Text, TextField } from '@birge/ui';
+import { Button, PhoneField, Screen, Text, TextField } from '@birge/ui';
 import { useState } from 'react';
 
 import { kratos } from '@/lib/api';
 import { useSession } from '@/lib/session';
-
-/** normalizePhone removes spaces, dashes and brackets people type or paste. */
-export function normalizePhone(input: string): string {
-  return input.replace(/[\s\-().]/g, '');
-}
 
 function codeOf(err: unknown): SignInErrorCode {
   return err instanceof SignInError ? err.code : 'unknown';
@@ -36,15 +31,14 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
   const [busy, setBusy] = useState(false);
 
   async function sendCode() {
-    const normalized = normalizePhone(phone);
-    if (!E164.test(normalized)) {
+    if (!E164.test(phone)) {
       setError('invalid_phone');
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      setPending(await kratos.startSignIn(normalized));
+      setPending(await kratos.startSignIn(phone));
       setCode('');
     } catch (err) {
       setError(codeOf(err));
@@ -81,16 +75,12 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
         footer={<Button title={t('sendCode')} onPress={sendCode} loading={busy} />}
       >
         <Text>{t('intro')}</Text>
-        <TextField
+        <PhoneField
           label={t('phone.label')}
           hint={t('phone.hint')}
           error={errorText}
           value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-          textContentType="telephoneNumber"
-          autoComplete="tel"
-          maxLength={20}
+          onChangePhone={setPhone}
           returnKeyType="send"
           onSubmitEditing={sendCode}
           testID="sign-in-phone"

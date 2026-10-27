@@ -2,17 +2,25 @@
 // Never suggests leaving a child with anyone except confirmed trusted contacts (N5).
 import { E164, unwrap, type Schemas } from '@birge/api';
 import { i18n, useTranslation } from '@birge/i18n';
-import { Banner, Button, ErrorState, Heading, List, ListItem, LoadingState, Screen, Text, TextField } from '@birge/ui';
+import {
+  Banner,
+  Button,
+  ErrorState,
+  Heading,
+  List,
+  ListItem,
+  LoadingState,
+  PhoneField,
+  Screen,
+  Text,
+  TextField,
+} from '@birge/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api } from '@/lib/api';
 
 type TrustedContact = Schemas['TrustedContact'];
-
-function normalizePhone(input: string): string {
-  return input.replace(/[\s\-().]/g, '');
-}
 
 function formatWhen(iso: string, lang: string): string {
   return new Intl.DateTimeFormat(lang, {
@@ -99,12 +107,11 @@ export function EmergencyPlanScreen() {
 
   function onAdd() {
     const trimmed = name.trim();
-    const normalized = normalizePhone(phone);
     if (!trimmed) {
       setFormError(t('contacts.invalidName'));
       return;
     }
-    if (!E164.test(normalized)) {
+    if (!E164.test(phone)) {
       setFormError(t('contacts.invalidPhone'));
       return;
     }
@@ -113,7 +120,7 @@ export function EmergencyPlanScreen() {
       return;
     }
     setFormError(null);
-    addContact.mutate({ kind: 'external', name: trimmed, phone: normalized });
+    addContact.mutate({ kind: 'external', name: trimmed, phone });
   }
 
   function onSend() {
@@ -143,14 +150,12 @@ export function EmergencyPlanScreen() {
             maxLength={60}
             testID="emergency-name"
           />
-          <TextField
+          <PhoneField
             label={t('contacts.phone')}
             hint={t('contacts.phoneHint')}
             error={formError ?? undefined}
             value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            maxLength={20}
+            onChangePhone={setPhone}
             testID="emergency-phone"
           />
           <Button
