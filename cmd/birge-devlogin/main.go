@@ -93,17 +93,22 @@ func main() {
 		addr = ":3000"
 	}
 	s := &server{admin: admin, client: &http.Client{Timeout: 10 * time.Second}, log: log}
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /login", s.loginPage)
-	mux.HandleFunc("POST /login", s.loginAccept)
-	mux.HandleFunc("GET /consent", s.consent)
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Addr: addr, Handler: newMux(s), ReadHeaderTimeout: 5 * time.Second}
 	log.Warn("development login app started: it signs anyone in as any staff role", "event", "DevLoginStarted", "addr", addr)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Error("server stopped", "error", err)
 		os.Exit(1)
 	}
+}
+
+// newMux registers the login, consent and health handlers on a ServeMux.
+func newMux(s *server) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /login", s.loginPage)
+	mux.HandleFunc("POST /login", s.loginAccept)
+	mux.HandleFunc("GET /consent", s.consent)
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	return mux
 }
 
 func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
