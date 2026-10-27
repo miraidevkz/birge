@@ -26,6 +26,7 @@ internal/domains/<context>/
 - Writing data and publishing an event happen in one transaction through the platform outbox, never "commit, then publish".
 - Consumers are idempotent: deduplicate by event `id`; repeated delivery must not repeat side effects (no second SMS, no second escalation).
 - Encrypted fields go through the platform crypto package with the user's data key. Never decrypt into logs or events.
+- Any query that shows members to each other (feeds, matches, rooms, SOS responders) applies the membership block filter (ADR-0019).
 - Time comes from the injected clock; never call `time.Now()` in `model` or `service`.
 
 ## Tests

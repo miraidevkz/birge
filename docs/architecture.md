@@ -107,6 +107,7 @@ docs/                 # architecture, ADRs, requirements, threat model
 | Chat | own module: WebSocket + push, PostgreSQL + NATS, server-side moderation, no E2EE | [0016](adr/0016-chat.md) |
 | AI evaluation | own Go runner over the real pipeline; deterministic sets per PR, LLM sets on AI changes, nightly, release | [0017](adr/0017-ai-evaluation.md) |
 | Client compatibility | additive `/v1`, snapshots of released contracts, 6 months / 3 versions, signed self-hosted OTA | [0018](adr/0018-client-compatibility.md) |
+| Member safety | mutual-invisibility blocks across contexts, item-only photos, legal hold for illegal content | [0019](adr/0019-user-safety-and-media-policy.md) |
 | Object storage | S3 API only; Garage for dev/MVP, local S3-compatible provider in production | [0015](adr/0015-object-storage.md) |
 
 ## Replication to other countries
