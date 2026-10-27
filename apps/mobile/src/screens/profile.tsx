@@ -95,7 +95,6 @@ export function ProfileScreen() {
       }
     >
       <Card testID="profile-name">
-        <Heading>{t('displayName.label')}</Heading>
         <TextField
           label={t('displayName.label')}
           value={name}
