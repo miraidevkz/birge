@@ -82,6 +82,7 @@ apps/
   admin/              # staff admin (Expo / react-native-web), separate bundle
 packages/             # shared TS: api-client, i18n, ui
 knowledge/{kk,ru}/    # knowledge base markdown (reviewed content only is indexed)
+evals/datasets/       # AI regression sets (crisis, anonymization, behavior, false-positive)
 deploy/
   helm/               # primary deployment target (Kubernetes / k3s)
   compose/            # alternative for development and small installs
@@ -104,6 +105,7 @@ docs/                 # architecture, ADRs, requirements, threat model
 | Data residency | personal data in-jurisdiction; LLM gets anonymized text only | [0013](adr/0013-data-residency.md) |
 | UI | RN Reusables + NativeWind, Reanimated, Expo Router; accessibility first | [0014](adr/0014-ui-stack.md) |
 | Chat | own module: WebSocket + push, PostgreSQL + NATS, server-side moderation, no E2EE | [0016](adr/0016-chat.md) |
+| AI evaluation | own Go runner over the real pipeline; deterministic sets per PR, LLM sets on AI changes, nightly, release | [0017](adr/0017-ai-evaluation.md) |
 | Object storage | S3 API only; Garage for dev/MVP, local S3-compatible provider in production | [0015](adr/0015-object-storage.md) |
 
 ## Replication to other countries
@@ -120,6 +122,7 @@ CI workflows are thin wrappers around `make` targets, so the same checks run loc
 | Go | gofmt, go vet, golangci-lint (incl. depguard, gosec), govulncheck, `go test -race` |
 | Contracts | OpenAPI lint, breaking-change diff against `main`, generated code is up to date |
 | Database | migration lint, destructive-operation gate, apply on an ephemeral PostgreSQL, sqlc diff |
+| AI | deterministic eval sets; LLM eval sets when prompts, model config, knowledge base or pipeline change |
 | Clients | tsc, eslint, unit tests |
 | Images | build, SBOM, vulnerability scan, signing |
 | Deploy | helm lint, manifest schema validation |

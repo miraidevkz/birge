@@ -5,7 +5,7 @@ description: Rules for any change that touches crisis detection, the crisis resp
 
 # Crisis path
 
-This is the part of the system that protects lives. Requirements: `docs/requirements/mvp.ru.md` § 5; ADR-0013.
+This is the part of the system that protects lives. Requirements: `docs/requirements/mvp.ru.md` § 5; ADR-0013, ADR-0017.
 
 ## Invariants
 
@@ -21,10 +21,10 @@ L1 lexicon → anonymize → retrieve → LLM (JSON: reply, crisis, sources, sug
 
 ## Tests are mandatory
 
-- Every change runs the crisis set (`tests/crisis/`, Kazakh and Russian, direct and indirect, typos, mixed language) and must keep 100% recall, including with the LLM disabled.
+- Every change runs the crisis set (`evals/datasets/crisis/`, Kazakh and Russian, direct and indirect, typos, mixed language) and must keep 100% recall, including with the LLM disabled (`llm-down` set). Use `cmd/birge-eval`.
 - Every change to anonymization runs its set: no phone, IIN, e-mail or name may reach the LLM request.
 - A held-out crisis set is kept outside the repository and run before release; do not try to obtain it.
-- Add a test case for every bug found.
+- Add a test case for every bug found. New cases are drafts (`status: draft`) until the psychologist approves them; only approved cases gate.
 
 ## Do not
 
