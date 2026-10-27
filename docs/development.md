@@ -1,6 +1,6 @@
 # Development guide
 
-How to build, test and change Birge. Read [`docs/architecture.md`](architecture.md) first for the shape of the system and [`AGENTS.md`](../AGENTS.md) for the rules every change follows.
+How to build, test and change Birge. Read [`docs/architecture.md`](architecture.md) first for the shape of the system, [`AGENTS.md`](../AGENTS.md) for the rules every change follows, and [`docs/solved-problems.md`](solved-problems.md) for the rules learned from real bugs.
 
 ## Prerequisites
 

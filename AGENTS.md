@@ -11,7 +11,7 @@ Birge («Бірге», "together") is an open-source platform of peer support an
 1. This file.
 2. Your brief (the task you were given).
 3. [`docs/architecture.md`](docs/architecture.md): only the sections your task touches.
-4. ADRs in [`docs/adr/`](docs/adr/) for the area you change.
+4. ADRs in [`docs/adr/`](docs/adr/) for the area you change, and [`docs/solved-problems.md`](docs/solved-problems.md) (rules learned from real bugs; check your code against them).
 5. The contract for your module in `contracts/`, and the module's own `README.md`.
 6. [`docs/requirements/mvp.ru.md`](docs/requirements/mvp.ru.md): only the section your brief cites.
 
@@ -93,6 +93,7 @@ This project will be maintained by people who did not write it. Code without an 
 - [ ] `make check` is green.
 - [ ] No new secrets, personal data or logs of message text.
 - [ ] Contracts, ADRs and the module README are updated if behaviour changed.
+- [ ] A fix that teaches a reusable rule adds it to `docs/solved-problems.md` with the commit.
 
 ## Report format
 
