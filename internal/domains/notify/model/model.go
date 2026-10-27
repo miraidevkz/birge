@@ -61,11 +61,16 @@ const (
 const ConsumerDeliveryRequested = "notify.DeliveryRequested"
 
 var (
-	ErrUnauthorized        = errors.New("notify: unauthorized")
-	ErrNotFound            = errors.New("notify: not found")
-	ErrInvalidInput        = errors.New("notify: invalid input")
+	// ErrUnauthorized means the caller has no member session.
+	ErrUnauthorized = errors.New("notify: unauthorized")
+	// ErrNotFound means the notification, delivery or device was not found.
+	ErrNotFound = errors.New("notify: not found")
+	// ErrInvalidInput means a request or event failed validation.
+	ErrInvalidInput = errors.New("notify: invalid input")
+	// ErrRecipientUnresolved means Recipients.Resolve returned no targets.
 	ErrRecipientUnresolved = errors.New("notify: recipient unresolved")
-	ErrInvalidCursor       = errors.New("notify: invalid cursor")
+	// ErrInvalidCursor means the inbox cursor could not be decoded.
+	ErrInvalidCursor = errors.New("notify: invalid cursor")
 )
 
 var templateRe = regexp.MustCompile(`^[a-z]+\.[a-z_]+$`)

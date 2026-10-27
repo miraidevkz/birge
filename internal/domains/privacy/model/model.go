@@ -23,7 +23,7 @@ var AllConsentTypes = []string{
 	ConsentResearch,
 }
 
-// Platform timer kind (ADR-0020): fires when deletion is due.
+// TimerDeletionDue is the platform timer kind (ADR-0020) that fires when deletion is due.
 const TimerDeletionDue = "privacy.DeletionDue"
 
 // Domain event types (contracts/events).
@@ -35,9 +35,12 @@ const (
 )
 
 var (
+	// ErrUnauthorized means the caller has no member session.
 	ErrUnauthorized = errors.New("privacy: unauthorized")
+	// ErrInvalidInput means a consent type, version or other argument failed validation.
 	ErrInvalidInput = errors.New("privacy: invalid input")
-	ErrNotFound     = errors.New("privacy: not found")
+	// ErrNotFound means the consent or deletion request was not found.
+	ErrNotFound = errors.New("privacy: not found")
 )
 
 // ConsentTypeIsValid reports whether t is a known consent type.

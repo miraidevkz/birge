@@ -1,3 +1,4 @@
+// Package api exposes the notify HTTP handlers (OpenAPI tag notify).
 package api
 
 import (

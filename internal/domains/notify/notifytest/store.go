@@ -101,6 +101,7 @@ type memoryTx struct {
 	s *MemoryStore
 }
 
+// MarkProcessed records eventID for consumer; newly is false when already seen.
 func (t *memoryTx) MarkProcessed(_ context.Context, consumer string, eventID uuid.UUID) (bool, error) {
 	m := t.s.processed[consumer]
 	if m == nil {
@@ -118,6 +119,7 @@ func reqKey(requestID uuid.UUID, kind string, ref uuid.UUID) string {
 	return requestID.String() + "|" + kind + "|" + ref.String()
 }
 
+// InsertNotification inserts n; inserted is false when the request/recipient row already exists.
 func (t *memoryTx) InsertNotification(_ context.Context, n model.Notification) (model.Notification, bool, error) {
 	key := reqKey(n.RequestID, n.RecipientKind, n.RecipientRef)
 	if id, ok := t.s.byRequest[key]; ok {
@@ -134,6 +136,7 @@ func (t *memoryTx) InsertNotification(_ context.Context, n model.Notification) (
 	return n, true, nil
 }
 
+// GetNotification returns the notification or model.ErrNotFound.
 func (t *memoryTx) GetNotification(_ context.Context, id uuid.UUID) (model.Notification, error) {
 	n, ok := t.s.notifications[id]
 	if !ok {
@@ -142,6 +145,7 @@ func (t *memoryTx) GetNotification(_ context.Context, id uuid.UUID) (model.Notif
 	return n, nil
 }
 
+// GetNotificationByRequestRecipient returns the row for requestID/kind/ref or model.ErrNotFound.
 func (t *memoryTx) GetNotificationByRequestRecipient(_ context.Context, requestID uuid.UUID, kind string, ref uuid.UUID) (model.Notification, error) {
 	id, ok := t.s.byRequest[reqKey(requestID, kind, ref)]
 	if !ok {
@@ -150,6 +154,7 @@ func (t *memoryTx) GetNotificationByRequestRecipient(_ context.Context, requestI
 	return t.s.notifications[id], nil
 }
 
+// ListInbox returns the member's inbox page (newest first), optionally after the cursor.
 func (t *memoryTx) ListInbox(_ context.Context, memberID uuid.UUID, cursorCreatedAt *time.Time, cursorID *uuid.UUID, limit int32) ([]model.Notification, error) {
 	var all []model.Notification
 	for _, n := range t.s.notifications {
@@ -190,6 +195,7 @@ func bytesLess(a, b uuid.UUID) bool {
 	return false
 }
 
+// MarkRead sets read_at (and acknowledged_at for critical) for the member's notification.
 func (t *memoryTx) MarkRead(_ context.Context, id, memberID uuid.UUID, at time.Time) (model.Notification, error) {
 	n, ok := t.s.notifications[id]
 	if !ok || n.RecipientKind != model.RecipientKindMember || n.RecipientRef != memberID {
@@ -209,6 +215,7 @@ func deliveryKey(notificationID uuid.UUID, channel string) string {
 	return notificationID.String() + "|" + channel
 }
 
+// InsertDelivery creates a delivery row; inserted is false when the channel row already exists.
 func (t *memoryTx) InsertDelivery(_ context.Context, notificationID uuid.UUID, channel, status string, _ time.Time) (uuid.UUID, bool, error) {
 	key := deliveryKey(notificationID, channel)
 	if d, ok := t.s.deliveries[key]; ok {
@@ -224,6 +231,7 @@ func (t *memoryTx) InsertDelivery(_ context.Context, notificationID uuid.UUID, c
 	return id, true, nil
 }
 
+// GetDelivery returns the delivery for notificationID/channel or model.ErrNotFound.
 func (t *memoryTx) GetDelivery(_ context.Context, notificationID uuid.UUID, channel string) (uuid.UUID, string, int32, error) {
 	d, ok := t.s.deliveries[deliveryKey(notificationID, channel)]
 	if !ok {
@@ -232,6 +240,7 @@ func (t *memoryTx) GetDelivery(_ context.Context, notificationID uuid.UUID, chan
 	return d.ID, d.Status, d.Attempts, nil
 }
 
+// UpdateDelivery writes status, attempts and optional provider id for deliveryID.
 func (t *memoryTx) UpdateDelivery(_ context.Context, deliveryID uuid.UUID, status string, attempts int32, providerMessageID *string, _ time.Time) error {
 	for k, d := range t.s.deliveries {
 		if d.ID == deliveryID {
@@ -245,16 +254,19 @@ func (t *memoryTx) UpdateDelivery(_ context.Context, deliveryID uuid.UUID, statu
 	return model.ErrNotFound
 }
 
+// UpsertDevice inserts or replaces the member's push device registration.
 func (t *memoryTx) UpsertDevice(_ context.Context, d model.Device) error {
 	t.s.devices[d.MemberID.String()+"|"+d.DeviceID.String()] = d
 	return nil
 }
 
+// DeleteDevice removes the member's device registration if present.
 func (t *memoryTx) DeleteDevice(_ context.Context, memberID, deviceID uuid.UUID) error {
 	delete(t.s.devices, memberID.String()+"|"+deviceID.String())
 	return nil
 }
 
+// ListDevices returns every push device registered for the member.
 func (t *memoryTx) ListDevices(_ context.Context, memberID uuid.UUID) ([]model.Device, error) {
 	var out []model.Device
 	for _, d := range t.s.devices {
@@ -274,18 +286,22 @@ func (t *memoryTx) schedule(kind string, notificationID uuid.UUID, dueAt time.Ti
 	return nil
 }
 
+// SchedulePush records a notify.Push timer (dedup key = notification id).
 func (t *memoryTx) SchedulePush(_ context.Context, notificationID uuid.UUID, dueAt time.Time) error {
 	return t.schedule(model.TimerPush, notificationID, dueAt)
 }
 
+// ScheduleExternalSMS records a notify.ExternalSMS timer (dedup key = notification id).
 func (t *memoryTx) ScheduleExternalSMS(_ context.Context, notificationID uuid.UUID, dueAt time.Time) error {
 	return t.schedule(model.TimerExternalSMS, notificationID, dueAt)
 }
 
+// ScheduleCriticalSMS records a notify.CriticalSMS timer (dedup key = notification id).
 func (t *memoryTx) ScheduleCriticalSMS(_ context.Context, notificationID uuid.UUID, dueAt time.Time) error {
 	return t.schedule(model.TimerCriticalSMS, notificationID, dueAt)
 }
 
+// CancelCriticalSMS removes a pending CriticalSMS timer; returns how many were cancelled.
 func (t *memoryTx) CancelCriticalSMS(_ context.Context, notificationID uuid.UUID, _ time.Time) (int64, error) {
 	key := timerKey(model.TimerCriticalSMS, notificationID)
 	if _, ok := t.s.timers[key]; !ok {

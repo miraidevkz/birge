@@ -60,13 +60,18 @@ type Tx interface {
 	LockMember(ctx context.Context, id uuid.UUID) error
 	// InsertMember creates the member of identityID; created is false when it already exists.
 	InsertMember(ctx context.Context, identityID uuid.UUID, now time.Time) (id uuid.UUID, created bool, err error)
+	// UpdateProfile applies the set fields of p; returns model.ErrMemberNotFound when id is absent.
 	UpdateProfile(ctx context.Context, id uuid.UUID, p ProfilePatch, now time.Time) error
+	// SetVerification writes the member's verification state.
 	SetVerification(ctx context.Context, id uuid.UUID, v model.Verification, now time.Time) error
 
+	// Children lists the member's child cards.
 	Children(ctx context.Context, memberID uuid.UUID) ([]model.Child, error)
+	// CountChildren returns how many child cards the member has.
 	CountChildren(ctx context.Context, memberID uuid.UUID) (int, error)
 	// ChildByIdempotencyKey returns model.ErrChildNotFound when absent.
 	ChildByIdempotencyKey(ctx context.Context, memberID, key uuid.UUID) (model.Child, error)
+	// InsertChild creates a child card keyed by the request Idempotency-Key.
 	InsertChild(ctx context.Context, memberID, key uuid.UUID, c model.ChildInput, now time.Time) (model.Child, error)
 	// UpdateChild returns model.ErrChildNotFound unless the child belongs to memberID.
 	UpdateChild(ctx context.Context, memberID, childID uuid.UUID, c model.ChildInput, now time.Time) (model.Child, error)
@@ -78,16 +83,22 @@ type Tx interface {
 
 	// InsertBlock reports false when the block already exists.
 	InsertBlock(ctx context.Context, blocker, blocked uuid.UUID, now time.Time) (bool, error)
+	// DeleteBlock removes a block if present (idempotent).
 	DeleteBlock(ctx context.Context, blocker, blocked uuid.UUID) error
+	// CountBlocks returns how many members blocker has blocked.
 	CountBlocks(ctx context.Context, blocker uuid.UUID) (int, error)
+	// Blocks lists members blocked by blocker, newest first, capped at limit.
 	Blocks(ctx context.Context, blocker uuid.UUID, limit int) ([]BlockRecord, error)
 	// IsBlocked reports a block between a and b in either direction.
 	IsBlocked(ctx context.Context, a, b uuid.UUID) (bool, error)
 
+	// DistrictExists reports whether id is a known district.
 	DistrictExists(ctx context.Context, id uuid.UUID) (bool, error)
 	// CountKnownNeeds returns how many of the distinct codes exist in the reference.
 	CountKnownNeeds(ctx context.Context, codes []string) (int, error)
+	// Cities returns the deployment's cities with their districts.
 	Cities(ctx context.Context) ([]model.City, error)
+	// Needs returns the deployment's needs codes.
 	Needs(ctx context.Context) ([]string, error)
 
 	// Publish stores e in the platform outbox in this transaction.

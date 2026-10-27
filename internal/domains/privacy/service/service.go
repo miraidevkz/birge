@@ -238,8 +238,10 @@ func (s *Service) RequestDeletion(ctx context.Context, memberID uuid.UUID) (mode
 	return out, err
 }
 
-// HandleDeletionDue marks the deletion request completed and shreds the
-// member key. Idempotent: a completed request skips Shred.
+// HandleDeletionDue shreds the member key then marks the request completed.
+// Order matters: shred first so a crash after Shred still retries mark-completed,
+// while a completed row never means the DEK is still live. Idempotent: a
+// completed request skips Shred.
 func (s *Service) HandleDeletionDue(ctx context.Context, memberID uuid.UUID) error {
 	if memberID == uuid.Nil {
 		return fmt.Errorf("%w: member id", model.ErrInvalidInput)

@@ -1,49 +1,79 @@
 # notify
 
-In-app inbox (source of truth), push and SMS delivery behind ports, and the
-critical-notification escalation ladder.
+In-app inbox (source of truth), content-free push and SMS delivery, and the critical-notification escalation ladder. Consumes `notify.DeliveryRequested` so other contexts can reach members and trusted contacts without holding channel details (`docs/architecture.md` notify row; residency ADR-0013).
 
 ## Owns
 
-- Schema `notify`: `notifications`, `deliveries`, `devices`
-- HTTP: `GET /me/inbox`, `POST /me/inbox/{id}/read`, `PUT|DELETE /me/devices/{id}`
-- Consumer of `notify.DeliveryRequested` (JetStream durable `notify-delivery-requested`)
-- Timer kinds (ADR-0020):
-  - `notify.Push` — push send after commit (due now; dedup = notification id)
-  - `notify.ExternalSMS` — immediate SMS for phone-only recipients (due now)
-  - `notify.CriticalSMS` — member critical SMS fallback after
-    `NOTIFY_CRITICAL_SMS_AFTER` (default 60s)
+| Table (schema `notify`) | Purpose | Personal data |
+|---|---|---|
+| `notifications` | Inbox / delivery-tracking rows (`template` + `params`; no message body) | `params` may hold non-sensitive template slots; phones are never stored |
+| `deliveries` | Push/SMS attempt status per notification and channel | `provider_message_id` only |
+| `devices` | Member push endpoints | `push_token` (treat as secret; never log) |
+
+## API
+
+Operations of tag `notify` in `contracts/openapi/birge.yaml`:
+
+| Operation | Rules not in the contract |
+|---|---|
+| `GET /me/inbox` | Member session only (staff refused). Newest first; cursor pagination; default limit 20, max 50. |
+| `POST /me/inbox/{id}/read` | Own notifications only. Idempotent. For `class=critical`, also sets `acknowledged_at` and cancels `notify.CriticalSMS`. |
+| `PUT/DELETE /me/devices/{id}` | Own devices only. Upsert on PUT; DELETE idempotent. Push tokens never logged. |
+
+Delivery is not HTTP: JetStream consumer `notify.DeliveryRequested` → `service.HandleDeliveryRequested`, then platform timers call push/SMS handlers after commit.
+
+## Events
+
+| Direction | Event | When | Guarantees |
+|---|---|---|---|
+| consumes | `notify.DeliveryRequested` v1 | another context needs a delivery | durable consumer; dedup via `platform.processed_events` (consumer name `notify.DeliveryRequested`); one notification per `(request_id, recipient_kind, recipient_ref)` |
+| publishes | none | | |
+
+## Timers
+
+| Kind | Scheduled when | Handler does | Idempotency |
+|---|---|---|---|
+| `notify.Push` | member recipient, new notification (due now; dedup = notification id) | `HandlePush`: send content-free push | skips if delivery already `sent`/`skipped`; at-least-once edge if provider accepts but status update fails |
+| `notify.ExternalSMS` | external recipient, new notification (due now) | `HandleExternalSMS`: re-resolve phone, guard, send fixed SMS | same status-based idempotency |
+| `notify.CriticalSMS` | member + `class=critical`, after `CriticalSMSAfter` | `HandleCriticalSMS` if still unacknowledged | status + `acknowledged_at`; cancelled on mark-read; critical path ignores daily SMS budget but other guard rejects mark `failed` |
+
+## Service API for other contexts
+
+none (other contexts publish `notify.DeliveryRequested`; they do not call this service directly).
+
+Ports used by this context (wired later): `Recipients`, `PushSender`, `SMSSender`.
+
+## Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `service.Config.CriticalSMSAfter` | 60s | Wait for acknowledgement before member critical SMS |
+| `service.Config.SMSTexts` | required for SMS | `template → language →` neutral fixed body (no message content) |
+| `guard.Config.AllowedPrefixes` | empty rejects all | E.164 prefix allow-list |
+| `guard.Config.PerNumberLimit` / `PerNumberWindow` | 0 disabled / 1h | Per-number rate limit |
+| `guard.Config.GlobalLimit` / `GlobalWindow` | 0 disabled / 1m | Process-wide rate limit |
+| `guard.Config.DailyBudget` | 0 unlimited | UTC-day send budget (bypassed for critical) |
+| TODO(verify): env names for wiring | | `cmd/birge` does not load these yet |
 
 ## Invariants
 
-- Consumers are idempotent via `platform.processed_events` (consumer
-  `notify.DeliveryRequested`); a duplicated event creates one notification per
-  `(request_id, recipient_kind, recipient_ref)`.
-- `recipient_kind=member` (`recipient_ref` = member id): inbox + push; critical
-  SMS only after the acknowledgement timeout.
-- `recipient_kind=external` (`recipient_ref` = trusted_contact id): no inbox and
-  no push; SMS is scheduled immediately for any class. Phone is re-resolved at
-  send time through the `Recipients` port; never stored.
-- Push and SMS carry no message content (ADR-0013). SMS bodies are neutral fixed
-  strings from config, keyed by template and language.
-- `sms/guard` runs before every SMS: allow-listed E.164 prefixes, per-number and
-  global rate limits, daily budget circuit breaker. For `class=critical` the
-  daily budget does not block; other guard rejections log
-  `event=CriticalSMSBlocked` and mark the delivery `failed` (not `skipped`).
-- Delivery timers run through `adapter.TimerHandlers` (`timers.Handler`). Status
-  checks make each successful run at most once; at-least-once edge: if the
-  provider accepts a message but the delivery status update fails, a timer retry
-  may contact the provider again.
-- Logs and events carry IDs and event names only — never message text, phone
-  numbers or push tokens.
-- Marking a critical notification read also acknowledges it and cancels the SMS timer.
+- Consumers idempotent via `processed_events`; unique `(request_id, recipient_kind, recipient_ref)` (database + service).
+- `recipient_kind=member`: inbox + push; critical SMS only after acknowledgement timeout. `external`: SMS only, no inbox/push; phone re-resolved at send time, never stored (service + schema).
+- Push and SMS carry no message content (ADR-0013); SMS bodies from config only.
+- `sms/guard` before every SMS; critical uses `AllowCritical` (no daily budget). Guard rejects for critical → `CriticalSMSBlocked` + delivery `failed` (not `skipped`).
+- Logs and events: IDs and event names only — never text, phones or push tokens (service + ports).
+- Marking critical read acknowledges and cancels CriticalSMS (service).
 
-## Ports
+## Failure modes
 
-| Port | Purpose |
-|---|---|
-| `Recipients` | Resolve `trusted_contact_id` / `staff_role` (wired later by emergency/safety) |
-| `PushSender` | Deliver push (fake in tests; real provider later) |
-| `SMSSender` | Deliver SMS (fake in tests; real provider later) |
+- Database down: inbox/device HTTP and timer handlers fail; JetStream messages are nacked/retried by the consumer.
+- Recipients unresolved: `HandleDeliveryRequested` returns `ErrRecipientUnresolved` (message retried); no partial notification for that event until resolve succeeds after `MarkProcessed` — resolve runs before the transaction.
+- Push/SMS provider down: delivery marked `failed`; timer retry may contact the provider again (at-least-once).
+- Guard / missing SMS text: non-critical → `skipped`; critical guard → `failed` + log; missing text fails the send path.
+- Broker down: outbox from producers lags; this context's consumer stops receiving until JetStream recovers.
 
-Wiring in `cmd/birge` is out of scope for wave 1.
+## Tests
+
+- Unit: `service/ladder_test.go`, `service/pagination_test.go`, `sms/guard/guard_test.go`, `api/handler` tests via notifytest fakes — ladder, idempotency, guard, cursor.
+- Integration: `adapter/integration_test.go` — PostgreSQL + NATS consumer path with `testinfra`.
+- Fakes: `notifytest/` (in-memory store, fake push/SMS).

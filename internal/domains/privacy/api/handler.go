@@ -1,3 +1,4 @@
+// Package api exposes the privacy HTTP handlers (OpenAPI tag privacy).
 package api
 
 import (

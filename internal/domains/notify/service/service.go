@@ -63,8 +63,10 @@ func (s *Service) log() *slog.Logger {
 
 // HandleDeliveryRequested processes one notify.DeliveryRequested event.
 // eventID is the envelope id used for processed_events deduplication.
-// Push and immediate external SMS are scheduled as platform timers in the same
-// transaction; providers are contacted by the timer handlers after commit.
+// Resolve runs before MarkProcessed so a temporary Recipients failure can
+// retry without burning the dedup slot. Push and immediate external SMS are
+// scheduled as platform timers in the same transaction; providers are
+// contacted by the timer handlers after commit (never inside the consumer txn).
 func (s *Service) HandleDeliveryRequested(ctx context.Context, eventID uuid.UUID, req model.DeliveryRequest) error {
 	if eventID == uuid.Nil {
 		return fmt.Errorf("%w: event id", model.ErrInvalidInput)
@@ -516,7 +518,10 @@ func (s *Service) ListInbox(ctx context.Context, memberID uuid.UUID, cursor stri
 	return page, nil
 }
 
-// MarkRead marks a notification read; for critical it also acknowledges and cancels the SMS timer.
+// MarkRead marks a notification read; for critical it also acknowledges
+// (SQL sets acknowledged_at) and cancels the SMS timer in the same
+// transaction so a crash cannot leave an acknowledgement without cancelling
+// the fallback SMS.
 func (s *Service) MarkRead(ctx context.Context, memberID, notificationID uuid.UUID) error {
 	if memberID == uuid.Nil {
 		return model.ErrUnauthorized

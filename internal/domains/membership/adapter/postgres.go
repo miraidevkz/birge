@@ -41,6 +41,7 @@ type pgTx struct {
 
 var _ port.Tx = (*pgTx)(nil)
 
+// MemberByIdentity returns the member for identityID or model.ErrMemberNotFound.
 func (t *pgTx) MemberByIdentity(ctx context.Context, identityID uuid.UUID) (port.MemberRecord, error) {
 	r, err := t.q.GetMemberByIdentity(ctx, identityID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -52,6 +53,7 @@ func (t *pgTx) MemberByIdentity(ctx context.Context, identityID uuid.UUID) (port
 	return memberRecord(store.GetMemberByIDRow(r)), nil
 }
 
+// MemberByID returns the member or model.ErrMemberNotFound.
 func (t *pgTx) MemberByID(ctx context.Context, id uuid.UUID) (port.MemberRecord, error) {
 	r, err := t.q.GetMemberByID(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -71,6 +73,7 @@ func memberRecord(r store.GetMemberByIDRow) port.MemberRecord {
 	}
 }
 
+// LockMember locks the member row until the end of the transaction.
 func (t *pgTx) LockMember(ctx context.Context, id uuid.UUID) error {
 	_, err := t.q.LockMember(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -82,6 +85,8 @@ func (t *pgTx) LockMember(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+// InsertMember creates the member for identityID; created is false when it
+// already exists (unique identity_id races resolve to one row).
 func (t *pgTx) InsertMember(ctx context.Context, identityID uuid.UUID, now time.Time) (uuid.UUID, bool, error) {
 	id, err := t.q.InsertMember(ctx, store.InsertMemberParams{IdentityID: identityID, Now: now})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -93,6 +98,7 @@ func (t *pgTx) InsertMember(ctx context.Context, identityID uuid.UUID, now time.
 	return id, true, nil
 }
 
+// UpdateProfile applies the set fields of p; returns model.ErrMemberNotFound when id is absent.
 func (t *pgTx) UpdateProfile(ctx context.Context, id uuid.UUID, p port.ProfilePatch, now time.Time) error {
 	var lang *string
 	if p.Lang != nil {
@@ -111,6 +117,7 @@ func (t *pgTx) UpdateProfile(ctx context.Context, id uuid.UUID, p port.ProfilePa
 	return nil
 }
 
+// SetVerification writes the member's verification state.
 func (t *pgTx) SetVerification(ctx context.Context, id uuid.UUID, v model.Verification, now time.Time) error {
 	n, err := t.q.SetMemberVerification(ctx, store.SetMemberVerificationParams{Verification: string(v), Now: now, ID: id})
 	if err != nil {
@@ -122,6 +129,7 @@ func (t *pgTx) SetVerification(ctx context.Context, id uuid.UUID, v model.Verifi
 	return nil
 }
 
+// Children lists the member's child cards.
 func (t *pgTx) Children(ctx context.Context, memberID uuid.UUID) ([]model.Child, error) {
 	rows, err := t.q.ListChildren(ctx, memberID)
 	if err != nil {
@@ -134,6 +142,7 @@ func (t *pgTx) Children(ctx context.Context, memberID uuid.UUID) ([]model.Child,
 	return out, nil
 }
 
+// CountChildren returns how many child cards the member has.
 func (t *pgTx) CountChildren(ctx context.Context, memberID uuid.UUID) (int, error) {
 	n, err := t.q.CountChildren(ctx, memberID)
 	if err != nil {
@@ -142,6 +151,7 @@ func (t *pgTx) CountChildren(ctx context.Context, memberID uuid.UUID) (int, erro
 	return int(n), nil
 }
 
+// ChildByIdempotencyKey returns the child created with key or model.ErrChildNotFound.
 func (t *pgTx) ChildByIdempotencyKey(ctx context.Context, memberID, key uuid.UUID) (model.Child, error) {
 	r, err := t.q.GetChildByIdempotencyKey(ctx, store.GetChildByIdempotencyKeyParams{MemberID: memberID, IdempotencyKey: key})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -153,6 +163,7 @@ func (t *pgTx) ChildByIdempotencyKey(ctx context.Context, memberID, key uuid.UUI
 	return child(r.ID, r.BirthYear, r.Needs), nil
 }
 
+// InsertChild creates a child card keyed by the request Idempotency-Key.
 func (t *pgTx) InsertChild(ctx context.Context, memberID, key uuid.UUID, c model.ChildInput, now time.Time) (model.Child, error) {
 	r, err := t.q.InsertChild(ctx, store.InsertChildParams{
 		MemberID: memberID, IdempotencyKey: key, BirthYear: int32(c.BirthYear), Needs: needs(c.Needs), Now: now, //nolint:gosec // validated to 1990..2100
@@ -163,6 +174,7 @@ func (t *pgTx) InsertChild(ctx context.Context, memberID, key uuid.UUID, c model
 	return child(r.ID, r.BirthYear, r.Needs), nil
 }
 
+// UpdateChild replaces a child card that belongs to memberID or returns model.ErrChildNotFound.
 func (t *pgTx) UpdateChild(ctx context.Context, memberID, childID uuid.UUID, c model.ChildInput, now time.Time) (model.Child, error) {
 	r, err := t.q.UpdateChild(ctx, store.UpdateChildParams{
 		BirthYear: int32(c.BirthYear), Needs: needs(c.Needs), Now: now, ID: childID, MemberID: memberID, //nolint:gosec // validated to 1990..2100
@@ -176,6 +188,7 @@ func (t *pgTx) UpdateChild(ctx context.Context, memberID, childID uuid.UUID, c m
 	return child(r.ID, r.BirthYear, r.Needs), nil
 }
 
+// DeleteChild removes a child of memberID and reports whether a row was deleted.
 func (t *pgTx) DeleteChild(ctx context.Context, memberID, childID uuid.UUID) (bool, error) {
 	n, err := t.q.DeleteChild(ctx, store.DeleteChildParams{ID: childID, MemberID: memberID})
 	if err != nil {
@@ -184,6 +197,7 @@ func (t *pgTx) DeleteChild(ctx context.Context, memberID, childID uuid.UUID) (bo
 	return n > 0, nil
 }
 
+// InsertPendingVerification creates a pending request; created is false while one is pending.
 func (t *pgTx) InsertPendingVerification(ctx context.Context, memberID uuid.UUID, now time.Time) (uuid.UUID, bool, error) {
 	id, err := t.q.InsertPendingVerificationRequest(ctx, store.InsertPendingVerificationRequestParams{MemberID: memberID, Now: now})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -195,6 +209,7 @@ func (t *pgTx) InsertPendingVerification(ctx context.Context, memberID uuid.UUID
 	return id, true, nil
 }
 
+// InsertBlock records a block; returns false when the block already exists.
 func (t *pgTx) InsertBlock(ctx context.Context, blocker, blocked uuid.UUID, now time.Time) (bool, error) {
 	n, err := t.q.InsertBlock(ctx, store.InsertBlockParams{Blocker: blocker, Blocked: blocked, Since: now})
 	if err != nil {
@@ -203,6 +218,7 @@ func (t *pgTx) InsertBlock(ctx context.Context, blocker, blocked uuid.UUID, now 
 	return n > 0, nil
 }
 
+// DeleteBlock removes a block if present (idempotent).
 func (t *pgTx) DeleteBlock(ctx context.Context, blocker, blocked uuid.UUID) error {
 	if err := t.q.DeleteBlock(ctx, store.DeleteBlockParams{Blocker: blocker, Blocked: blocked}); err != nil {
 		return fmt.Errorf("membership: delete block: %w", err)
@@ -210,6 +226,7 @@ func (t *pgTx) DeleteBlock(ctx context.Context, blocker, blocked uuid.UUID) erro
 	return nil
 }
 
+// CountBlocks returns how many members blocker has blocked.
 func (t *pgTx) CountBlocks(ctx context.Context, blocker uuid.UUID) (int, error) {
 	n, err := t.q.CountBlocks(ctx, blocker)
 	if err != nil {
@@ -218,6 +235,7 @@ func (t *pgTx) CountBlocks(ctx context.Context, blocker uuid.UUID) (int, error) 
 	return int(n), nil
 }
 
+// Blocks lists members blocked by blocker, newest first, capped at limit.
 func (t *pgTx) Blocks(ctx context.Context, blocker uuid.UUID, limit int) ([]port.BlockRecord, error) {
 	rows, err := t.q.ListBlocks(ctx, store.ListBlocksParams{Blocker: blocker, MaxRows: int32(min(limit, model.MaxBlocks))}) //nolint:gosec // capped at MaxBlocks
 	if err != nil {
@@ -230,6 +248,7 @@ func (t *pgTx) Blocks(ctx context.Context, blocker uuid.UUID, limit int) ([]port
 	return out, nil
 }
 
+// IsBlocked reports a block between a and b in either direction.
 func (t *pgTx) IsBlocked(ctx context.Context, a, b uuid.UUID) (bool, error) {
 	blocked, err := t.q.IsBlocked(ctx, store.IsBlockedParams{A: a, B: b})
 	if err != nil {
@@ -238,6 +257,7 @@ func (t *pgTx) IsBlocked(ctx context.Context, a, b uuid.UUID) (bool, error) {
 	return blocked, nil
 }
 
+// DistrictExists reports whether id is a known district.
 func (t *pgTx) DistrictExists(ctx context.Context, id uuid.UUID) (bool, error) {
 	ok, err := t.q.DistrictExists(ctx, id)
 	if err != nil {
@@ -246,6 +266,7 @@ func (t *pgTx) DistrictExists(ctx context.Context, id uuid.UUID) (bool, error) {
 	return ok, nil
 }
 
+// CountKnownNeeds returns how many of the distinct codes exist in the reference table.
 func (t *pgTx) CountKnownNeeds(ctx context.Context, codes []string) (int, error) {
 	n, err := t.q.CountKnownNeeds(ctx, codes)
 	if err != nil {
@@ -254,6 +275,7 @@ func (t *pgTx) CountKnownNeeds(ctx context.Context, codes []string) (int, error)
 	return int(n), nil
 }
 
+// Cities returns the deployment's cities with their districts.
 func (t *pgTx) Cities(ctx context.Context) ([]model.City, error) {
 	cities, err := t.q.ListCities(ctx)
 	if err != nil {
@@ -278,6 +300,7 @@ func (t *pgTx) Cities(ctx context.Context) ([]model.City, error) {
 	return out, nil
 }
 
+// Needs returns the deployment's needs codes.
 func (t *pgTx) Needs(ctx context.Context) ([]string, error) {
 	codes, err := t.q.ListNeeds(ctx)
 	if err != nil {
@@ -286,6 +309,7 @@ func (t *pgTx) Needs(ctx context.Context) ([]string, error) {
 	return needs(codes), nil
 }
 
+// Publish stores e in the platform outbox in this transaction.
 func (t *pgTx) Publish(ctx context.Context, now time.Time, e outbox.Event) error {
 	_, err := outbox.Enqueue(ctx, t.outbox, now, "", e)
 	return err

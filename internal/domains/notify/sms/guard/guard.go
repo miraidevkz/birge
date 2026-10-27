@@ -144,7 +144,7 @@ func prune(in []time.Time, cutoff time.Time) []time.Time {
 	return out
 }
 
-// String keeps errors free of phone numbers when wrapped.
+// Explain returns err's message; callers use it so wrapped errors stay free of phone numbers.
 func Explain(err error) string {
 	if err == nil {
 		return ""

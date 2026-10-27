@@ -118,6 +118,7 @@ type memoryTx struct {
 	s *MemoryStore
 }
 
+// AppendConsent inserts one append-only consent_history row and returns it with its id.
 func (t *memoryTx) AppendConsent(_ context.Context, r model.ConsentRecord) (model.ConsentRecord, error) {
 	if r.ID == uuid.Nil {
 		r.ID = uuid.Must(uuid.NewV7())
@@ -126,6 +127,7 @@ func (t *memoryTx) AppendConsent(_ context.Context, r model.ConsentRecord) (mode
 	return r, nil
 }
 
+// GetLatestConsent returns the newest history row for memberID/type or model.ErrNotFound.
 func (t *memoryTx) GetLatestConsent(_ context.Context, memberID uuid.UUID, consentType string) (model.ConsentRecord, error) {
 	var (
 		found bool
@@ -146,6 +148,7 @@ func (t *memoryTx) GetLatestConsent(_ context.Context, memberID uuid.UUID, conse
 	return best, nil
 }
 
+// ListLatestConsents returns the newest history row per consent type for the member.
 func (t *memoryTx) ListLatestConsents(_ context.Context, memberID uuid.UUID) ([]model.ConsentRecord, error) {
 	byType := make(map[string]model.ConsentRecord)
 	for _, c := range t.s.consents {
@@ -166,6 +169,7 @@ func (t *memoryTx) ListLatestConsents(_ context.Context, memberID uuid.UUID) ([]
 	return out, nil
 }
 
+// InsertDeletionRequest creates the member's deletion request; inserted is false when one exists.
 func (t *memoryTx) InsertDeletionRequest(_ context.Context, r model.DeletionRequest) (model.DeletionRequest, bool, error) {
 	if _, ok := t.s.deletions[r.MemberID]; ok {
 		return model.DeletionRequest{}, false, nil
@@ -174,6 +178,7 @@ func (t *memoryTx) InsertDeletionRequest(_ context.Context, r model.DeletionRequ
 	return r, true, nil
 }
 
+// GetDeletionRequest returns the member's deletion request or model.ErrNotFound.
 func (t *memoryTx) GetDeletionRequest(_ context.Context, memberID uuid.UUID) (model.DeletionRequest, error) {
 	r, ok := t.s.deletions[memberID]
 	if !ok {
@@ -182,6 +187,7 @@ func (t *memoryTx) GetDeletionRequest(_ context.Context, memberID uuid.UUID) (mo
 	return r, nil
 }
 
+// MarkDeletionCompleted sets completed_at once; updated is false when absent or already completed.
 func (t *memoryTx) MarkDeletionCompleted(_ context.Context, memberID uuid.UUID, at time.Time) (model.DeletionRequest, bool, error) {
 	r, ok := t.s.deletions[memberID]
 	if !ok {
@@ -195,6 +201,7 @@ func (t *memoryTx) MarkDeletionCompleted(_ context.Context, memberID uuid.UUID, 
 	return r, true, nil
 }
 
+// PublishConsentChanged records a privacy.ConsentChanged event in memory.
 func (t *memoryTx) PublishConsentChanged(_ context.Context, now time.Time, data model.ConsentChangedData) error {
 	t.s.events = append(t.s.events, MemoryEvent{
 		Type:    model.EventConsentChanged,
@@ -205,6 +212,7 @@ func (t *memoryTx) PublishConsentChanged(_ context.Context, now time.Time, data 
 	return nil
 }
 
+// PublishDataDeletionRequested records a privacy.DataDeletionRequested event in memory.
 func (t *memoryTx) PublishDataDeletionRequested(_ context.Context, now time.Time, data model.DataDeletionRequestedData) error {
 	t.s.events = append(t.s.events, MemoryEvent{
 		Type:    model.EventDataDeletionRequested,
@@ -215,6 +223,7 @@ func (t *memoryTx) PublishDataDeletionRequested(_ context.Context, now time.Time
 	return nil
 }
 
+// ScheduleDeletionDue records a privacy.DeletionDue timer; scheduled is false on dedup hit.
 func (t *memoryTx) ScheduleDeletionDue(_ context.Context, memberID uuid.UUID, dueAt time.Time) (bool, error) {
 	key := timerKey(model.TimerDeletionDue, memberID)
 	if _, ok := t.s.timers[key]; ok {

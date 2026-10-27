@@ -1,3 +1,4 @@
+// Package api exposes the membership HTTP handlers (OpenAPI tag membership).
 package api
 
 import (
