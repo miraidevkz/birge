@@ -63,17 +63,22 @@ export function formatPhone(e164: string): string {
 
 /**
  * applyPhoneEdit maps one TextInput change onto E.164, display and caret.
- * selectionStart is the caret in previousDisplay before the edit (tracked via
- * onSelectionChange). Deleting a separator deletes the digit before it.
+ *
+ * The edit is derived from previousDisplay and nextText alone (common prefix
+ * and common suffix). React Native does not guarantee the order of
+ * onSelectionChange vs onChangeText — iOS can report the post-edit selection
+ * first — so selection offsets must not feed this math. Caret (in digits) is
+ * the digits in nextText minus the digits in the common suffix. Backspacing a
+ * separator (same digit count, shorter text) removes the digit before the
+ * deleted character at the common-prefix boundary.
  */
-export function applyPhoneEdit(
-  previousDisplay: string,
-  nextText: string,
-  selectionStart: number = previousDisplay.length,
-): PhoneEditResult {
+export function applyPhoneEdit(previousDisplay: string, nextText: string): PhoneEditResult {
   const prevDigits = digitsOf(previousDisplay);
   const nextDigits = digitsOf(nextText);
-  const digitsBeforeCaret = digitsOf(previousDisplay.slice(0, selectionStart)).length;
+
+  const prefixLen = commonPrefixLength(previousDisplay, nextText);
+  const suffixLen = commonSuffixLength(previousDisplay, nextText, prefixLen);
+  const suffix = nextText.slice(nextText.length - suffixLen);
 
   let digits: string;
   let caretDigits: number;
@@ -82,20 +87,14 @@ export function applyPhoneEdit(
     nextDigits.length === prevDigits.length && nextText.length < previousDisplay.length && prevDigits.length > 0;
 
   if (deletedSeparator) {
-    // Backspace on a space, ')', '-' or similar: drop the digit before the caret.
-    const removeIdx = Math.max(0, digitsBeforeCaret - 1);
+    // Deleted character sits at prefixLen; drop the digit before it.
+    const digitsBeforeDelete = digitsOf(previousDisplay.slice(0, prefixLen)).length;
+    const removeIdx = Math.max(0, digitsBeforeDelete - 1);
     digits = prevDigits.slice(0, removeIdx) + prevDigits.slice(removeIdx + 1);
     caretDigits = removeIdx;
   } else {
     digits = nextDigits;
-    const digitDelta = nextDigits.length - prevDigits.length;
-    if (digitDelta > 0) {
-      caretDigits = digitsBeforeCaret + digitDelta;
-    } else if (digitDelta < 0) {
-      caretDigits = Math.max(0, digitsBeforeCaret + digitDelta);
-    } else {
-      caretDigits = digitsBeforeCaret;
-    }
+    caretDigits = nextDigits.length - digitsOf(suffix).length;
   }
 
   // A '+' in nextText (or still carrying digits from a previous international value)
@@ -106,6 +105,30 @@ export function applyPhoneEdit(
   const maxCaret = digitsOf(e164).length;
   const caret = caretAfterDigits(display, Math.min(Math.max(0, caretDigits), maxCaret));
   return { e164, display, caret };
+}
+
+/** commonPrefixLength is how many leading characters previous and next share. */
+function commonPrefixLength(previous: string, next: string): number {
+  const n = Math.min(previous.length, next.length);
+  let i = 0;
+  while (i < n && previous[i] === next[i]) {
+    i++;
+  }
+  return i;
+}
+
+/**
+ * commonSuffixLength is the shared trailing run after the common prefix, so the
+ * prefix and suffix never overlap when the strings differ only in the middle.
+ */
+function commonSuffixLength(previous: string, next: string, prefixLen: number): number {
+  const maxPrev = previous.length - prefixLen;
+  const maxNext = next.length - prefixLen;
+  let i = 0;
+  while (i < maxPrev && i < maxNext && previous[previous.length - 1 - i] === next[next.length - 1 - i]) {
+    i++;
+  }
+  return i;
 }
 
 function digitsToE164(digits: string, explicitPlus: boolean, nextText: string): string {
