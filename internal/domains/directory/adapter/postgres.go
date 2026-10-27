@@ -136,8 +136,8 @@ func (t *postgresTx) RejectSpecialist(ctx context.Context, id uuid.UUID, reason 
 func (t *postgresTx) UpsertReview(ctx context.Context, r model.Review) (model.Review, error) {
 	row, err := t.q.UpsertReview(ctx, directorystore.UpsertReviewParams{
 		ID: r.ID, SpecialistID: r.SpecialistID, AuthorID: r.AuthorID,
-		Rating: int32(r.Rating), //nolint:gosec // validated 1..5
-		Text:   r.Text, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+		Rating:  int32(r.Rating), //nolint:gosec // validated 1..5
+		Content: r.Text, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	})
 	if err != nil {
 		return model.Review{}, fmt.Errorf("upsert review: %w", err)
@@ -242,7 +242,7 @@ func mapSpecialist(r directorystore.DirectorySpecialist) model.Specialist {
 func mapReview(r directorystore.DirectoryReview) model.Review {
 	return model.Review{
 		ID: r.ID, SpecialistID: r.SpecialistID, AuthorID: r.AuthorID, Rating: int(r.Rating),
-		Text: r.Text, Status: r.Status, RejectReason: r.RejectReason,
+		Text: r.Content, Status: r.Status, RejectReason: r.RejectReason,
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
 }

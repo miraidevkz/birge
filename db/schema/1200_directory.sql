@@ -52,8 +52,8 @@ CREATE TABLE directory.reviews (
     specialist_id uuid        NOT NULL REFERENCES directory.specialists (id),
     author_id     uuid        NOT NULL,
     rating        integer     NOT NULL CHECK (rating BETWEEN 1 AND 5),
-    text          text        NOT NULL
-                              CHECK (char_length(text) BETWEEN 1 AND 1000),
+    content       text        NOT NULL
+                              CHECK (char_length(content) BETWEEN 1 AND 1000),
     status        text        NOT NULL
                               CHECK (status IN ('pending', 'active', 'rejected')),
     reject_reason text        CHECK (reject_reason IS NULL OR char_length(reject_reason) <= 40),

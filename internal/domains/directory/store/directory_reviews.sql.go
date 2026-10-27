@@ -17,7 +17,7 @@ UPDATE directory.reviews
 SET status = 'active', reject_reason = NULL, updated_at = $1
 WHERE id = $2
   AND status = 'pending'
-RETURNING id, specialist_id, author_id, rating, text, status, reject_reason, created_at, updated_at
+RETURNING id, specialist_id, author_id, rating, content, status, reject_reason, created_at, updated_at
 `
 
 type ApproveReviewParams struct {
@@ -33,7 +33,7 @@ func (q *Queries) ApproveReview(ctx context.Context, arg ApproveReviewParams) (D
 		&i.SpecialistID,
 		&i.AuthorID,
 		&i.Rating,
-		&i.Text,
+		&i.Content,
 		&i.Status,
 		&i.RejectReason,
 		&i.CreatedAt,
@@ -63,7 +63,7 @@ func (q *Queries) AverageActiveRating(ctx context.Context, specialistID uuid.UUI
 }
 
 const getReview = `-- name: GetReview :one
-SELECT id, specialist_id, author_id, rating, text, status, reject_reason, created_at, updated_at
+SELECT id, specialist_id, author_id, rating, content, status, reject_reason, created_at, updated_at
 FROM directory.reviews
 WHERE id = $1
 `
@@ -76,7 +76,7 @@ func (q *Queries) GetReview(ctx context.Context, id uuid.UUID) (DirectoryReview,
 		&i.SpecialistID,
 		&i.AuthorID,
 		&i.Rating,
-		&i.Text,
+		&i.Content,
 		&i.Status,
 		&i.RejectReason,
 		&i.CreatedAt,
@@ -86,7 +86,7 @@ func (q *Queries) GetReview(ctx context.Context, id uuid.UUID) (DirectoryReview,
 }
 
 const getReviewBySpecialistAuthor = `-- name: GetReviewBySpecialistAuthor :one
-SELECT id, specialist_id, author_id, rating, text, status, reject_reason, created_at, updated_at
+SELECT id, specialist_id, author_id, rating, content, status, reject_reason, created_at, updated_at
 FROM directory.reviews
 WHERE specialist_id = $1
   AND author_id = $2
@@ -105,7 +105,7 @@ func (q *Queries) GetReviewBySpecialistAuthor(ctx context.Context, arg GetReview
 		&i.SpecialistID,
 		&i.AuthorID,
 		&i.Rating,
-		&i.Text,
+		&i.Content,
 		&i.Status,
 		&i.RejectReason,
 		&i.CreatedAt,
@@ -115,7 +115,7 @@ func (q *Queries) GetReviewBySpecialistAuthor(ctx context.Context, arg GetReview
 }
 
 const getReviewForUpdate = `-- name: GetReviewForUpdate :one
-SELECT id, specialist_id, author_id, rating, text, status, reject_reason, created_at, updated_at
+SELECT id, specialist_id, author_id, rating, content, status, reject_reason, created_at, updated_at
 FROM directory.reviews
 WHERE id = $1
 FOR UPDATE
@@ -129,7 +129,7 @@ func (q *Queries) GetReviewForUpdate(ctx context.Context, id uuid.UUID) (Directo
 		&i.SpecialistID,
 		&i.AuthorID,
 		&i.Rating,
-		&i.Text,
+		&i.Content,
 		&i.Status,
 		&i.RejectReason,
 		&i.CreatedAt,
@@ -139,7 +139,7 @@ func (q *Queries) GetReviewForUpdate(ctx context.Context, id uuid.UUID) (Directo
 }
 
 const listLatestActiveReviews = `-- name: ListLatestActiveReviews :many
-SELECT id, specialist_id, author_id, rating, text, status, reject_reason, created_at, updated_at
+SELECT id, specialist_id, author_id, rating, content, status, reject_reason, created_at, updated_at
 FROM directory.reviews
 WHERE specialist_id = $1
   AND status = 'active'
@@ -166,7 +166,7 @@ func (q *Queries) ListLatestActiveReviews(ctx context.Context, arg ListLatestAct
 			&i.SpecialistID,
 			&i.AuthorID,
 			&i.Rating,
-			&i.Text,
+			&i.Content,
 			&i.Status,
 			&i.RejectReason,
 			&i.CreatedAt,
@@ -187,7 +187,7 @@ UPDATE directory.reviews
 SET status = 'rejected', reject_reason = $1, updated_at = $2
 WHERE id = $3
   AND status = 'pending'
-RETURNING id, specialist_id, author_id, rating, text, status, reject_reason, created_at, updated_at
+RETURNING id, specialist_id, author_id, rating, content, status, reject_reason, created_at, updated_at
 `
 
 type RejectReviewParams struct {
@@ -204,7 +204,7 @@ func (q *Queries) RejectReview(ctx context.Context, arg RejectReviewParams) (Dir
 		&i.SpecialistID,
 		&i.AuthorID,
 		&i.Rating,
-		&i.Text,
+		&i.Content,
 		&i.Status,
 		&i.RejectReason,
 		&i.CreatedAt,
@@ -215,17 +215,17 @@ func (q *Queries) RejectReview(ctx context.Context, arg RejectReviewParams) (Dir
 
 const upsertReview = `-- name: UpsertReview :one
 INSERT INTO directory.reviews (
-    id, specialist_id, author_id, rating, text, status, created_at, updated_at
+    id, specialist_id, author_id, rating, content, status, created_at, updated_at
 ) VALUES (
     $1, $2, $3, $4, $5, 'pending', $6, $7
 )
 ON CONFLICT (specialist_id, author_id) DO UPDATE
 SET rating = EXCLUDED.rating,
-    text = EXCLUDED.text,
+    content = EXCLUDED.content,
     status = 'pending',
     reject_reason = NULL,
     updated_at = EXCLUDED.updated_at
-RETURNING id, specialist_id, author_id, rating, text, status, reject_reason, created_at, updated_at
+RETURNING id, specialist_id, author_id, rating, content, status, reject_reason, created_at, updated_at
 `
 
 type UpsertReviewParams struct {
@@ -233,7 +233,7 @@ type UpsertReviewParams struct {
 	SpecialistID uuid.UUID
 	AuthorID     uuid.UUID
 	Rating       int32
-	Text         string
+	Content      string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
@@ -246,7 +246,7 @@ func (q *Queries) UpsertReview(ctx context.Context, arg UpsertReviewParams) (Dir
 		arg.SpecialistID,
 		arg.AuthorID,
 		arg.Rating,
-		arg.Text,
+		arg.Content,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -256,7 +256,7 @@ func (q *Queries) UpsertReview(ctx context.Context, arg UpsertReviewParams) (Dir
 		&i.SpecialistID,
 		&i.AuthorID,
 		&i.Rating,
-		&i.Text,
+		&i.Content,
 		&i.Status,
 		&i.RejectReason,
 		&i.CreatedAt,

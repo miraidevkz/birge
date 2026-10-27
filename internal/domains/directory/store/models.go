@@ -15,7 +15,7 @@ type DirectoryReview struct {
 	SpecialistID uuid.UUID
 	AuthorID     uuid.UUID
 	Rating       int32
-	Text         string
+	Content      string
 	Status       string
 	RejectReason *string
 	CreatedAt    time.Time
