@@ -16,6 +16,7 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 
 ## Safety and privacy
 
+- **Check an image's declared size before decoding it.** `image.DecodeConfig` reads only the header; refuse width×height above a limit before `image.Decode`, or a small file that claims a huge image exhausts memory. (sharing photo processing review)
 - **Never drop a critical notification silently.** A budget or guard that blocks a crisis SMS fails loudly (`failed`, Error log with an event name for alerting), and the daily budget does not apply to critical messages. (190cb6e)
 - **A log line never joins a person to health data.** Log a record ID (check-in, escalation), not the member ID next to a flag, score or category. (d183550)
 - **Bind ciphertexts and wrapped keys to their owner.** Associated data names the field and the row (`<context>.<table>.<column>|<id>`); a wrapped data key is bound to its member and KEK, so a copied value fails to open. (23756ea)
