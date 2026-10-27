@@ -39,12 +39,13 @@ linters:
     revive:
       rules:
         - name: exported
-          disabled: true
+          arguments: [checkPrivateReceivers, sayRepetitiveInsteadOfStutters]
+        - name: package-comments
   exclusions:
     generated: strict
     rules:
       - path: _test\.go
-        linters: [gosec, wrapcheck, noctx]
+        linters: [gosec, wrapcheck, noctx, revive]
       # Development and test tooling, not part of the production binary.
       - path: (cmd/birge-dbtool|internal/platform/(pgtemp|testinfra))/
         linters: [gosec, noctx, wrapcheck]
