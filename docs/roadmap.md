@@ -8,7 +8,8 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [ ] ASVS checklist
 - [x] `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`
 - [x] Go module and `cmd/birge` skeleton with health endpoints and graceful shutdown
-- [ ] `internal/platform`: db, outbox, timers, crypto interface, telemetry
+- [x] `internal/platform`: db, clock, outbox + JetStream publisher, timers (sqlc)
+- [ ] `internal/platform`: crypto interface, telemetry; integration tests against PostgreSQL/NATS
 - [x] `contracts/`: OpenAPI 3.1 skeleton, event envelope schema
 - [ ] Codegen (Go server, TS client)
 - [x] `db/schema.sql` for platform tables (outbox, timers, audit)

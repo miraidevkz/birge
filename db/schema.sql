@@ -34,7 +34,6 @@ CREATE TABLE platform.timers (
     due_at       timestamptz NOT NULL,
     payload      jsonb       NOT NULL DEFAULT '{}'::jsonb,
     attempts     integer     NOT NULL DEFAULT 0,
-    locked_until timestamptz,
     last_error   text,
     created_at   timestamptz NOT NULL DEFAULT now(),
     done_at      timestamptz
