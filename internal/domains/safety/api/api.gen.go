@@ -128,6 +128,7 @@ func (e EscalationSource) Valid() bool {
 
 // Defines values for Lang.
 const (
+	En Lang = "en"
 	Kk Lang = "kk"
 	Ru Lang = "ru"
 )
@@ -135,6 +136,8 @@ const (
 // Valid indicates whether the value is a known member of the Lang enum.
 func (e Lang) Valid() bool {
 	switch e {
+	case En:
+		return true
 	case Kk:
 		return true
 	case Ru:
@@ -276,8 +279,10 @@ type EscalationStatus string
 // EscalationContact defines model for EscalationContact.
 type EscalationContact struct {
 	DisplayName string `json:"displayName"`
-	Lang        Lang   `json:"lang"`
-	Phone       string `json:"phone"`
+
+	// Lang Interface languages at launch. New languages are added by configuration and locale files (ADR-0014).
+	Lang  Lang   `json:"lang"`
+	Phone string `json:"phone"`
 }
 
 // EscalationPage defines model for EscalationPage.
@@ -295,7 +300,7 @@ type HelpRequestAccepted struct {
 	EscalationId openapi_types.UUID `json:"escalationId"`
 }
 
-// Lang defines model for Lang.
+// Lang Interface languages at launch. New languages are added by configuration and locale files (ADR-0014).
 type Lang string
 
 // Problem defines model for Problem.

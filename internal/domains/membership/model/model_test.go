@@ -63,7 +63,7 @@ func TestChildInputNormalize(t *testing.T) {
 }
 
 func TestProfileUpdateNormalize(t *testing.T) {
-	name, bad, lang, badLang, nilID := " Example ", "", model.LangRU, model.Lang("en"), uuid.Nil
+	name, bad, lang, badLang, nilID := " Example ", "", model.LangRU, model.Lang("de"), uuid.Nil
 	tests := []struct {
 		name string
 		in   model.ProfileUpdate

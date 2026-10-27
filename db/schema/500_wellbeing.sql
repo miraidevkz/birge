@@ -34,7 +34,7 @@ CREATE INDEX checkins_member_completed_idx
 -- Audio practices metadata; object bytes live in in-jurisdiction object storage.
 CREATE TABLE wellbeing.practices (
     id               uuid        PRIMARY KEY DEFAULT uuidv7(),
-    lang             text        NOT NULL CHECK (lang IN ('kk', 'ru')),
+    lang             text        NOT NULL CHECK (lang IN ('kk', 'ru', 'en')),
     title_key        text        NOT NULL CHECK (char_length(title_key) BETWEEN 1 AND 80),
     duration_seconds integer     NOT NULL CHECK (duration_seconds BETWEEN 1 AND 3600),
     object_key       text        NOT NULL CHECK (char_length(object_key) BETWEEN 1 AND 512),

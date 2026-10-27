@@ -182,7 +182,7 @@ func TestUpdateMe(t *testing.T) {
 		{"blank name", model.ProfileUpdate{DisplayName: ptr("   ")}, false, model.ErrInvalidDisplayName, ""},
 		{"long name", model.ProfileUpdate{DisplayName: ptr(strings.Repeat("ә", 41))}, false, model.ErrInvalidDisplayName, ""},
 		{"control char", model.ProfileUpdate{DisplayName: ptr("a\nb")}, false, model.ErrInvalidDisplayName, ""},
-		{"bad lang", model.ProfileUpdate{Lang: ptr(model.Lang("en"))}, false, model.ErrInvalidLang, ""},
+		{"bad lang", model.ProfileUpdate{Lang: ptr(model.Lang("de"))}, false, model.ErrInvalidLang, ""},
 		{"unknown district", model.ProfileUpdate{DistrictID: ptr(uuid.New())}, false, model.ErrUnknownDistrict, ""},
 		{"seal fails", model.ProfileUpdate{DisplayName: ptr(testName)}, true, errAny, ""},
 	}

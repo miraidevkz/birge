@@ -19,6 +19,7 @@ import (
 
 // Defines values for Lang.
 const (
+	En Lang = "en"
 	Kk Lang = "kk"
 	Ru Lang = "ru"
 )
@@ -26,6 +27,8 @@ const (
 // Valid indicates whether the value is a known member of the Lang enum.
 func (e Lang) Valid() bool {
 	switch e {
+	case En:
+		return true
 	case Kk:
 		return true
 	case Ru:
@@ -119,7 +122,7 @@ type City struct {
 	Id openapi_types.UUID `json:"id"`
 }
 
-// Lang defines model for Lang.
+// Lang Interface languages at launch. New languages are added by configuration and locale files (ADR-0014).
 type Lang string
 
 // Member defines model for Member.
@@ -128,12 +131,14 @@ type Member struct {
 	CityId   *openapi_types.UUID `json:"cityId,omitempty"`
 
 	// DisplayName Absent until the member sets it during onboarding.
-	DisplayName  *string             `json:"displayName,omitempty"`
-	DistrictId   *openapi_types.UUID `json:"districtId,omitempty"`
-	Id           openapi_types.UUID  `json:"id"`
-	Lang         Lang                `json:"lang"`
-	Roles        []MemberRoles       `json:"roles"`
-	Verification MemberVerification  `json:"verification"`
+	DisplayName *string             `json:"displayName,omitempty"`
+	DistrictId  *openapi_types.UUID `json:"districtId,omitempty"`
+	Id          openapi_types.UUID  `json:"id"`
+
+	// Lang Interface languages at launch. New languages are added by configuration and locale files (ADR-0014).
+	Lang         Lang               `json:"lang"`
+	Roles        []MemberRoles      `json:"roles"`
+	Verification MemberVerification `json:"verification"`
 }
 
 // MemberRoles defines model for Member.Roles.
@@ -148,7 +153,9 @@ type MemberUpdate struct {
 
 	// DistrictId The city is derived from the district.
 	DistrictId *openapi_types.UUID `json:"districtId,omitempty"`
-	Lang       *Lang               `json:"lang,omitempty"`
+
+	// Lang Interface languages at launch. New languages are added by configuration and locale files (ADR-0014).
+	Lang *Lang `json:"lang,omitempty"`
 }
 
 // Problem defines model for Problem.

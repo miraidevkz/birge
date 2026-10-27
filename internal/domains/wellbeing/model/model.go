@@ -36,6 +36,7 @@ const (
 const (
 	LangKK = "kk"
 	LangRU = "ru"
+	LangEN = "en"
 )
 
 // AnswersField is the associated-data field name for sealed check-in answers (ADR-0009).
@@ -229,7 +230,7 @@ func SuggestionIsValid(s string) bool {
 
 // LangIsValid reports whether lang is kk or ru.
 func LangIsValid(lang string) bool {
-	return lang == LangKK || lang == LangRU
+	return lang == LangKK || lang == LangRU || lang == LangEN
 }
 
 // InstrumentIsValid reports whether instrument is phq4 or pss4.

@@ -215,7 +215,7 @@ func TestOperations(t *testing.T) {
 		{"malformed patch", call{method: http.MethodPatch, path: "/me", identity: me, key: true, body: `{"lang":`}, 400, "invalid_request"},
 		{"missing key", call{method: http.MethodPatch, path: "/me", identity: me, body: `{"lang":"ru"}`}, 400, "invalid_request"},
 		{"long name", call{method: http.MethodPatch, path: "/me", identity: me, key: true, body: `{"displayName":"` + strings.Repeat("a", 41) + `"}`}, 400, "invalid_display_name"},
-		{"bad lang", call{method: http.MethodPatch, path: "/me", identity: me, key: true, body: `{"lang":"en"}`}, 400, "invalid_lang"},
+		{"bad lang", call{method: http.MethodPatch, path: "/me", identity: me, key: true, body: `{"lang":"de"}`}, 400, "invalid_lang"},
 		{"unknown district", call{method: http.MethodPatch, path: "/me", identity: me, key: true, body: `{"districtId":"` + uuid.NewString() + `"}`}, 400, "unknown_district"},
 		{"bad year", call{method: http.MethodPost, path: "/me/children", identity: me, key: true, body: `{"birthYear":1900,"needs":[]}`}, 400, "invalid_birth_year"},
 		{"unknown need", call{method: http.MethodPost, path: "/me/children", identity: me, key: true, body: `{"birthYear":2019,"needs":["unknown"]}`}, 400, "unknown_need"},

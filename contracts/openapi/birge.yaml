@@ -1002,7 +1002,8 @@ components:
           description: The city is derived from the district.
     Lang:
       type: string
-      enum: [kk, ru]
+      description: Interface languages at launch. New languages are added by configuration and locale files (ADR-0014).
+      enum: [kk, ru, en]
     Child:
       type: object
       additionalProperties: false

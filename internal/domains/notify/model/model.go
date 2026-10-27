@@ -193,7 +193,7 @@ func (r DeliveryRequest) Validate() error {
 type ResolvedRecipient struct {
 	Kind     string // member | external | staff
 	Ref      uuid.UUID
-	Language string // "kk" or "ru"
+	Language string // "kk", "ru" or "en"
 }
 
 // Validate checks Kind and Ref.

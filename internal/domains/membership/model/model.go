@@ -38,10 +38,11 @@ type Lang string
 const (
 	LangKK Lang = "kk"
 	LangRU Lang = "ru"
+	LangEN Lang = "en"
 )
 
 // Valid reports whether l is a supported language.
-func (l Lang) Valid() bool { return l == LangKK || l == LangRU }
+func (l Lang) Valid() bool { return l == LangKK || l == LangRU || l == LangEN }
 
 // Verification is the member's verification state.
 type Verification string

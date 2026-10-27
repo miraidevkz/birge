@@ -486,11 +486,11 @@ func (s *Service) smsText(template, lang string) string {
 	if t := byLang[lang]; t != "" {
 		return t
 	}
-	if t := byLang["ru"]; t != "" {
-		return t
-	}
-	if t := byLang["kk"]; t != "" {
-		return t
+	// Fall back to another language rather than send nothing.
+	for _, l := range []string{"ru", "kk", "en"} {
+		if t := byLang[l]; t != "" {
+			return t
+		}
 	}
 	return ""
 }

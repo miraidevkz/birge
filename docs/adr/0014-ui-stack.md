@@ -9,7 +9,8 @@ Users are tired, stressed parents, often on low-end Android phones and slow netw
 - Components: React Native Reusables (shadcn-style, copied into `packages/ui`, built on `@rn-primitives`) styled with NativeWind v4.
 - Motion: Reanimated and Gesture Handler (UI thread); Lottie for illustrations. 150–250 ms, no spring/bounce. Motion is off when the OS "reduce motion" setting is on. Crisis and SOS screens have no animation.
 - Navigation: Expo Router with native stack transitions. Native platform materials where available (iOS Liquid Glass via Expo's glass/native-tab components), with a plain fallback on older iOS and on Android.
-- Typography: a font family with full Kazakh Cyrillic coverage (PT Sans or Noto Sans, OFL); locales planned as `kk-Cyrl` and `kk-Latn`.
+- Languages at launch: Kazakh, Russian and English (`kk`, `ru`, `en`); `kk-Latn` is added when the Latin alphabet transition requires it. All user-facing text lives in locale files; a new language needs no code change.
+- Typography: a font family with full Kazakh Cyrillic coverage (PT Sans or Noto Sans, OFL).
 - Accessibility: WCAG 2.2 AA contrast, system font scaling, VoiceOver/TalkBack labels, one primary action per screen, SOS reachable from every screen.
 - Design source: Penpot.
 

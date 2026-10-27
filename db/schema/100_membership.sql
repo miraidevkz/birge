@@ -36,7 +36,7 @@ CREATE TABLE membership.members (
     -- Personal data: sealed with the member's key through the Encryptor port
     -- (ADR-0009). NULL until the member sets a name.
     display_name bytea       CHECK (octet_length(display_name) <= 1024),
-    lang         text        NOT NULL DEFAULT 'kk' CHECK (lang IN ('kk', 'ru')),
+    lang         text        NOT NULL DEFAULT 'kk' CHECK (lang IN ('kk', 'ru', 'en')),
     district_id  uuid        REFERENCES membership.districts (id),
     verification text        NOT NULL DEFAULT 'new' CHECK (verification IN ('new', 'pending', 'verified')),
     roles        text[]      NOT NULL DEFAULT '{mom}'
