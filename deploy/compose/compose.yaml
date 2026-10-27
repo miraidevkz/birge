@@ -182,13 +182,14 @@ services:
       hydra-migrate: { condition: service_completed_successfully }
       keygen: { condition: service_completed_successfully }
 
-  # Registers the admin app (public client, PKCE) once; later starts keep it.
+  # Registers the admin app (public client, PKCE) from hydra/admin-client.json
+  # on every start, so edits to the file apply; it holds no secret or data.
   hydra-clients:
     image: oryd/hydra:v26.2.0
     entrypoint: ["sh", "-c"]
     command:
       - >-
-        hydra get oauth2-client birge-admin -e http://hydra:4445 >/dev/null 2>&1 ||
+        { hydra delete oauth2-client birge-admin -e http://hydra:4445 >/dev/null 2>&1 || true; } &&
         hydra import oauth2-client /etc/config/hydra/admin-client.json -e http://hydra:4445
     volumes:
       - ./hydra:/etc/config/hydra:ro
