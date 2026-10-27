@@ -79,6 +79,8 @@ describe('AssistantScreen', () => {
     await fireEvent.changeText(screen.getByTestId('assistant-input'), 'Hello');
     await fireEvent.press(screen.getByTestId('assistant-send'));
     expect(await screen.findByText('Could not send. Try again.')).toBeTruthy();
+    // A failed send still offers Help: the message might have been a crisis.
+    expect(screen.getByTestId('assistant-error-help')).toBeTruthy();
   });
 
   it('on crisis shows the fixed help text and a Help link', async () => {
@@ -96,8 +98,10 @@ describe('AssistantScreen', () => {
     await renderAssistant();
     await fireEvent.changeText(screen.getByTestId('assistant-input'), 'I cannot go on');
     await fireEvent.press(screen.getByTestId('assistant-send'));
-    // Fixed help text is shown on the crisis message and in the sticky crisis banner.
-    expect((await screen.findAllByText(/You are not alone/)).length).toBeGreaterThan(0);
+    // The fixed help text is shown once, with 112 and the reply's crisis phones right there.
+    expect(await screen.findAllByText(/You are not alone/)).toHaveLength(1);
+    expect(screen.getByTestId('call-112')).toBeTruthy();
+    expect(await screen.findByText('+70000000002')).toBeTruthy();
     expect(screen.getByTestId('assistant-open-help')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('assistant-open-help'));
     await waitFor(() => expect(router.push).toHaveBeenCalledWith('/sos'));

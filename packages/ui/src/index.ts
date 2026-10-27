@@ -24,6 +24,8 @@ export { EmptyState, ErrorState, LoadingState } from './states';
 export type { EmptyStateProps, ErrorStateProps } from './states';
 export { Heading, Text } from './text';
 export type { HeadingProps, TextProps, TextTone, TextVariant } from './text';
+export { CallItem, LifeThreatBanner } from './call';
+export type { CallItemProps, LifeThreatBannerProps } from './call';
 export { PhoneField } from './phone-field';
 export type { PhoneFieldProps } from './phone-field';
 export { applyPhoneEdit, digitsOf, formatPhone, toE164 } from './phone';

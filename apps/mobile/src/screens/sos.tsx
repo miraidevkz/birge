@@ -5,11 +5,21 @@
 // of the crisis phone list (mvp §4.6, non-negotiable 1).
 import { ApiError, unwrap, type Schemas } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
-import { Banner, Button, Heading, List, ListItem, Screen, Text, TextField } from '@birge/ui';
+import {
+  Banner,
+  Button,
+  CallItem,
+  Heading,
+  LifeThreatBanner,
+  List,
+  ListItem,
+  Screen,
+  Text,
+  TextField,
+} from '@birge/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Linking } from 'react-native';
 
 import { api } from '@/lib/api';
 import { saveCrisisPhones, useCrisisPhones } from '@/lib/crisis-phones';
@@ -20,9 +30,6 @@ type SosRequest = Schemas['SosRequest'];
 type SosType = Schemas['SosType'];
 type DraftType = SosType | null;
 type HelpStatus = 'idle' | 'sending' | 'sent' | 'queued' | 'failed';
-
-/** LIFE_THREAT_NUMBER is fixed and independent of CRISIS_PHONES / the network. */
-const LIFE_THREAT_NUMBER = '112';
 
 /** SosScreen raises and closes SOS and shows crisis phones immediately. */
 export function SosScreen() {
@@ -227,29 +234,16 @@ export function SosScreen() {
         data={phones}
         keyExtractor={(p) => p.number}
         renderItem={({ item }) => (
-          <ListItem
-            title={item.label}
-            subtitle={item.number}
+          <CallItem
+            label={item.label}
+            number={item.number}
             accessibilityLabel={t('call', { label: item.label, number: item.number })}
-            onPress={() => void Linking.openURL(`tel:${item.number}`)}
           />
         )}
         empty={{ title: t('phonesHeading'), description: t('noPhones') }}
         header={
           <>
-            <Banner
-              tone="danger"
-              action={
-                <Button
-                  title={tHelp('call112')}
-                  variant="destructive"
-                  onPress={() => void Linking.openURL(`tel:${LIFE_THREAT_NUMBER}`)}
-                  testID="call-112"
-                />
-              }
-            >
-              {tHelp('lifeThreat')}
-            </Banner>
+            <LifeThreatBanner message={tHelp('lifeThreat')} callTitle={tHelp('call112')} />
             {banner ? <Banner tone={banner.tone}>{t(banner.key)}</Banner> : null}
             {phones.length > 0 ? <Heading>{t('phonesHeading')}</Heading> : null}
             {signedIn && open.length > 0 ? (

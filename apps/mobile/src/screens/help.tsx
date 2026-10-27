@@ -10,10 +10,9 @@
 //     a session (and then links to sign-in).
 import { unwrap, type Schemas } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
-import { Banner, Button, Heading, List, ListItem, Screen, Text } from '@birge/ui';
+import { Banner, Button, CallItem, Heading, LifeThreatBanner, List, Screen, Text } from '@birge/ui';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Linking } from 'react-native';
 
 import { api } from '@/lib/api';
 import { saveCrisisPhones, useCrisisPhones } from '@/lib/crisis-phones';
@@ -22,9 +21,6 @@ import { useSession } from '@/lib/session';
 
 type Source = Schemas['EscalationSource'];
 type Status = 'idle' | 'sending' | 'sent' | 'queued' | 'failed';
-
-/** LIFE_THREAT_NUMBER is fixed and independent of CRISIS_PHONES / the network. */
-const LIFE_THREAT_NUMBER = '112';
 
 const bannerFor = {
   sent: { tone: 'success', key: 'status.sent' },
@@ -123,29 +119,16 @@ export function HelpScreen({ source }: { source: Source }) {
         data={phones}
         keyExtractor={(p) => p.number}
         renderItem={({ item }) => (
-          <ListItem
-            title={item.label}
-            subtitle={item.number}
+          <CallItem
+            label={item.label}
+            number={item.number}
             accessibilityLabel={t('call', { label: item.label, number: item.number })}
-            onPress={() => void Linking.openURL(`tel:${item.number}`)}
           />
         )}
         empty={{ title: t('phonesHeading'), description: t('noPhones') }}
         header={
           <>
-            <Banner
-              tone="danger"
-              action={
-                <Button
-                  title={t('call112')}
-                  variant="destructive"
-                  onPress={() => void Linking.openURL(`tel:${LIFE_THREAT_NUMBER}`)}
-                  testID="call-112"
-                />
-              }
-            >
-              {t('lifeThreat')}
-            </Banner>
+            <LifeThreatBanner message={t('lifeThreat')} callTitle={t('call112')} />
             <Text variant="label">{t('intro')}</Text>
             {banner ? <Banner tone={banner.tone}>{t(banner.key)}</Banner> : null}
             {phones.length > 0 ? <Heading>{t('phonesHeading')}</Heading> : null}

@@ -1,13 +1,26 @@
-// AI assistant chat. Crisis replies show the fixed help text and a Help link;
+// AI assistant chat. Crisis replies show the fixed help text, "call 112" and
+// the crisis phones in the reply itself (ADR-0023), plus a Help link;
 // reaching Help never depends on this screen (SOS is on every Screen; Help is /sos).
 import { ApiError, unwrap, type Schemas } from '@birge/api';
 import { i18n, useTranslation, type Language } from '@birge/i18n';
-import { Banner, Button, Card, ChoiceGroup, List, ListItem, Screen, Text, TextField } from '@birge/ui';
+import {
+  Banner,
+  Button,
+  CallItem,
+  Card,
+  ChoiceGroup,
+  LifeThreatBanner,
+  List,
+  ListItem,
+  Screen,
+  Text,
+  TextField,
+} from '@birge/ui';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
 
 import { api } from '@/lib/api';
-import { saveCrisisPhones } from '@/lib/crisis-phones';
+import { saveCrisisPhones, useCrisisPhones } from '@/lib/crisis-phones';
 import { flushOutbox, outbox } from '@/lib/help-outbox';
 
 type Scope = Schemas['AssistantMessageInput']['scope'];
@@ -43,6 +56,7 @@ export function AssistantScreen() {
   const [error, setError] = useState<'consent_required' | 'daily_limit' | 'unknown' | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [crisisActive, setCrisisActive] = useState(false);
+  const phones = useCrisisPhones();
   const [contactStatus, setContactStatus] = useState<'idle' | 'sending' | 'queued' | 'sent' | 'failed'>('idle');
 
   const contactPerson = useCallback(async () => {
@@ -159,14 +173,22 @@ export function AssistantScreen() {
         renderItem={({ item }) => (
           <Card testID={`assistant-msg-${item.id}`}>
             <ListItem
-              title={item.role === 'user' ? t('you') : t('assistant')}
+              title={item.crisis ? t('crisis.heading') : item.role === 'user' ? t('you') : t('assistant')}
               subtitle={item.text}
               emphasis={item.crisis === true}
             />
             {item.crisis ? (
-              <Banner tone="danger" title={t('crisis.heading')}>
-                {tHelp('intro')}
-              </Banner>
+              <>
+                <LifeThreatBanner message={tHelp('lifeThreat')} callTitle={tHelp('call112')} />
+                {phones.map((p) => (
+                  <CallItem
+                    key={p.number}
+                    label={p.label}
+                    number={p.number}
+                    accessibilityLabel={tHelp('call', { label: p.label, number: p.number })}
+                  />
+                ))}
+              </>
             ) : null}
             {item.degraded ? (
               <Banner
@@ -222,15 +244,25 @@ export function AssistantScreen() {
               </Banner>
             ) : null}
             {error === 'daily_limit' ? <Banner tone="warning">{t('errors.daily_limit')}</Banner> : null}
-            {error === 'unknown' ? <Banner tone="danger">{t('errors.unknown')}</Banner> : null}
+            {error === 'unknown' ? (
+              <Banner
+                tone="danger"
+                action={
+                  <Button
+                    title={t('crisis.openHelp')}
+                    variant="secondary"
+                    size="sm"
+                    onPress={() => router.push('/sos')}
+                    testID="assistant-error-help"
+                  />
+                }
+              >
+                {t('errors.unknown')}
+              </Banner>
+            ) : null}
             {contactStatus === 'queued' ? <Banner tone="info">{tHelp('status.queued')}</Banner> : null}
             {contactStatus === 'sent' ? <Banner tone="success">{tHelp('status.sent')}</Banner> : null}
             {contactStatus === 'failed' ? <Banner tone="danger">{tHelp('status.failed')}</Banner> : null}
-            {crisisActive ? (
-              <Banner tone="danger" title={t('crisis.heading')}>
-                {tHelp('intro')}
-              </Banner>
-            ) : null}
           </>
         }
         testID="assistant-messages"
