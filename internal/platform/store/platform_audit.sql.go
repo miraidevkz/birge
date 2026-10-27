@@ -11,6 +11,26 @@ import (
 	"github.com/google/uuid"
 )
 
+const auditEntryExists = `-- name: AuditEntryExists :one
+SELECT EXISTS (
+    SELECT 1 FROM platform.audit_log
+    WHERE object_type = $1 AND object_id = $2::uuid AND action = $3
+) AS found
+`
+
+type AuditEntryExistsParams struct {
+	ObjectType string
+	ObjectID   uuid.UUID
+	Action     string
+}
+
+func (q *Queries) AuditEntryExists(ctx context.Context, arg AuditEntryExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, auditEntryExists, arg.ObjectType, arg.ObjectID, arg.Action)
+	var found bool
+	err := row.Scan(&found)
+	return found, err
+}
+
 const insertAuditEntry = `-- name: InsertAuditEntry :exec
 INSERT INTO platform.audit_log (actor_id, actor_role, action, object_type, object_id, reason)
 VALUES ($1, $2, $3, $4, $5, $6)

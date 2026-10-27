@@ -70,6 +70,25 @@ func (q *Queries) DeletePublishedEventsBefore(ctx context.Context, before *time.
 	return result.RowsAffected(), nil
 }
 
+const eventProcessed = `-- name: EventProcessed :one
+SELECT EXISTS (
+    SELECT 1 FROM platform.processed_events
+    WHERE consumer = $1 AND event_id = $2
+) AS found
+`
+
+type EventProcessedParams struct {
+	Consumer string
+	EventID  uuid.UUID
+}
+
+func (q *Queries) EventProcessed(ctx context.Context, arg EventProcessedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, eventProcessed, arg.Consumer, arg.EventID)
+	var found bool
+	err := row.Scan(&found)
+	return found, err
+}
+
 const insertOutboxEvent = `-- name: InsertOutboxEvent :one
 INSERT INTO platform.outbox (event_type, event_version, payload, trace_parent, occurred_at)
 VALUES ($1, $2, $3, $4, $5)

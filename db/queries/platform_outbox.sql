@@ -25,6 +25,12 @@ SELECT min(occurred_at)::timestamptz AS oldest
 FROM platform.outbox
 WHERE published_at IS NULL;
 
+-- name: EventProcessed :one
+SELECT EXISTS (
+    SELECT 1 FROM platform.processed_events
+    WHERE consumer = @consumer AND event_id = @event_id
+) AS found;
+
 -- name: MarkEventProcessed :execrows
 INSERT INTO platform.processed_events (consumer, event_id)
 VALUES (@consumer, @event_id)

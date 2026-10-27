@@ -57,6 +57,56 @@ func Record(ctx context.Context, q *store.Queries, e Entry) error {
 	return nil
 }
 
+// SystemActorID is the actor of entries written by the platform itself
+// (account deletion), not by a person. It is a fixed, documented value so a
+// reader can tell such entries apart from those of staff and members.
+var SystemActorID = uuid.MustParse("00000000-0000-7000-8000-000000000001")
+
+// RoleSystem is the actor role of entries written with SystemActorID.
+const RoleSystem = "system"
+
+// AuditObjectMember is the object type of entries about a member as a whole.
+const AuditObjectMember = "member"
+
+// RecordOnce inserts e unless an entry with the same action, object type and
+// object ID exists. Idempotent work (account deletion re-run after a
+// redelivered event) uses it so a retry adds no second entry. e.ObjectID is
+// required. Two concurrent first calls could both insert; callers that must
+// not race lock their own rows first.
+func RecordOnce(ctx context.Context, q *store.Queries, e Entry) error {
+	if e.ObjectID == uuid.Nil {
+		return fmt.Errorf("audit: object id is required for %s", e.Action)
+	}
+	if err := validate(e); err != nil {
+		return err
+	}
+	found, err := q.AuditEntryExists(ctx, store.AuditEntryExistsParams{
+		ObjectType: e.ObjectType, ObjectID: e.ObjectID, Action: e.Action,
+	})
+	if err != nil {
+		return fmt.Errorf("audit: look up %s: %w", e.Action, err)
+	}
+	if found {
+		return nil
+	}
+	return Record(ctx, q, e)
+}
+
+// MemberDeleted is the entry a bounded context writes once when it has
+// erased a member's data on account deletion: action
+// "<context>.member_deleted", object "member" with the member ID, actor system.
+func MemberDeleted(boundedContext string, memberID uuid.UUID) Entry {
+	return Entry{
+		ActorID: SystemActorID, ActorRole: RoleSystem,
+		Action: boundedContext + ".member_deleted", ObjectType: AuditObjectMember, ObjectID: memberID,
+	}
+}
+
+// RecordMemberDeleted writes MemberDeleted(boundedContext, memberID) once.
+func RecordMemberDeleted(ctx context.Context, q *store.Queries, boundedContext string, memberID uuid.UUID) error {
+	return RecordOnce(ctx, q, MemberDeleted(boundedContext, memberID))
+}
+
 func validate(e Entry) error {
 	if e.ActorID == uuid.Nil {
 		return fmt.Errorf("audit: actor id is required")

@@ -32,6 +32,29 @@ func (q *Queries) CancelTimers(ctx context.Context, arg CancelTimersParams) (int
 	return result.RowsAffected(), nil
 }
 
+const cancelTimersForSubjects = `-- name: CancelTimersForSubjects :execrows
+UPDATE platform.timers
+SET done_at = $1, last_error = 'cancelled'
+WHERE kind = ANY($2::text[]) AND subject_id = ANY($3::uuid[]) AND done_at IS NULL
+`
+
+type CancelTimersForSubjectsParams struct {
+	DoneAt     *time.Time
+	Kinds      []string
+	SubjectIds []uuid.UUID
+}
+
+// CancelTimersForSubjects cancels the pending timers of the given kinds
+// whose subject is one of subject_ids (account deletion cancels a member's
+// timers and those of her records in one statement).
+func (q *Queries) CancelTimersForSubjects(ctx context.Context, arg CancelTimersForSubjectsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelTimersForSubjects, arg.DoneAt, arg.Kinds, arg.SubjectIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimDueTimer = `-- name: ClaimDueTimer :one
 SELECT id, kind, subject_id, dedup_key, due_at, payload, attempts
 FROM platform.timers

@@ -72,6 +72,22 @@ func Cancel(ctx context.Context, q *store.Queries, now time.Time, kind string, s
 	return q.CancelTimers(ctx, store.CancelTimersParams{DoneAt: &now, Kind: kind, SubjectID: subject})
 }
 
+// CancelSubjects marks the active timers of the given kinds whose subject is
+// in subjects as done without firing them. Cancelling nothing is not an
+// error, so a repeated call (idempotent account deletion) changes nothing.
+func CancelSubjects(ctx context.Context, q *store.Queries, now time.Time, kinds []string, subjects []uuid.UUID) (int64, error) {
+	if len(kinds) == 0 || len(subjects) == 0 {
+		return 0, nil
+	}
+	n, err := q.CancelTimersForSubjects(ctx, store.CancelTimersForSubjectsParams{
+		DoneAt: &now, Kinds: kinds, SubjectIds: subjects,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("timers: cancel for subjects: %w", err)
+	}
+	return n, nil
+}
+
 // Backoff is the delay before retry number attempts+1: 10s, 20s, 40s, ... capped at 1h.
 func Backoff(attempts int) time.Duration {
 	const base, ceiling = 10 * time.Second, time.Hour

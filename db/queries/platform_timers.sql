@@ -26,6 +26,14 @@ UPDATE platform.timers
 SET done_at = @done_at, last_error = 'cancelled'
 WHERE kind = @kind AND subject_id = @subject_id AND done_at IS NULL;
 
+-- CancelTimersForSubjects cancels the pending timers of the given kinds
+-- whose subject is one of subject_ids (account deletion cancels a member's
+-- timers and those of her records in one statement).
+-- name: CancelTimersForSubjects :execrows
+UPDATE platform.timers
+SET done_at = @done_at, last_error = 'cancelled'
+WHERE kind = ANY(@kinds::text[]) AND subject_id = ANY(@subject_ids::uuid[]) AND done_at IS NULL;
+
 -- name: OldestOverdueTimer :one
 SELECT min(due_at)::timestamptz AS oldest
 FROM platform.timers
