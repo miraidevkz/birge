@@ -17,6 +17,12 @@ x-birge-env: &birge-env
   BIRGE_SMS_ALLOWED_PREFIXES: ${BIRGE_SMS_ALLOWED_PREFIXES:-+77}
   BIRGE_PRACTICES_BASE_URL: https://objects.example.invalid
   BIRGE_DELIVERY_MODE: dev
+  # Development retries the sign-in many times from one number and one
+  # phone; the production defaults (3 codes per number per 10 minutes,
+  # 5 SMS per number per hour) would lock testers out. Override to test them.
+  BIRGE_AUTH_RATE_PER_NUMBER: ${BIRGE_AUTH_RATE_PER_NUMBER:-60/1s}
+  BIRGE_AUTH_RATE_PER_IP: ${BIRGE_AUTH_RATE_PER_IP:-120/1s}
+  BIRGE_SMS_PER_NUMBER_LIMIT: ${BIRGE_SMS_PER_NUMBER_LIMIT:-500}
   # The web client below; native clients send no Origin and stay allowed.
   BIRGE_CHAT_WS_ORIGINS: localhost:8081
 

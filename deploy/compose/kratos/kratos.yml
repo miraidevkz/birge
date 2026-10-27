@@ -20,11 +20,13 @@ selfservice:
     code:
       enabled: true
       passwordless_enabled: true
+  # 30 minutes (production: 10) so a tester reading codes by hand is not
+  # timed out.
   flows:
     login:
-      lifespan: 10m
+      lifespan: 30m
     registration:
-      lifespan: 10m
+      lifespan: 30m
       after:
         code:
           hooks:
