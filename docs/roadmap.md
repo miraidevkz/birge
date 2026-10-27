@@ -62,7 +62,6 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 ## Follow-ups from wave 3
 
 - [ ] Wire `emergency` (settings, MemberInfo/Blocks/Acquaintances adapters, notify trusted-contact resolution through `TrustedContactTarget`/`ContactPhone`, district push on `SosShared`)
-- [ ] Platform audit API (safety and emergency insert into `platform.audit_log` with raw SQL for now)
 - [ ] Endpoints for trusted contacts and moderators to read an SOS; list and decline invitations; rate limit invitation notifications
 - [ ] One-time links for external contacts to view a sent emergency plan
 - [ ] Locale keys and SMS texts for every notification template in use

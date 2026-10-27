@@ -9,7 +9,7 @@ The crisis path (ADR-0023): level-1 crisis detection on a local lexicon, escalat
 | `escalations` | One row per request for a person; lifecycle enforced by `escalations_lifecycle_check`; at most one open-or-taken row per member (`escalations_active_member_idx`) | `member_id` (pseudonymous ID); `note` encrypted with the member's data key (AD `safety.escalations.note\|<id>`) |
 | `duty_shifts` | Primary and backup shifts per role; id is the client's Idempotency-Key; cancelled, never deleted | `phone` encrypted with the staff member's data key (AD `safety.duty_shifts.phone\|<id>`) |
 
-Writes to `platform.audit_log` through the `Auditor` port (see Open questions).
+Writes to `platform.audit_log` through the `Auditor` port (`internal/platform/audit`).
 
 ## API
 
@@ -100,7 +100,6 @@ One UTF-8 file per language and category, `<kk|ru|en>.<category>.txt`; one entry
 
 ## Open questions
 
-- **Audit insert is temporary.** `adapter/audit.go` writes `platform.audit_log` with a raw SQL statement because platform has no audit API yet; replace it with a platform audit package.
 - `Escalation.districtId` is required in the contract but unknown when membership has no district or is unavailable; the API then returns the nil UUID. The contract should make it optional.
 - Staff SMS language is one setting (`StaffLang`); shifts have no language column.
 - notify re-resolves external recipients at send time as `trusted_contact_id` (`model.ResolvedRecipient.AsRecipient`); staff-shift recipients need their own form there, or the SMS timer cannot re-resolve them.

@@ -4,6 +4,7 @@ Shared infrastructure used by bounded contexts. Contexts must not import each ot
 
 | Package | One-liner | ADR |
 |---|---|---|
+| `audit` | Append-only writes to `platform.audit_log` in the caller's transaction. | — |
 | `auth` | Request-scoped principal (`IdentityID`, staff flag, roles) set by the session and staffauth middleware. | [0008](../../../docs/adr/0008-identity.md) |
 | `bearer` | Bearer header parsing and the bounded token-hash LRU shared by `session` and `staffauth`. | [0008](../../../docs/adr/0008-identity.md) |
 | `clock` | Injectable clock so domain code never calls `time.Now` directly. | — |
@@ -17,6 +18,6 @@ Shared infrastructure used by bounded contexts. Contexts must not import each ot
 | `pgtemp` | Throwaway PostgreSQL clusters for tools/tests (dev tooling). | [0006](../../../docs/adr/0006-database-and-migrations.md) |
 | `session` | Bearer session validation against Kratos `whoami` with short LRU cache. | [0008](../../../docs/adr/0008-identity.md) |
 | `staffauth` | Staff OIDC access tokens via RFC 7662 introspection: claim mapping to roles, MFA required, short LRU cache. | [0008](../../../docs/adr/0008-identity.md) |
-| `store` | sqlc-generated queries for platform tables (outbox, timers, keys, processed_events). | [0006](../../../docs/adr/0006-database-and-migrations.md) |
+| `store` | sqlc-generated queries for platform tables (outbox, timers, keys, audit_log, processed_events). | [0006](../../../docs/adr/0006-database-and-migrations.md) |
 | `testinfra` | Test helpers: `Postgres(t)` and `NATS(t)` for integration tests. | — |
 | `timers` | Durable PostgreSQL timers claimed with `SKIP LOCKED`. | [0020](../../../docs/adr/0020-scheduler.md) |

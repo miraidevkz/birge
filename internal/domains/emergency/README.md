@@ -12,7 +12,7 @@ SOS and the emergency plan («SOS», «План ЧС»): a member raises an SOS 
 | `trusted_contacts` | Up to 3 active contacts per owner: `member` (invited → confirmed) or `external` (confirmed at once); `plan_sent_at`; removed with `removed_at`, never deleted | external `name` and `phone` sealed with the owner's key (AD `emergency.trusted_contacts.name\|<id>`, `….phone\|<id>`); `lang` |
 | `plan_sends` | One row per confirmed «Отправить план» (Idempotency-Key); also the plan-send rate limit | IDs and counts only |
 
-Writes to `platform.audit_log` through the `Auditor` port (see Open questions).
+Writes to `platform.audit_log` through the `Auditor` port (`internal/platform/audit`).
 
 ## API
 
@@ -104,7 +104,6 @@ Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS 
 ## Open questions
 
 - **External one-time plan links are out of scope.** The contract promises external contacts an SMS with a 24-hour one-time link to the plan; this context requests the `emergency.plan_sent` delivery for them, but no link exists yet (needs a token table, a public endpoint and its rate limit).
-- **Audit insert is temporary**, as in safety: `adapter/audit.go` writes `platform.audit_log` with raw SQL until platform has an audit API.
 - New notify templates need locale and `BIRGE_SMS_TEXTS` entries: `emergency.sos_raised`, `emergency.sos_raised_contact`, `emergency.sos_responded`, `emergency.trusted_invitation`, `emergency.plan_sent`.
 - Contact alerts on raise use class `critical` (member contacts get the SMS fallback); the brief fixed the class only for the moderator alert.
 - There is no endpoint for a trusted contact to read the SOS text, for moderators to see SOS in the admin, or for an invited member to list or decline invitations (she learns the `contact_id` from the invitation notification).
