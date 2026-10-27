@@ -1,0 +1,24 @@
+# Anonymization evaluation set (kk). status: draft (every case below).
+# Synthetic cases written by an agent; fake data only. Not approved by the project
+# psychologist or a Kazakh native speaker, so none of them gates a release yet (ADR-0017).
+# Format: input<TAB>must-not-contain. Lines starting with # are comments.
+Менің телефоным +7 701 123 45 67, хабарласыңыз	123 45 67
+Нөмірім 8(707)765-43-21	765-43-21
+Ұлымның телефоны 87021112233	87021112233
+ЖСН 900101300123 керек пе?	900101300123
+ЖСН: 900101 300123	300123
+Поштам aigul.test@example.kz жазыңыз	aigul.test@example.kz
+Мекенжайым Абай көшесі 15, пәтер 8	Абай
+Біз Достық даңғылы 120 тұрамыз	120
+Айгүлмен сөйлестім, ол көмектесті	Айгүл
+Арманның дәрігері жоқ	Арман
+Арманға 7 жас	Арман
+Ерланды мектепке алмады	Ерлан
+Мадинада мүгедектік бар	Мадина
+Нурланнан сұрадым	Нурлан
+Әселге айттым	Әсел
+Куәлік нөмірі N12345678	12345678
+Анықтама 0451234567 нөмірімен берілді	0451234567
+Маған +7 777 000 11 22 немесе ainur@example.org арқылы	ainur@example.org
+Самал шағын ауданы 2, үй 5	Самал
+Телефоным 8 727 300 12 34	300 12 34

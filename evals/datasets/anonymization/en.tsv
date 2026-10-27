@@ -1,0 +1,16 @@
+# Anonymization evaluation set (en). status: draft (every case below).
+# Synthetic cases written by an agent; fake data only. Not approved by the project
+# psychologist or a native speaker, so none of them gates a release yet (ADR-0017).
+# Format: input<TAB>must-not-contain. Lines starting with # are comments.
+Call me at +7 701 123 45 67	123 45 67
+My number is 87011234567	87011234567
+My IIN is 900101300123	900101300123
+Email me at sarah.test@example.com	sarah.test@example.com
+We live at 15 Abay Street	Abay
+Address: Abay ave. 15	Abay
+Mary helped me a lot	Mary
+I talked to John about the school	John
+David's teacher refused	David
+Passport N12345678	12345678
+Text me +77011234567 or mail emily@example.org	emily@example.org
+My son's ID is 150505600111	150505600111

@@ -1,0 +1,27 @@
+# Anonymization evaluation set (ru). status: draft (every case below).
+# Synthetic cases written by an agent; fake data only. Not approved by the project
+# psychologist or a native speaker, so none of them gates a release yet (ADR-0017).
+# Format: input<TAB>must-not-contain. Lines starting with # are comments.
+Мой телефон +7 (701) 123-45-67	123-45-67
+Позвоните 8 701 123 45 67	123 45 67
+Номер 87011234567	87011234567
+ИИН ребёнка 150505600111	150505600111
+ИИН 150505 600111 нужен?	600111
+Почта anna.test@example.ru	anna.test@example.ru
+Пишите на test @ example.com	example.com
+Живём на ул. Абая 15, кв. 3	Абая
+Адрес: улица Сатпаева, д. 22	Сатпаева
+мкр. Самал-2, дом 5	Самал
+проспект Достык 120	Достык
+дом 7 кв. 45	кв. 45
+Мне посоветовала Анна	Анна
+Поговорила с Анной, стало легче	Анной
+У Сергея нет времени	Сергея
+Я отправила документы Ольге	Ольге
+Сыну Арману 5 лет	Арману
+Дочь Мадины ходит в сад	Мадины
+Паспорт N12345678	12345678
+Удостоверение 045123456	045123456
+Свидетельство о рождении № 1234567	1234567
+Звоните 8-701-765-43-21 или пишите maria@example.kz	maria@example.kz
+Городской 8 (7172) 55-66-77	55-66-77

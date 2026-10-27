@@ -1,0 +1,45 @@
+# TEST name dictionary for anonymize tests and the anonymization eval set.
+# Fake data only; a deployment supplies its own list through service Settings.
+# Kazakh
+Айгуль
+Айгүл
+Арман
+Ерлан
+Асель
+Әсел
+Динара
+Нұрлан
+Нурлан
+Жанар
+Ботагөз
+Ержан
+Айбек
+Мадина
+Гүлнар
+Сауле
+Дәурен
+Аружан
+Бауыржан
+Айдана
+# Russian
+Анна
+Мария
+Сергей
+Ольга
+Елена
+Наталья
+Дмитрий
+Ирина
+Татьяна
+Алексей
+Любовь
+Игорь
+Светлана
+Михаил
+# English
+John
+Mary
+Sarah
+David
+Emily
+Michael
