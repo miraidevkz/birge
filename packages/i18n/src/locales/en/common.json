@@ -1,0 +1,13 @@
+{
+  "appName": "Birge",
+  "tabs": {
+    "home": "Home",
+    "circle": "Circle",
+    "help": "Help",
+    "profile": "Profile"
+  },
+  "comingSoon": {
+    "title": "Coming soon",
+    "description": "This section is being prepared."
+  }
+}

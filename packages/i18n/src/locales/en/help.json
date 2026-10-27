@@ -1,0 +1,18 @@
+{
+  "title": "Help now",
+  "intro": "You are not alone. If you or your child are in danger right now, call one of these numbers.",
+  "phonesHeading": "Crisis phone numbers",
+  "call": "Call {{label}}, {{number}}",
+  "noPhones": "Phone numbers appear after the app has connected once. In an emergency, call your local emergency number.",
+  "contact": {
+    "heading": "Talk to a person",
+    "description": "A psychologist on duty will contact you as soon as possible.",
+    "action": "Contact a person now"
+  },
+  "status": {
+    "sent": "Request sent. A person on duty will contact you.",
+    "queued": "No connection. Your request is saved and will be sent automatically when you are back online.",
+    "signedOut": "Sign in so that a person on duty can contact you. The phone numbers above work without signing in.",
+    "failed": "The request could not be sent. Please call one of the numbers above."
+  }
+}

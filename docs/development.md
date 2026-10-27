@@ -9,7 +9,7 @@ How to build, test and change Birge. Read [`docs/architecture.md`](architecture.
 | Go | the version in `go.mod` | backend, tools |
 | PostgreSQL server binaries (`initdb`, `postgres` on `PATH`) | 18 | integration tests and migration tooling start throwaway clusters; no server needs to run |
 | make, git | any recent | |
-| Node.js + pnpm | see `apps/` (when added) | mobile app and admin |
+| Node.js + npm | a current LTS release | mobile app, shared client packages (see [Clients](#clients)) |
 
 No Docker is needed for development or tests. Development tools (sqlc, oapi-codegen, golangci-lint, psqldef) are pinned in `tools/go.mod` and run with `go tool`; you do not install them.
 
@@ -192,6 +192,46 @@ The privacy timer `privacy.DeletionDue` shreds the member key at `BIRGE_DELETION
 - Wiring end-to-end tests in `internal/wiring` exercise the API and worker together (including moderation: listing/held/report/verification decisions over JetStream).
 - The crisis path has its own evaluation sets and rules ([ADR-0017](adr/0017-ai-evaluation.md), `.claude/skills/crisis-path/SKILL.md`). The level-1 set is line-based (`evals/datasets/crisis/*.tsv`, see its README); `go test ./internal/domains/safety/crisis/` runs it against the DEMO lexicon and logs recall and the false-positive rate.
 
+## Clients
+
+The clients are npm workspaces at the repository root: `apps/mobile` (Expo Router app for iOS, Android and web) and the shared packages `packages/ui` (tokens and components), `packages/api` (generated API client, outbox, sign-in) and `packages/i18n` (locale files). Each has a README; start with [`apps/mobile/README.md`](../apps/mobile/README.md).
+
+```sh
+npm ci              # once; installs all workspaces
+npm run check       # typecheck, lint (ESLint + Prettier), tests, api-check, web-build; same as `make app-check`
+npm test -- packages/ui        # one workspace's tests
+npm run format      # Prettier --write
+```
+
+Rules the setup enforces:
+
+- Exact versions only (`.npmrc` `save-exact`). Expo SDK packages are added with `npx expo install <pkg>` from `apps/mobile` so their versions match the SDK, then pinned exactly.
+- No install scripts (`.npmrc` `ignore-scripts`): a dependency that only works with its postinstall script is not accepted.
+- Expo telemetry is off in every script (`EXPO_NO_TELEMETRY=1`).
+
+### Running npm on a build host
+
+If Node is not installed on your machine, run the same npm commands on a build host that has it: sync the working tree there (tracked and untracked files, without `node_modules`), run `npm ci` and the command, and copy back only the files the command changed (for `npm install`, `package-lock.json`). Keep install scripts disabled on that host as well. Files that a command creates (a new generated file) only come back if your sync includes them, so create the file first or add it with `git add -N`.
+
+### Regenerate the API client
+
+After a change to `contracts/openapi/birge.yaml`:
+
+```sh
+npm run api-gen     # writes packages/api/src/schema.gen.ts
+npm run api-check   # must pass; it also runs inside npm test
+```
+
+Commit the regenerated file with the contract change. A type error in the app after regeneration means a screen relied on something the contract changed.
+
+### Add a locale key
+
+Add the key at the same path to `packages/i18n/src/locales/{kk,ru,en}/<namespace>.json`, then use `t('<path>')` from `useTranslation('<namespace>')`. The locale test fails if one language misses it, a value is empty, or the `{{placeholders}}` differ. Details: [`packages/i18n/README.md`](../packages/i18n/README.md).
+
+### Add a UI component
+
+Check `packages/ui` first, then RN Reusables; a pattern used on two screens becomes a component. Use tokens only, own accessibility and reduce-motion, export it from `packages/ui/src/index.ts`, document it in [`packages/ui/README.md`](../packages/ui/README.md) and add a test. Screens may not import raw React Native primitives or pass `style`; ESLint reports it.
+
 ## Troubleshooting
 
 | Symptom | Cause |
@@ -200,3 +240,6 @@ The privacy timer `privacy.DeletionDue` shreds the member key at `BIRGE_DELETION
 | `make api-check`: file is stale | run `make api-gen` and commit the result |
 | `make db-check`: migrations do not match | run `make -s migration name=...` and save the migration |
 | lint `exported ... should have comment` | document the identifier (see AGENTS.md § Code documentation) |
+| `npm run api-check`: schema.gen.ts is stale | run `npm run api-gen` and commit the result |
+| Jest: `render` function has not been called | Testing Library 14 renders asynchronously: `await render(...)`, `await fireEvent.press(...)` |
+| `expo export` rewrites `apps/mobile/tsconfig.json` | NativeWind adds `nativewind-env.d.ts` when it is missing at the app root; keep that file |

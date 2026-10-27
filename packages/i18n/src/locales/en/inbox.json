@@ -1,0 +1,27 @@
+{
+  "templates": {
+    "circle": {
+      "match_proposed": "Someone who understands is ready to meet you for tea.",
+      "ask_met": "Did you meet? Let us know."
+    },
+    "chat": {
+      "new_message": "New message in your chat room."
+    },
+    "emergency": {
+      "sos_raised_contact": "A person who trusts you is asking for help.",
+      "sos_responded": "Someone responded to your SOS.",
+      "sos_shared": "Your SOS was shown to mothers in your district.",
+      "trusted_invitation": "You were invited to be a trusted contact.",
+      "plan_sent": "An emergency plan was sent to you."
+    },
+    "sharing": {
+      "contact_request": "Someone wants to contact you about your listing.",
+      "listing_decided": "Your listing was reviewed."
+    },
+    "wellbeing": {
+      "checkin_reminder": "Time for your weekly check-in."
+    }
+  },
+  "fallback": "You have a new notification.",
+  "unread": "Unread"
+}

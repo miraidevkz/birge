@@ -4,10 +4,13 @@ GO ?= go
 GOLANGCI_LINT := $(CURDIR)/bin/golangci-lint
 OAPI := $(GO) -C tools tool oapi-codegen
 PSQLDEF := $(CURDIR)/bin/psqldef
+# Go packages of this module. node_modules is excluded: some npm packages ship
+# Go sources, and ./... would vet, test and lint them as part of the module.
+GO_PKGS = $(shell $(GO) list -f '{{.Dir}}' ./... | grep -v /node_modules/)
 # API area -> generated file; one oapi-codegen config per area in contracts/codegen/.
 API_AREAS := meta:internal/platform/meta/api.gen.go membership:internal/domains/membership/api/api.gen.go privacy:internal/domains/privacy/api/api.gen.go notify:internal/domains/notify/api/api.gen.go safety:internal/domains/safety/api/api.gen.go wellbeing:internal/domains/wellbeing/api/api.gen.go emergency:internal/domains/emergency/api/api.gen.go assistant:internal/domains/assistant/api/api.gen.go knowledge:internal/domains/knowledge/api/api.gen.go circle:internal/domains/circle/api/api.gen.go chat:internal/domains/chat/api/api.gen.go sharing:internal/domains/sharing/api/api.gen.go directory:internal/domains/directory/api/api.gen.go moderation:internal/domains/moderation/api/api.gen.go
 
-.PHONY: check secrets lint api-gen api-check psqldef migration db-check go-check go-fmt-check go-vet go-test go-build sqlc sqlc-check kb-export
+.PHONY: check secrets lint api-gen api-check psqldef migration db-check go-check go-fmt-check go-vet go-test go-build sqlc sqlc-check kb-export app-check
 
 check: secrets go-check
 
@@ -20,10 +23,10 @@ go-fmt-check:
 	@out=$$(gofmt -l cmd internal); if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 
 go-vet:
-	$(GO) vet ./...
+	$(GO) vet $(GO_PKGS)
 
 go-test:
-	$(GO) test -race ./...
+	$(GO) test -race $(GO_PKGS)
 
 go-build:
 	CGO_ENABLED=0 $(GO) build -trimpath -o /dev/null ./cmd/birge
@@ -43,7 +46,7 @@ sqlc-check:
 
 lint:
 	$(GO) -C tools build -o $(GOLANGCI_LINT) github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-	$(GOLANGCI_LINT) run ./...
+	$(GOLANGCI_LINT) run $(GO_PKGS)
 
 api-gen:
 	@for a in $(API_AREAS); do n=$${a%%:*}; f=$${a#*:}; \
@@ -63,3 +66,8 @@ migration: psqldef
 
 db-check: psqldef
 	@$(GO) run ./cmd/birge-dbtool -psqldef $(PSQLDEF) check
+
+# Client checks (apps/mobile and packages/*): typecheck, lint, tests, the
+# generated API client and the web build. Needs Node and `npm ci` first.
+app-check:
+	npm run check

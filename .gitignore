@@ -18,6 +18,8 @@ coverage.out
 node_modules/
 .expo/
 web-build/
+apps/*/dist/
+expo-env.d.ts
 *.tsbuildinfo
 
 # editors and OS

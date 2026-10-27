@@ -1,0 +1,69 @@
+// Every locale file, bundled. Texts ship inside the app so they work offline,
+// including the fixed crisis screen (ADR-0023: never depends on the network).
+//
+// To add a namespace: create <ns>.json in kk/, ru/ and en/, then add it to the
+// three objects below. The parity test fails if a language misses a key.
+import enAuth from './locales/en/auth.json';
+import enCircle from './locales/en/circle.json';
+import enCommon from './locales/en/common.json';
+import enHelp from './locales/en/help.json';
+import enHome from './locales/en/home.json';
+import enInbox from './locales/en/inbox.json';
+import enProfile from './locales/en/profile.json';
+import enUi from './locales/en/ui.json';
+import kkAuth from './locales/kk/auth.json';
+import kkCircle from './locales/kk/circle.json';
+import kkCommon from './locales/kk/common.json';
+import kkHelp from './locales/kk/help.json';
+import kkHome from './locales/kk/home.json';
+import kkInbox from './locales/kk/inbox.json';
+import kkProfile from './locales/kk/profile.json';
+import kkUi from './locales/kk/ui.json';
+import ruAuth from './locales/ru/auth.json';
+import ruCircle from './locales/ru/circle.json';
+import ruCommon from './locales/ru/common.json';
+import ruHelp from './locales/ru/help.json';
+import ruHome from './locales/ru/home.json';
+import ruInbox from './locales/ru/inbox.json';
+import ruProfile from './locales/ru/profile.json';
+import ruUi from './locales/ru/ui.json';
+
+/** Namespaces, one per feature. `common` is the default. */
+export const namespaces = ['common', 'ui', 'auth', 'home', 'inbox', 'help', 'circle', 'profile'] as const;
+
+/** Namespace is one locale file name. */
+export type Namespace = (typeof namespaces)[number];
+
+/** resources maps language to namespace to the parsed locale file. */
+export const resources = {
+  kk: {
+    common: kkCommon,
+    ui: kkUi,
+    auth: kkAuth,
+    home: kkHome,
+    inbox: kkInbox,
+    help: kkHelp,
+    circle: kkCircle,
+    profile: kkProfile,
+  },
+  ru: {
+    common: ruCommon,
+    ui: ruUi,
+    auth: ruAuth,
+    home: ruHome,
+    inbox: ruInbox,
+    help: ruHelp,
+    circle: ruCircle,
+    profile: ruProfile,
+  },
+  en: {
+    common: enCommon,
+    ui: enUi,
+    auth: enAuth,
+    home: enHome,
+    inbox: enInbox,
+    help: enHelp,
+    circle: enCircle,
+    profile: enProfile,
+  },
+} as const satisfies Record<string, Record<Namespace, object>>;

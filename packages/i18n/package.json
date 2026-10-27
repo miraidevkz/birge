@@ -1,0 +1,17 @@
+{
+  "name": "@birge/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "i18next": "26.5.11",
+    "react-i18next": "17.1.9"
+  },
+  "peerDependencies": {
+    "react": "19.3.0"
+  }
+}

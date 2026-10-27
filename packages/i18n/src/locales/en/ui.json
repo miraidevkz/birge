@@ -1,0 +1,15 @@
+{
+  "sos": {
+    "label": "SOS",
+    "hint": "Opens crisis help and phone numbers"
+  },
+  "loading": "Loading…",
+  "error": {
+    "title": "Something went wrong",
+    "description": "Check your connection and try again.",
+    "retry": "Try again"
+  },
+  "sheet": {
+    "close": "Close"
+  }
+}

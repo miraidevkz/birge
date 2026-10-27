@@ -1,0 +1,73 @@
+// The three non-content states every data screen has (loading, empty, error).
+// They live here so each screen gets the same texts, accessibility and motion
+// behaviour (ADR-0014) and never shows "No items" during the first load.
+import { useTranslation } from '@birge/i18n';
+import { ActivityIndicator, View } from 'react-native';
+
+import { Button } from './button';
+import { useMotionAllowed } from './motion';
+import { Heading, Text } from './text';
+import { useThemeColors } from './theme';
+
+/** LoadingState shows progress while the first load runs. Without motion it shows only the text. */
+export function LoadingState({ label }: { label?: string }) {
+  const { t } = useTranslation('ui');
+  const colors = useThemeColors();
+  const motion = useMotionAllowed();
+  const text = label ?? t('loading');
+  return (
+    <View
+      className="items-center justify-center gap-3 py-8"
+      accessible
+      accessibilityLabel={text}
+      accessibilityLiveRegion="polite"
+      accessibilityState={{ busy: true }}
+    >
+      {motion ? <ActivityIndicator color={colors.primary} /> : null}
+      <Text tone="muted">{text}</Text>
+    </View>
+  );
+}
+
+/** EmptyStateProps explain why there is nothing and, when useful, offer the next step. */
+export interface EmptyStateProps {
+  title: string;
+  description?: string;
+  action?: { label: string; onPress: () => void };
+}
+
+/** EmptyState is shown when data loaded and has no items. */
+export function EmptyState({ title, description, action }: EmptyStateProps) {
+  return (
+    <View className="items-center gap-2 py-8">
+      <Heading className="text-center">{title}</Heading>
+      {description ? (
+        <Text tone="muted" className="text-center">
+          {description}
+        </Text>
+      ) : null}
+      {action ? <Button title={action.label} onPress={action.onPress} variant="secondary" /> : null}
+    </View>
+  );
+}
+
+/** ErrorStateProps: texts default to the generic connection message. */
+export interface ErrorStateProps {
+  title?: string;
+  description?: string;
+  onRetry?: () => void;
+}
+
+/** ErrorState is shown when the first load failed and there is nothing cached to show. */
+export function ErrorState({ title, description, onRetry }: ErrorStateProps) {
+  const { t } = useTranslation('ui');
+  return (
+    <View className="items-center gap-2 py-8" accessibilityLiveRegion="polite">
+      <Heading className="text-center">{title ?? t('error.title')}</Heading>
+      <Text tone="muted" className="text-center">
+        {description ?? t('error.description')}
+      </Text>
+      {onRetry ? <Button title={t('error.retry')} onPress={onRetry} variant="secondary" /> : null}
+    </View>
+  );
+}
