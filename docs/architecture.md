@@ -74,7 +74,7 @@ contracts/
   openapi/            # HTTP API (source of truth; server and TS client are generated)
   events/             # JSON Schemas for domain events
 db/
-  schema.sql          # desired schema (declarative)
+  schema/             # desired schema, one file per context (declarative)
   migrations/         # generated, versioned, reviewed migrations
   queries/            # SQL for sqlc
 apps/

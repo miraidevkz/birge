@@ -1,6 +1,6 @@
--- Desired database schema (declarative). Edit this file, then run `make migration name=<slug>`.
--- See ADR-0006 and the db-migration skill. Target: PostgreSQL 18 (built-in uuidv7()).
--- One PostgreSQL schema per bounded context; a context owns its schema.
+-- Desired schema of the platform tables (declarative). The full desired schema is
+-- every file in db/schema/ in name order; one file per bounded context
+-- (NNN_<context>.sql). See ADR-0006 and the db-migration skill. PostgreSQL 18.
 
 CREATE SCHEMA IF NOT EXISTS platform;
 

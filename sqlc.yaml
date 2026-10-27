@@ -1,7 +1,7 @@
 version: "2"
 sql:
   - engine: postgresql
-    schema: db/schema.sql
+    schema: db/schema
     queries:
       - db/queries/platform_outbox.sql
       - db/queries/platform_timers.sql

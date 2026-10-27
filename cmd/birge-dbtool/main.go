@@ -1,10 +1,10 @@
 // Command birge-dbtool generates and checks database migrations (ADR-0006).
 //
 //	birge-dbtool migration <name>  print the migration that turns the migrated
-//	                               database into db/schema.sql (save it under
+//	                               database into db/schema/*.sql (save it under
 //	                               db/migrations/ with the printed file name)
 //	birge-dbtool check             apply all migrations to a fresh database,
-//	                               verify the result equals db/schema.sql and
+//	                               verify the result equals db/schema/*.sql and
 //	                               run the destructive-operation gate
 //
 // It needs PostgreSQL binaries (initdb, postgres) and psqldef in PATH, or
@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,7 +36,7 @@ const header = "SET lock_timeout = '5s';\nSET statement_timeout = '60s';\n"
 
 func main() {
 	psqldef := flag.String("psqldef", "psqldef", "psqldef binary")
-	schema := flag.String("schema", "db/schema.sql", "desired schema")
+	schema := flag.String("schema", "db/schema", "directory with the desired schema files (applied in name order)")
 	dir := flag.String("migrations", "db/migrations", "migrations directory")
 	flag.Parse()
 	t := tool{psqldef: *psqldef, schema: *schema, dir: *dir, out: os.Stdout, now: time.Now}
@@ -78,13 +79,13 @@ func (t tool) migration(ctx context.Context, name string) error {
 		return err
 	}
 	if ddl == "" {
-		return errors.New("db/schema.sql already matches the migrations; nothing to generate")
+		return errors.New("db/schema already matches the migrations; nothing to generate")
 	}
 	body := "-- +goose Up\n" + header + ddl + "\n"
 	if v := gate("generated", body); v != "" {
 		return fmt.Errorf("%s\nwrite this migration by hand as expand/contract (see the db-migration skill)", v)
 	}
-	// The generated migration must bring the database exactly to schema.sql.
+	// The generated migration must bring the database exactly to the desired schema.
 	if _, err := db.ExecContext(ctx, header+ddl); err != nil {
 		return fmt.Errorf("generated migration does not apply: %w\n%s", err, ddl)
 	}
@@ -128,7 +129,7 @@ func (t tool) check(ctx context.Context) error {
 		return err
 	}
 	if ddl != "" {
-		return fmt.Errorf("migrations do not match db/schema.sql; run make migration. Missing:\n%s", ddl)
+		return fmt.Errorf("migrations do not match db/schema; run make migration. Missing:\n%s", ddl)
 	}
 	_, err = fmt.Fprintln(t.out, "migrations OK")
 	return err
@@ -161,11 +162,37 @@ func (t tool) migrated(ctx context.Context) (*sql.DB, *pgtemp.Instance, error) {
 	return db, inst, nil
 }
 
-// diff returns the DDL psqldef would run to reach schema.sql, without
+// desired concatenates the schema files in name order.
+func (t tool) desired() (string, error) {
+	files, err := filepath.Glob(filepath.Join(t.schema, "*.sql"))
+	if err != nil {
+		return "", err
+	}
+	if len(files) == 0 {
+		return "", fmt.Errorf("no schema files in %s", t.schema)
+	}
+	var b strings.Builder
+	for _, f := range files {
+		c, err := os.ReadFile(f)
+		if err != nil {
+			return "", err
+		}
+		b.Write(c)
+		b.WriteString("\n")
+	}
+	return b.String(), nil
+}
+
+// diff returns the DDL psqldef would run to reach the desired schema, without
 // comments, or "" when there is none.
 func (t tool) diff(ctx context.Context, inst *pgtemp.Instance) (string, error) {
+	want, err := t.desired()
+	if err != nil {
+		return "", err
+	}
 	cmd := exec.CommandContext(ctx, t.psqldef, "-U", "birge", "-h", "127.0.0.1", "-p", strconv.Itoa(inst.Port),
-		"--dry-run", "--file", t.schema, "postgres")
+		"--dry-run", "postgres")
+	cmd.Stdin = strings.NewReader(want)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()

@@ -20,7 +20,7 @@ import (
 	"birge/internal/platform/pgtemp"
 )
 
-// Postgres starts an empty PostgreSQL cluster with db/schema.sql applied and
+// Postgres starts an empty PostgreSQL cluster with db/schema/*.sql applied and
 // returns a pool connected to it. Everything is removed when the test ends.
 func Postgres(t testing.TB) *pgxpool.Pool {
 	t.Helper()
@@ -39,12 +39,18 @@ func Postgres(t testing.TB) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	schema, err := os.ReadFile(filepath.Join(repoRoot(t), "db", "schema.sql"))
+	files, err := filepath.Glob(filepath.Join(repoRoot(t), "db", "schema", "*.sql"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, string(schema)); err != nil {
-		t.Fatalf("apply schema: %v", err)
+	for _, f := range files { // Glob returns names sorted
+		schema, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, string(schema)); err != nil {
+			t.Fatalf("apply %s: %v", filepath.Base(f), err)
+		}
 	}
 	return pool
 }

@@ -13,7 +13,7 @@ metadata:
 > - Layout is `internal/domains/<context>/{model,service,port,adapter,api}` (see the domain-module skill); ignore `pkg/` examples.
 > - Run at most 2-3 sub-agents. Never install tools with `@latest`.
 > - Log IDs and event names only; never message text, request bodies or personal data.
-> - Queries are plain SQL in `db/queries/` compiled by sqlc (pgx driver). Schema changes follow the db-migration skill: `db/schema.sql` -> psqldef -> goose. No golang-migrate, Flyway or Atlas.
+> - Queries are plain SQL in `db/queries/` compiled by sqlc (pgx driver). Schema changes follow the db-migration skill: `db/schema/*.sql` -> psqldef -> goose. No golang-migrate, Flyway or Atlas.
 > - Row-level security is decided by an ADR.
 
 **Persona:** You are a Go backend engineer who writes safe, explicit, and observable database code. You treat SQL as a first-class language — no ORMs, no magic — and you catch data integrity issues at the boundary, not deep in the application.
