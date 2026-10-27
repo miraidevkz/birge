@@ -1,0 +1,129 @@
+{
+  "_comment": "DEMO knowledge base only — titles and bodies contain DEMO. A real deployment replaces this after the psychologist and lawyer review. Seeded by birge migrate into empty knowledge tables.",
+  "topics": [
+    {
+      "kind": "rights",
+      "code": "demo_pmpk",
+      "titles": {
+        "kk": "DEMO ПМПК",
+        "ru": "DEMO ПМПК",
+        "en": "DEMO PMPK"
+      }
+    },
+    {
+      "kind": "rights",
+      "code": "demo_benefits",
+      "titles": {
+        "kk": "DEMO жәрдемақы",
+        "ru": "DEMO пособия",
+        "en": "DEMO benefits"
+      }
+    },
+    {
+      "kind": "selfhelp",
+      "code": "demo_burnout",
+      "titles": {
+        "kk": "DEMO эмоционалдық шаршау",
+        "ru": "DEMO выгорание",
+        "en": "DEMO burnout"
+      }
+    },
+    {
+      "kind": "selfhelp",
+      "code": "demo_boundaries",
+      "titles": {
+        "kk": "DEMO шекаралар",
+        "ru": "DEMO границы",
+        "en": "DEMO boundaries"
+      }
+    }
+  ],
+  "articles": [
+    {
+      "topic_code": "demo_pmpk",
+      "versions": [
+        {
+          "lang": "kk",
+          "title": "DEMO ПМПК-ға қалай өтініш беру керек?",
+          "body": "DEMO: бұл мысал мәтін. Нақты заң мәтіні емес. Дереккөзді тексеріңіз.",
+          "source_url": "https://example.invalid/demo/pmpk-kk"
+        },
+        {
+          "lang": "ru",
+          "title": "DEMO Как подать заявление в ПМПК?",
+          "body": "DEMO: это примерный текст. Не является действующим законом. Проверьте источник.",
+          "source_url": "https://example.invalid/demo/pmpk-ru"
+        },
+        {
+          "lang": "en",
+          "title": "DEMO How do I apply to the PMPK?",
+          "body": "DEMO: this is sample text. It is not current law. Check the source.",
+          "source_url": "https://example.invalid/demo/pmpk-en"
+        }
+      ]
+    },
+    {
+      "topic_code": "demo_benefits",
+      "versions": [
+        {
+          "lang": "kk",
+          "title": "DEMO мүгедектік жәрдемақысы қандай?",
+          "body": "DEMO: мысал жауап. Заңгер кеңесін алмастырмайды.",
+          "source_url": "https://example.invalid/demo/benefits-kk"
+        },
+        {
+          "lang": "ru",
+          "title": "DEMO Какое пособие по инвалидности?",
+          "body": "DEMO: примерный ответ. Не заменяет консультацию юриста.",
+          "source_url": "https://example.invalid/demo/benefits-ru"
+        },
+        {
+          "lang": "en",
+          "title": "DEMO What disability benefit applies?",
+          "body": "DEMO: sample answer. Does not replace legal advice.",
+          "source_url": "https://example.invalid/demo/benefits-en"
+        }
+      ]
+    },
+    {
+      "topic_code": "demo_burnout",
+      "versions": [
+        {
+          "lang": "kk",
+          "title": "DEMO шаршағанда не істеу керек?",
+          "body": "DEMO: қысқа демалыс және қолдау. Бұл психолог мақұлдаған мысал емес — DEMO."
+        },
+        {
+          "lang": "ru",
+          "title": "DEMO Что делать при выгорании?",
+          "body": "DEMO: короткий отдых и поддержка. Это не утверждённый психологом текст — DEMO."
+        },
+        {
+          "lang": "en",
+          "title": "DEMO What helps with burnout?",
+          "body": "DEMO: a short rest and support. This is not psychologist-approved text — DEMO."
+        }
+      ]
+    },
+    {
+      "topic_code": "demo_boundaries",
+      "versions": [
+        {
+          "lang": "kk",
+          "title": "DEMO шекараны қалай қою керек?",
+          "body": "DEMO: өз қажетіңізді айтыңыз. Мысал мәтін — DEMO."
+        },
+        {
+          "lang": "ru",
+          "title": "DEMO Как обозначить границы?",
+          "body": "DEMO: скажите о своей потребности. Примерный текст — DEMO."
+        },
+        {
+          "lang": "en",
+          "title": "DEMO How do I set a boundary?",
+          "body": "DEMO: name your need. Sample text — DEMO."
+        }
+      ]
+    }
+  ]
+}

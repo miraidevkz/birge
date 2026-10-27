@@ -84,3 +84,27 @@ func TestSettingsAndReference(t *testing.T) {
 		t.Fatalf("reference = %+v", ref)
 	}
 }
+
+func TestKnowledgeDemoMarked(t *testing.T) {
+	k, err := presets.LoadKnowledge()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(k.Articles) < 3 {
+		t.Fatalf("want at least 3 demo articles, got %d", len(k.Articles))
+	}
+	langs := map[string]int{}
+	for _, a := range k.Articles {
+		for _, v := range a.Versions {
+			if !strings.Contains(v.Title, "DEMO") || !strings.Contains(v.Body, "DEMO") {
+				t.Errorf("version %s/%s missing DEMO mark", a.TopicCode, v.Lang)
+			}
+			langs[v.Lang]++
+		}
+	}
+	for _, lang := range []string{"kk", "ru", "en"} {
+		if langs[lang] < 3 {
+			t.Errorf("lang %s has %d versions, want ≥3", lang, langs[lang])
+		}
+	}
+}

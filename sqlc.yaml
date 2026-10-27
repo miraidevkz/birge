@@ -208,3 +208,32 @@ sql:
             go_type:
               type: time.Time
               pointer: true
+  - engine: postgresql
+    schema:
+      - db/schema/800_knowledge.sql
+    queries:
+      - db/queries/knowledge_topics.sql
+      - db/queries/knowledge_articles.sql
+      - db/queries/knowledge_versions.sql
+    gen:
+      go:
+        package: store
+        out: internal/domains/knowledge/store
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: github.com/google/uuid
+              type: UUID
+              pointer: true
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              type: time.Time
+              pointer: true

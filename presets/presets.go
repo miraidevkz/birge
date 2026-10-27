@@ -23,6 +23,7 @@ const (
 	NameConsentVersions = "consent_versions"
 	NameCrisisPhones    = "crisis_phones"
 	NameReference       = "reference"
+	NameKnowledge       = "knowledge"
 )
 
 //go:embed demo
@@ -128,4 +129,66 @@ func LoadReference() (Reference, error) {
 		}
 	}
 	return raw, nil
+}
+
+// KnowledgeTopic is a DEMO knowledge topic (no UUIDs; assigned on seed).
+type KnowledgeTopic struct {
+	Kind   string            `json:"kind"`
+	Code   string            `json:"code"`
+	Titles map[string]string `json:"titles"`
+}
+
+// KnowledgeVersion is one DEMO language version of an article.
+type KnowledgeVersion struct {
+	Lang      string `json:"lang"`
+	Title     string `json:"title"`
+	Body      string `json:"body"`
+	SourceURL string `json:"source_url"`
+}
+
+// KnowledgeArticle is a DEMO article under a topic code.
+type KnowledgeArticle struct {
+	TopicCode string             `json:"topic_code"`
+	Versions  []KnowledgeVersion `json:"versions"`
+}
+
+// Knowledge is the DEMO knowledge base (topics and articles).
+type Knowledge struct {
+	Topics   []KnowledgeTopic   `json:"topics"`
+	Articles []KnowledgeArticle `json:"articles"`
+}
+
+// LoadKnowledge reads the DEMO knowledge articles (titles/bodies contain DEMO).
+func LoadKnowledge() (Knowledge, error) {
+	b, err := demoFS.ReadFile("demo/knowledge/articles.json")
+	if err != nil {
+		return Knowledge{}, fmt.Errorf("presets: knowledge: %w", err)
+	}
+	var raw struct {
+		Topics   []KnowledgeTopic   `json:"topics"`
+		Articles []KnowledgeArticle `json:"articles"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return Knowledge{}, fmt.Errorf("presets: knowledge: %w", err)
+	}
+	if len(raw.Topics) == 0 || len(raw.Articles) == 0 {
+		return Knowledge{}, fmt.Errorf("presets: knowledge: topics and articles required")
+	}
+	out := Knowledge{Topics: raw.Topics, Articles: raw.Articles}
+	for _, t := range out.Topics {
+		if t.Kind == "" || t.Code == "" || len(t.Titles) == 0 {
+			return Knowledge{}, fmt.Errorf("presets: knowledge: each topic needs kind, code and titles")
+		}
+	}
+	for _, a := range out.Articles {
+		if a.TopicCode == "" || len(a.Versions) == 0 {
+			return Knowledge{}, fmt.Errorf("presets: knowledge: each article needs topic_code and versions")
+		}
+		for _, v := range a.Versions {
+			if v.Lang == "" || v.Title == "" || v.Body == "" {
+				return Knowledge{}, fmt.Errorf("presets: knowledge: each version needs lang, title and body")
+			}
+		}
+	}
+	return out, nil
 }
