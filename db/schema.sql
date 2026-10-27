@@ -45,7 +45,7 @@ CREATE UNIQUE INDEX timers_active_dedup_idx ON platform.timers (kind, dedup_key)
 -- Audit log: append-only (the application role has INSERT and SELECT only; see db/roles.sql).
 CREATE TABLE platform.audit_log (
     id          uuid        PRIMARY KEY DEFAULT uuidv7(),
-    at          timestamptz NOT NULL DEFAULT now(),
+    occurred_at timestamptz NOT NULL DEFAULT now(),
     actor_id    uuid        NOT NULL,
     actor_role  text        NOT NULL,
     action      text        NOT NULL,
@@ -54,5 +54,5 @@ CREATE TABLE platform.audit_log (
     reason      text
 );
 
-CREATE INDEX audit_log_object_idx ON platform.audit_log (object_type, object_id, at);
-CREATE INDEX audit_log_actor_idx ON platform.audit_log (actor_id, at);
+CREATE INDEX audit_log_object_idx ON platform.audit_log (object_type, object_id, occurred_at);
+CREATE INDEX audit_log_actor_idx ON platform.audit_log (actor_id, occurred_at);

@@ -12,7 +12,7 @@ import (
 
 type PlatformAuditLog struct {
 	ID         uuid.UUID
-	At         time.Time
+	OccurredAt time.Time
 	ActorID    uuid.UUID
 	ActorRole  string
 	Action     string

@@ -10,17 +10,17 @@ Data loss is the worst failure in this project. Follow these steps exactly; see 
 ## Steps
 
 1. Edit `db/schema.sql` (the desired state). Never edit an existing file in `db/migrations/`.
-2. Generate: `make migration name=<slug>`. It runs `psqldef --dry-run` against an ephemeral PostgreSQL and saves the diff as a new goose migration.
+2. Generate: `make -s migration name=<snake_case>`. It applies the existing migrations to a throwaway PostgreSQL, runs `psqldef --dry-run` against `db/schema.sql`, checks that the result applies and matches, and **prints** the migration with its file name on the first line (`-- file: db/migrations/<timestamp>_<name>.sql`). Save the rest under that name. It refuses to generate destructive statements.
 3. Read the generated SQL line by line. It must contain only additive or compatible changes.
-4. Make sure the migration starts with:
+4. The generated migration already starts with (hand-written ones must too):
    ```sql
    SET lock_timeout = '5s';
    SET statement_timeout = '60s';
    ```
 5. Update queries in `db/queries/` and run `make sqlc`.
-6. Run `make db-check`: migration lint, destructive-operation gate, apply on a fresh database, sqlc diff.
+6. Run `make db-check`: destructive-operation gate and `lock_timeout` check on every file, all migrations applied to a fresh database, result compared with `db/schema.sql`. `make go-check` includes it and `sqlc-check`.
 
-## Forbidden without an approval marker and an ADR reference
+## Forbidden without the marker `-- birge:destructive-approved ADR-NNNN`
 
 `DROP TABLE`, `DROP COLUMN`, `TRUNCATE`, `DELETE` without `WHERE`, narrowing a type, adding `NOT NULL` without a default to a populated table, dropping a constraint that protects data.
 
