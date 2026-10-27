@@ -263,6 +263,12 @@ func (s *Service) CreateDraft(ctx context.Context, p auth.Principal, key uuid.UU
 
 // UpdateDraft edits the caller's own draft.
 func (s *Service) UpdateDraft(ctx context.Context, p auth.Principal, versionID uuid.UUID, content model.Content) (model.Version, error) {
+	// Deny before any lookup: callers without a knowledge role must not learn
+	// whether a version exists (404 vs 401/403). The role for the version's
+	// kind is checked again once it is loaded.
+	if _, err := authorize(p, staffReadRoles); err != nil {
+		return model.Version{}, err
+	}
 	if versionID == uuid.Nil {
 		return model.Version{}, model.ErrInvalidInput
 	}
@@ -302,6 +308,12 @@ func (s *Service) UpdateDraft(ctx context.Context, p auth.Principal, versionID u
 
 // SubmitForReview moves the caller's draft to in_review.
 func (s *Service) SubmitForReview(ctx context.Context, p auth.Principal, versionID uuid.UUID) (model.Version, error) {
+	// Deny before any lookup: callers without a knowledge role must not learn
+	// whether a version exists (404 vs 401/403). The role for the version's
+	// kind is checked again once it is loaded.
+	if _, err := authorize(p, staffReadRoles); err != nil {
+		return model.Version{}, err
+	}
 	if versionID == uuid.Nil {
 		return model.Version{}, model.ErrInvalidInput
 	}
@@ -339,6 +351,12 @@ func (s *Service) SubmitForReview(ctx context.Context, p auth.Principal, version
 // languages needs_sync, schedules ReviewDue and Expire timers, audits and
 // emits knowledge.ArticlePublished — all in one transaction.
 func (s *Service) Publish(ctx context.Context, p auth.Principal, versionID uuid.UUID) (model.Version, error) {
+	// Deny before any lookup: callers without a knowledge role must not learn
+	// whether a version exists (404 vs 401/403). The role for the version's
+	// kind is checked again once it is loaded.
+	if _, err := authorize(p, staffReadRoles); err != nil {
+		return model.Version{}, err
+	}
 	if versionID == uuid.Nil {
 		return model.Version{}, model.ErrInvalidInput
 	}
@@ -417,6 +435,12 @@ func (s *Service) Publish(ctx context.Context, p auth.Principal, versionID uuid.
 // Reject sends an in_review version back to draft with a reason code. The
 // reviewer must hold the matching role and must not be the author.
 func (s *Service) Reject(ctx context.Context, p auth.Principal, versionID uuid.UUID, reason string) (model.Version, error) {
+	// Deny before any lookup: callers without a knowledge role must not learn
+	// whether a version exists (404 vs 401/403). The role for the version's
+	// kind is checked again once it is loaded.
+	if _, err := authorize(p, staffReadRoles); err != nil {
+		return model.Version{}, err
+	}
 	if versionID == uuid.Nil || !model.RejectIsValid(reason) {
 		return model.Version{}, model.ErrInvalidInput
 	}
