@@ -1,6 +1,7 @@
 // Package wiring assembles the Birge backend from environment configuration:
-// it is what cmd/birge runs for `birge api`, `birge worker`, `birge migrate`
-// and `birge kb-reindex` (keygen lives in cmd/birge and needs no wiring). It
+// it is what cmd/birge runs for `birge api`, `birge worker`, `birge migrate`,
+// `birge kb-reindex` and `birge kb-export` (keygen lives in cmd/birge and needs
+// no wiring). It
 // owns no data and no business rules; it chooses the adapters behind every
 // port and the order of the HTTP middleware.
 //
@@ -32,6 +33,8 @@
 //     seed when those tables are empty (presets; never overwrites).
 //   - kb-reindex: rebuilds the Qdrant collection from PublishedFragments
 //     (ADR-0010); requires TEI, Qdrant and BIRGE_EMBEDDING_MODEL_ID.
+//   - kb-export: writes published knowledge markdown under --out (ADR-0022);
+//     requires DATABASE_URL only.
 //   - Adapters between contexts and platform: the membership Encryptor on the
 //     platform envelope, safety/wellbeing/emergency/assistant/chat Sealer (same
 //     envelope with per-column associated data), safety MemberDirectory

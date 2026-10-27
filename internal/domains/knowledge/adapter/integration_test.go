@@ -4,6 +4,9 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"birge/internal/domains/knowledge/adapter"
+	"birge/internal/domains/knowledge/export"
 	"birge/internal/domains/knowledge/model"
 	"birge/internal/domains/knowledge/service"
 	"birge/internal/platform/auth"
@@ -240,7 +244,7 @@ func TestDemoSeedPostgres(t *testing.T) {
 		})
 	}
 	for _, a := range k.Articles {
-		da := adapter.DemoArticle{TopicCode: a.TopicCode}
+		da := adapter.DemoArticle{TopicCode: a.TopicCode, Slug: a.Slug}
 		for _, v := range a.Versions {
 			da.Versions = append(da.Versions, adapter.DemoVersion{
 				Lang: v.Lang, Title: v.Title, Body: v.Body, SourceURL: v.SourceURL,
@@ -263,5 +267,40 @@ func TestDemoSeedPostgres(t *testing.T) {
 	}
 	if n < 9 {
 		t.Fatalf("published versions = %d, want ≥9", n)
+	}
+
+	dir := t.TempDir()
+	w := &export.Writer{
+		Store: &adapter.PostgresStore{Pool: pool},
+		Now:   func() time.Time { return now },
+	}
+	exported, err := w.Export(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exported < 9 {
+		t.Fatalf("exported = %d, want ≥9", exported)
+	}
+	path := filepath.Join(dir, "en", "demo_pmpk", "apply.md")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	for _, want := range []string{`reviewed_by: "lawyer"`, `topic: "demo_pmpk"`, "DEMO: this is sample text"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q in:\n%s", want, text)
+		}
+	}
+	// Idempotent: second export matches.
+	if _, err := w.Export(ctx, dir); err != nil {
+		t.Fatal(err)
+	}
+	raw2, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != string(raw2) {
+		t.Fatal("second DEMO export differed")
 	}
 }

@@ -11,14 +11,13 @@ import (
 	"birge/internal/domains/knowledge/port"
 )
 
-// HandleReviewDue handles knowledge.ReviewDue (subject = version id).
-// Reviewer notification (notify.DeliveryRequested with a staff_role recipient
-// that matches the kind) is intentionally left to a follow-up: the platform
-// has no rights-lawyer staff_role form for DeliveryRequested yet, and routing
-// self-help to psychologist / rights to moderator would be wrong. The timer
-// completes so it does not retry; the README documents the gap.
+// HandleReviewDue handles knowledge.ReviewDue (subject = version id): marks
+// the version review_due_at so staffListReviewDue can list it. Staff push or
+// SMS to reviewers is out of scope until staff devices exist; the README
+// documents that follow-up. The timer completes so it does not retry.
 func (s *Service) HandleReviewDue(ctx context.Context, tx port.Tx, versionID uuid.UUID) error {
-	v, err := tx.GetVersionWithArticle(ctx, versionID, false)
+	now := s.now()
+	v, err := tx.GetVersionWithArticle(ctx, versionID, true)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			return nil
@@ -27,6 +26,9 @@ func (s *Service) HandleReviewDue(ctx context.Context, tx port.Tx, versionID uui
 	}
 	if v.Status != model.StatusPublished {
 		return nil
+	}
+	if _, err := tx.MarkReviewDue(ctx, versionID, now); err != nil {
+		return err
 	}
 	s.log().Info("knowledge review due", "event", "knowledge.ReviewDue", "version_id", versionID, "article_id", v.ArticleID, "kind", v.Kind)
 	return nil

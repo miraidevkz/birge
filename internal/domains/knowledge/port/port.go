@@ -56,6 +56,12 @@ type Tx interface {
 	RetirePublished(ctx context.Context, articleID uuid.UUID, lang string, exceptID uuid.UUID, at time.Time) (retired model.Version, ok bool, err error)
 	MarkOtherLanguagesNeedsSync(ctx context.Context, articleID uuid.UUID, lang string, at time.Time) error
 	ListStaffVersions(ctx context.Context, f model.VersionFilter) ([]model.Version, error)
+	// MarkReviewDue sets review_due_at when the ReviewDue timer fires (idempotent).
+	MarkReviewDue(ctx context.Context, versionID uuid.UUID, at time.Time) (model.Version, error)
+	// ListReviewDue returns published versions with review_due_at set, oldest expiry first.
+	ListReviewDue(ctx context.Context, f model.ReviewDueFilter) ([]model.Version, error)
+	// ListExportVersions returns published versions for repository export (ADR-0022).
+	ListExportVersions(ctx context.Context, now time.Time) ([]model.ExportArticle, error)
 
 	// Publish enqueues e in this transaction's outbox (ADR-0007).
 	Publish(ctx context.Context, now time.Time, e model.Event) error

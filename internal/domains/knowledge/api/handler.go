@@ -176,6 +176,36 @@ func (s *Server) StaffCreateTopic(ctx context.Context, req StaffCreateTopicReque
 	return StaffCreateTopic201JSONResponse(toAPIStaffTopic(topic)), nil
 }
 
+// StaffListReviewDue returns published versions due for review.
+func (s *Server) StaffListReviewDue(ctx context.Context, req StaffListReviewDueRequestObject) (StaffListReviewDueResponseObject, error) {
+	var cursor string
+	if req.Params.Cursor != nil {
+		cursor = *req.Params.Cursor
+	}
+	page, err := s.Service.StaffListReviewDue(ctx, principal(ctx), cursor)
+	if err != nil {
+		if errors.Is(err, model.ErrForbidden) {
+			return StaffListReviewDue403ApplicationProblemPlusJSONResponse{
+				ProblemApplicationProblemPlusJSONResponse(problem(http.StatusForbidden, "forbidden", "Not allowed.")),
+			}, nil
+		}
+		if st, c, t, ok := problemFor(err); ok {
+			return StaffListReviewDuedefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+		}
+		return nil, err
+	}
+	items := make([]StaffArticle, 0, len(page.Items))
+	for _, v := range page.Items {
+		items = append(items, toAPIStaffArticle(v))
+	}
+	out := StaffListReviewDue200JSONResponse{Items: items}
+	if page.NextCursor != "" {
+		c := page.NextCursor
+		out.NextCursor = &c
+	}
+	return out, nil
+}
+
 // StaffListArticles returns a page of versions.
 func (s *Server) StaffListArticles(ctx context.Context, req StaffListArticlesRequestObject) (StaffListArticlesResponseObject, error) {
 	var status, cursor string

@@ -389,7 +389,7 @@ func (t *memoryTx) RetirePublished(_ context.Context, articleID uuid.UUID, lang 
 	for id, v := range t.st.versions {
 		if v.ArticleID == articleID && v.Lang == lang && v.Status == model.StatusPublished && id != exceptID {
 			v.Status = model.StatusRetired
-			v.ReviewerID, v.ReviewedAt, v.ExpiresAt = nil, nil, nil
+			v.ReviewerID, v.ReviewedAt, v.ExpiresAt, v.ReviewDueAt = nil, nil, nil, nil
 			v.UpdatedAt = at
 			t.st.versions[id] = v
 			return v, true, nil
@@ -437,6 +437,84 @@ func (t *memoryTx) ListStaffVersions(_ context.Context, f model.VersionFilter) (
 	if int(f.Limit) < len(out) {
 		out = out[:f.Limit]
 	}
+	return out, nil
+}
+
+// MarkReviewDue implements port.Tx.
+func (t *memoryTx) MarkReviewDue(_ context.Context, versionID uuid.UUID, at time.Time) (model.Version, error) {
+	v, ok := t.st.versions[versionID]
+	if !ok || v.Status != model.StatusPublished {
+		return model.Version{}, model.ErrNotFound
+	}
+	if v.ReviewDueAt == nil {
+		due := at
+		v.ReviewDueAt = &due
+	}
+	v.UpdatedAt = at
+	t.st.versions[versionID] = v
+	return v, nil
+}
+
+// ListReviewDue implements port.Tx.
+func (t *memoryTx) ListReviewDue(_ context.Context, f model.ReviewDueFilter) ([]model.Version, error) {
+	var out []model.Version
+	for _, v := range t.st.versions {
+		if v.Status != model.StatusPublished || v.ReviewDueAt == nil || v.ExpiresAt == nil {
+			continue
+		}
+		a := t.st.articles[v.ArticleID]
+		if f.Kind != "" && a.Kind != f.Kind {
+			continue
+		}
+		if f.CursorExpiresAt != nil && f.CursorID != nil {
+			beforeOrEqual := v.ExpiresAt.Before(*f.CursorExpiresAt) ||
+				(v.ExpiresAt.Equal(*f.CursorExpiresAt) && v.ID.String() <= f.CursorID.String())
+			if beforeOrEqual {
+				continue
+			}
+		}
+		v.TopicID, v.Kind = a.TopicID, a.Kind
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].ExpiresAt.Equal(*out[j].ExpiresAt) {
+			return out[i].ExpiresAt.Before(*out[j].ExpiresAt)
+		}
+		return out[i].ID.String() < out[j].ID.String()
+	})
+	if int(f.Limit) < len(out) {
+		out = out[:f.Limit]
+	}
+	return out, nil
+}
+
+// ListExportVersions implements port.Tx.
+func (t *memoryTx) ListExportVersions(_ context.Context, now time.Time) ([]model.ExportArticle, error) {
+	var out []model.ExportArticle
+	for _, v := range t.st.versions {
+		if v.Status != model.StatusPublished || v.ReviewedAt == nil || v.ExpiresAt == nil {
+			continue
+		}
+		a := t.st.articles[v.ArticleID]
+		if a.Kind == model.KindRights && !v.ExpiresAt.After(now) {
+			continue
+		}
+		topic := t.st.topics[a.TopicID]
+		out = append(out, model.ExportArticle{
+			Lang: v.Lang, TopicCode: topic.Code, ArticleSlug: a.Slug, Kind: a.Kind,
+			Title: v.Title, Body: v.Body, SourceURL: v.SourceURL,
+			ReviewedAt: *v.ReviewedAt, ExpiresAt: *v.ExpiresAt,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Lang != out[j].Lang {
+			return out[i].Lang < out[j].Lang
+		}
+		if out[i].TopicCode != out[j].TopicCode {
+			return out[i].TopicCode < out[j].TopicCode
+		}
+		return out[i].ArticleSlug < out[j].ArticleSlug
+	})
 	return out, nil
 }
 

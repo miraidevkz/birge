@@ -1,10 +1,10 @@
 -- name: InsertArticle :one
-INSERT INTO knowledge.articles (id, topic_id, kind, created_at)
-VALUES (@id, @topic_id, @kind, @created_at)
-RETURNING id, topic_id, kind, created_at;
+INSERT INTO knowledge.articles (id, topic_id, kind, slug, created_at)
+VALUES (@id, @topic_id, @kind, @slug, @created_at)
+RETURNING id, topic_id, kind, slug, created_at;
 
 -- name: GetArticle :one
-SELECT id, topic_id, kind, created_at
+SELECT id, topic_id, kind, slug, created_at
 FROM knowledge.articles
 WHERE id = @id;
 

@@ -106,6 +106,77 @@ func (s *Service) StaffListArticles(ctx context.Context, p auth.Principal, statu
 	return page, nil
 }
 
+// StaffListReviewDue returns published versions whose ReviewDue timer has
+// fired, oldest expiry first. Lawyer sees rights; psychologist self-help;
+// admin both. MFA required; deny by default.
+func (s *Service) StaffListReviewDue(ctx context.Context, p auth.Principal, cursor string) (model.StaffPage, error) {
+	kind, err := authorizeReviewDue(p)
+	if err != nil {
+		return model.StaffPage{}, err
+	}
+	f := model.ReviewDueFilter{Kind: kind, Limit: staffPageSize + 1}
+	if cursor != "" {
+		at, id, err := decodeCursor(cursor)
+		if err != nil {
+			return model.StaffPage{}, err
+		}
+		f.CursorExpiresAt, f.CursorID = &at, &id
+	}
+	var items []model.Version
+	if err := s.Store.InTx(ctx, func(tx port.Tx) error {
+		var err error
+		items, err = tx.ListReviewDue(ctx, f)
+		return err
+	}); err != nil {
+		return model.StaffPage{}, err
+	}
+	page := model.StaffPage{Items: items}
+	if len(items) > staffPageSize {
+		page.Items = items[:staffPageSize]
+		last := page.Items[staffPageSize-1]
+		if last.ExpiresAt == nil {
+			return model.StaffPage{}, fmt.Errorf("review-due: missing expires_at")
+		}
+		page.NextCursor = encodeCursor(*last.ExpiresAt, last.ID)
+	}
+	return page, nil
+}
+
+// authorizeReviewDue returns the kind filter for the review-due queue (empty =
+// both kinds for admin) or an error. MFA is required.
+func authorizeReviewDue(p auth.Principal) (kind string, err error) {
+	if p.IdentityID == uuid.Nil {
+		return "", model.ErrUnauthorized
+	}
+	if !p.Staff || !p.MFA {
+		return "", model.ErrForbidden
+	}
+	hasAdmin, hasLawyer, hasPsych := false, false, false
+	for _, r := range p.Roles {
+		switch r {
+		case model.RoleAdmin:
+			hasAdmin = true
+		case model.RoleLawyer:
+			hasLawyer = true
+		case model.RolePsychologist:
+			hasPsych = true
+		}
+	}
+	if hasAdmin {
+		return "", nil
+	}
+	if hasLawyer && hasPsych {
+		return "", nil
+	}
+	if hasLawyer {
+		return model.KindRights, nil
+	}
+	if hasPsych {
+		return model.KindSelfhelp, nil
+	}
+	return "", model.ErrForbidden
+}
+
 // CreateDraft starts a new article (or a new language version of an existing
 // one) as a draft. Psychologist authors self-help; lawyer authors rights.
 // Idempotent per author and Idempotency-Key.
@@ -153,8 +224,9 @@ func (s *Service) CreateDraft(ctx context.Context, p auth.Principal, key uuid.UU
 			}
 		} else {
 			aid := uuid.Must(uuid.NewV7())
+			slug := model.ArticleSlugFromID(aid)
 			art, err = tx.InsertArticle(ctx, model.Article{
-				ID: aid, TopicID: topicID, Kind: topic.Kind, CreatedAt: now,
+				ID: aid, TopicID: topicID, Kind: topic.Kind, Slug: slug, CreatedAt: now,
 			})
 			if err != nil {
 				return err

@@ -33,6 +33,7 @@ type DemoTopic struct {
 // DemoArticle is one DEMO article with versions in each language.
 type DemoArticle struct {
 	TopicCode string
+	Slug      string
 	Versions  []DemoVersion
 }
 
@@ -98,6 +99,9 @@ func SeedDemoIfEmpty(ctx context.Context, pool *pgxpool.Pool, seed DemoSeed, now
 			if !ok {
 				return fmt.Errorf("knowledge: demo article topic %q unknown", a.TopicCode)
 			}
+			if model.ValidateSlug(a.Slug) != nil || !model.SlugSafe(a.Slug) {
+				return fmt.Errorf("knowledge: demo article slug %q invalid", a.Slug)
+			}
 			var kind string
 			for _, t := range seed.Topics {
 				if t.Code == a.TopicCode {
@@ -107,7 +111,7 @@ func SeedDemoIfEmpty(ctx context.Context, pool *pgxpool.Pool, seed DemoSeed, now
 			}
 			aid := uuid.Must(uuid.NewV7())
 			if _, err := q.InsertArticle(ctx, knowledgestore.InsertArticleParams{
-				ID: aid, TopicID: topicID, Kind: kind, CreatedAt: now,
+				ID: aid, TopicID: topicID, Kind: kind, Slug: a.Slug, CreatedAt: now,
 			}); err != nil {
 				return fmt.Errorf("knowledge: insert demo article: %w", err)
 			}

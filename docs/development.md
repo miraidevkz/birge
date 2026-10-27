@@ -118,6 +118,12 @@ A fresh deployment can start with no configuration or reference data files: when
 
 `birge kb-reindex` rebuilds the current model's Qdrant collection from every published, non-expired knowledge fragment. It requires `DATABASE_URL`, `BIRGE_TEI_URL`, `BIRGE_QDRANT_URL` and `BIRGE_EMBEDDING_MODEL_ID`.
 
+`birge kb-export --out <dir>` writes every current published knowledge version to `<dir>/{kk,ru,en}/<topic-code>/<article-slug>.md` with YAML front matter (`title`, `topic`, `source_url`, `reviewed_by` = reviewer role, `reviewed_at`, `expires_at`). Drafts and expired rights are skipped; `.md` files under `<dir>/{kk,ru,en}/<topic>/` that the run did not write (retired or expired versions) are removed, nothing else under `<dir>` is touched. Output is deterministic so a rerun without content changes produces no diff. Requires `DATABASE_URL` only (migrate + seed first). Convenience target:
+
+```sh
+make kb-export   # writes under knowledge/
+```
+
 Health: `GET /healthz` answers 204 while the process runs; `GET /readyz` answers 204 when the database (and NATS for the API and the worker) is reachable and 503 otherwise.
 
 ## Running locally

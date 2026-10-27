@@ -1003,6 +1003,26 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/KnowledgeTopic'}
         default: {$ref: '#/components/responses/Problem'}
+  /staff/knowledge/review-due:
+    get:
+      operationId: staffListReviewDue
+      tags: [knowledge]
+      summary: Published versions whose review-due timer has fired, oldest expiry first. Lawyer sees rights; psychologist self-help; admin both. MFA required (deny by default).
+      security:
+        - staffOidc: []
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema: {type: string, maxLength: 128}
+      responses:
+        '200':
+          description: Versions due for review.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffArticlePage'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
   /staff/knowledge/articles:
     get:
       operationId: staffListArticles

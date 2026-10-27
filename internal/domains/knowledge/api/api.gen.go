@@ -339,6 +339,11 @@ type StaffCreateDraftParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// StaffListReviewDueParams defines parameters for StaffListReviewDue.
+type StaffListReviewDueParams struct {
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // StaffRejectJSONBody defines parameters for StaffReject.
 type StaffRejectJSONBody struct {
 	Reason StaffRejectJSONBodyReason `json:"reason"`
@@ -376,6 +381,9 @@ type ServerInterface interface {
 	// StaffCreateDraft Start a new article or a new version of an existing one (draft).
 	// (POST /staff/knowledge/articles)
 	StaffCreateDraft(w http.ResponseWriter, r *http.Request, params StaffCreateDraftParams)
+	// StaffListReviewDue Published versions whose review-due timer has fired, oldest expiry first. Lawyer sees rights; psychologist self-help; admin both. MFA required (deny by default).
+	// (GET /staff/knowledge/review-due)
+	StaffListReviewDue(w http.ResponseWriter, r *http.Request, params StaffListReviewDueParams)
 
 	// (GET /staff/knowledge/topics)
 	StaffListTopics(w http.ResponseWriter, r *http.Request)
@@ -617,6 +625,39 @@ func (siw *ServerInterfaceWrapper) StaffCreateDraft(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.StaffCreateDraft(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StaffListReviewDue operation middleware
+func (siw *ServerInterfaceWrapper) StaffListReviewDue(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StaffListReviewDueParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StaffListReviewDue(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -883,6 +924,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/knowledge/articles/{articleId}", wrapper.GetArticle)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/staff/knowledge/topics", wrapper.StaffListTopics)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/staff/knowledge/topics", wrapper.StaffCreateTopic)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/staff/knowledge/review-due", wrapper.StaffListReviewDue)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/staff/knowledge/articles", wrapper.StaffListArticles)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/staff/knowledge/articles", wrapper.StaffCreateDraft)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/staff/knowledge/versions/{versionId}", wrapper.StaffUpdateDraft)
@@ -1098,6 +1140,61 @@ type StaffCreateDraftdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response StaffCreateDraftdefaultApplicationProblemPlusJSONResponse) VisitStaffCreateDraftResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StaffListReviewDueRequestObject struct {
+	Params StaffListReviewDueParams
+}
+
+type StaffListReviewDueResponseObject interface {
+	VisitStaffListReviewDueResponse(w http.ResponseWriter) error
+}
+
+type StaffListReviewDue200JSONResponse StaffArticlePage
+
+func (response StaffListReviewDue200JSONResponse) VisitStaffListReviewDueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StaffListReviewDue403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response StaffListReviewDue403ApplicationProblemPlusJSONResponse) VisitStaffListReviewDueResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StaffListReviewDuedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response StaffListReviewDuedefaultApplicationProblemPlusJSONResponse) VisitStaffListReviewDueResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -1377,6 +1474,9 @@ type StrictServerInterface interface {
 	// StaffCreateDraft Start a new article or a new version of an existing one (draft).
 	// (POST /staff/knowledge/articles)
 	StaffCreateDraft(ctx context.Context, request StaffCreateDraftRequestObject) (StaffCreateDraftResponseObject, error)
+	// StaffListReviewDue Published versions whose review-due timer has fired, oldest expiry first. Lawyer sees rights; psychologist self-help; admin both. MFA required (deny by default).
+	// (GET /staff/knowledge/review-due)
+	StaffListReviewDue(ctx context.Context, request StaffListReviewDueRequestObject) (StaffListReviewDueResponseObject, error)
 
 	// (GET /staff/knowledge/topics)
 	StaffListTopics(ctx context.Context, request StaffListTopicsRequestObject) (StaffListTopicsResponseObject, error)
@@ -1568,6 +1668,32 @@ func (sh *strictHandler) StaffCreateDraft(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(StaffCreateDraftResponseObject); ok {
 		if err := validResponse.VisitStaffCreateDraftResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StaffListReviewDue operation middleware
+func (sh *strictHandler) StaffListReviewDue(w http.ResponseWriter, r *http.Request, params StaffListReviewDueParams) {
+	var request StaffListReviewDueRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StaffListReviewDue(ctx, request.(StaffListReviewDueRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StaffListReviewDue")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StaffListReviewDueResponseObject); ok {
+		if err := validResponse.VisitStaffListReviewDueResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

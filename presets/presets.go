@@ -150,6 +150,7 @@ type KnowledgeVersion struct {
 // KnowledgeArticle is a DEMO article under a topic code.
 type KnowledgeArticle struct {
 	TopicCode string             `json:"topic_code"`
+	Slug      string             `json:"slug"`
 	Versions  []KnowledgeVersion `json:"versions"`
 }
 
@@ -192,8 +193,8 @@ func LoadKnowledge() (Knowledge, error) {
 		}
 	}
 	for _, a := range out.Articles {
-		if a.TopicCode == "" || len(a.Versions) == 0 {
-			return Knowledge{}, fmt.Errorf("presets: knowledge: each article needs topic_code and versions")
+		if a.TopicCode == "" || a.Slug == "" || len(a.Versions) == 0 {
+			return Knowledge{}, fmt.Errorf("presets: knowledge: each article needs topic_code, slug and versions")
 		}
 		for _, v := range a.Versions {
 			if v.Lang == "" || v.Title == "" || v.Body == "" {

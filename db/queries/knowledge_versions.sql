@@ -9,12 +9,12 @@ VALUES (
 )
 ON CONFLICT (author_id, idempotency_key) DO NOTHING
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at;
 
 -- name: GetVersionByIdempotencyKey :one
 SELECT id, article_id, lang, status, title, body, source_url,
-       author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+       author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
        needs_sync, idempotency_key, created_at, updated_at
 FROM knowledge.versions
 WHERE author_id = @author_id
@@ -22,14 +22,14 @@ WHERE author_id = @author_id
 
 -- name: GetVersion :one
 SELECT id, article_id, lang, status, title, body, source_url,
-       author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+       author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
        needs_sync, idempotency_key, created_at, updated_at
 FROM knowledge.versions
 WHERE id = @id;
 
 -- name: GetVersionForUpdate :one
 SELECT id, article_id, lang, status, title, body, source_url,
-       author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+       author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
        needs_sync, idempotency_key, created_at, updated_at
 FROM knowledge.versions
 WHERE id = @id
@@ -37,8 +37,8 @@ FOR UPDATE;
 
 -- name: GetVersionWithArticle :one
 SELECT v.id, v.article_id, v.lang, v.status, v.title, v.body, v.source_url,
-       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.reject_reason,
-       v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
+       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.review_due_at,
+       v.reject_reason, v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
        a.topic_id, a.kind
 FROM knowledge.versions v
 JOIN knowledge.articles a ON a.id = v.article_id
@@ -46,8 +46,8 @@ WHERE v.id = @id;
 
 -- name: GetVersionWithArticleForUpdate :one
 SELECT v.id, v.article_id, v.lang, v.status, v.title, v.body, v.source_url,
-       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.reject_reason,
-       v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
+       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.review_due_at,
+       v.reject_reason, v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
        a.topic_id, a.kind
 FROM knowledge.versions v
 JOIN knowledge.articles a ON a.id = v.article_id
@@ -65,7 +65,7 @@ WHERE id = @id
   AND status = 'draft'
   AND author_id = @author_id
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at;
 
 -- name: SubmitVersion :one
@@ -77,7 +77,7 @@ WHERE id = @id
   AND status = 'draft'
   AND author_id = @author_id
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at;
 
 -- name: RejectVersion :one
@@ -88,7 +88,7 @@ SET status = 'draft',
 WHERE id = @id
   AND status = 'in_review'
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at;
 
 -- name: PublishVersion :one
@@ -103,7 +103,7 @@ SET status = 'published',
 WHERE id = @id
   AND status = 'in_review'
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at;
 
 -- name: RetirePublished :one
@@ -112,14 +112,58 @@ SET status = 'retired',
     reviewer_id = NULL,
     reviewed_at = NULL,
     expires_at = NULL,
+    review_due_at = NULL,
     updated_at = @updated_at
 WHERE article_id = @article_id
   AND lang = @lang
   AND status = 'published'
   AND id <> @except_id
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at;
+
+-- name: MarkReviewDue :one
+-- Sets review_due_at when the knowledge.ReviewDue timer fires (idempotent).
+UPDATE knowledge.versions
+SET review_due_at = COALESCE(review_due_at, @review_due_at),
+    updated_at = @updated_at
+WHERE id = @id
+  AND status = 'published'
+RETURNING id, article_id, lang, status, title, body, source_url,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
+          needs_sync, idempotency_key, created_at, updated_at;
+
+-- name: ListReviewDue :many
+-- Published versions marked review-due, oldest expiry first. kind filter is
+-- optional (NULL = all kinds the caller may see).
+SELECT v.id, v.article_id, v.lang, v.status, v.title, v.body, v.source_url,
+       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.review_due_at,
+       v.reject_reason, v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
+       a.topic_id, a.kind
+FROM knowledge.versions v
+JOIN knowledge.articles a ON a.id = v.article_id
+WHERE v.status = 'published'
+  AND v.review_due_at IS NOT NULL
+  AND (sqlc.narg('kind')::text IS NULL OR a.kind = sqlc.narg('kind')::text)
+  AND (
+      sqlc.narg('cursor_expires_at')::timestamptz IS NULL
+      OR (v.expires_at, v.id) > (sqlc.narg('cursor_expires_at')::timestamptz, sqlc.narg('cursor_id')::uuid)
+  )
+ORDER BY v.expires_at ASC, v.id ASC
+LIMIT @page_limit;
+
+-- name: ListExportVersions :many
+-- Current published versions for repository export (ADR-0022). Drafts,
+-- in-review and retired are excluded; expired rights are excluded; expired
+-- self-help stays until replaced.
+SELECT v.id AS version_id, v.article_id, v.lang, v.title, v.body, v.source_url,
+       v.reviewed_at, v.expires_at, a.kind, a.slug AS article_slug, t.code AS topic_code
+FROM knowledge.versions v
+JOIN knowledge.articles a ON a.id = v.article_id
+JOIN knowledge.topics t ON t.id = a.topic_id
+WHERE v.status = 'published'
+  AND (a.kind <> 'rights' OR v.expires_at > @now)
+ORDER BY v.lang ASC, t.code ASC, a.slug ASC;
 
 -- name: MarkOtherLanguagesNeedsSync :exec
 UPDATE knowledge.versions
@@ -131,8 +175,8 @@ WHERE article_id = @article_id
 
 -- name: ListStaffVersions :many
 SELECT v.id, v.article_id, v.lang, v.status, v.title, v.body, v.source_url,
-       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.reject_reason,
-       v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
+       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.review_due_at,
+       v.reject_reason, v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
        a.topic_id, a.kind
 FROM knowledge.versions v
 JOIN knowledge.articles a ON a.id = v.article_id

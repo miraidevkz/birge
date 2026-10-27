@@ -113,7 +113,10 @@ var (
 	ErrConflict = errors.New("knowledge: conflict")
 )
 
-var codeRe = regexp.MustCompile(`^[a-z_]{2,40}$`)
+var (
+	codeRe = regexp.MustCompile(`^[a-z_]{2,40}$`)
+	slugRe = regexp.MustCompile(`^[a-z0-9_]{2,60}$`)
+)
 
 // KindIsValid reports whether k is a known knowledge kind.
 func KindIsValid(k string) bool { return k == KindRights || k == KindSelfhelp }
@@ -186,6 +189,7 @@ type Article struct {
 	ID        uuid.UUID
 	TopicID   uuid.UUID
 	Kind      string
+	Slug      string // export path segment; unique per topic
 	CreatedAt time.Time
 }
 
@@ -207,6 +211,7 @@ type Version struct {
 	RejectReason   *string
 	NeedsSync      bool
 	IdempotencyKey *uuid.UUID
+	ReviewDueAt    *time.Time // set when knowledge.ReviewDue fires
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
@@ -262,6 +267,28 @@ type VersionFilter struct {
 	Limit           int32
 }
 
+// ReviewDueFilter selects the review-due queue, oldest expiry first.
+type ReviewDueFilter struct {
+	// Kind limits to one kind; empty means both (admin).
+	Kind            string
+	CursorExpiresAt *time.Time
+	CursorID        *uuid.UUID
+	Limit           int32
+}
+
+// ExportArticle is one published version ready for repository export.
+type ExportArticle struct {
+	Lang        string
+	TopicCode   string
+	ArticleSlug string
+	Kind        string
+	Title       string
+	Body        string
+	SourceURL   *string
+	ReviewedAt  time.Time
+	ExpiresAt   time.Time
+}
+
 // AuditEntry is one platform.audit_log row (IDs and fixed codes only).
 type AuditEntry struct {
 	At         time.Time
@@ -310,6 +337,38 @@ func ValidateCode(code string) error {
 		return ErrInvalidInput
 	}
 	return nil
+}
+
+// ValidateSlug checks an article slug for the export path (no separators).
+func ValidateSlug(slug string) error {
+	if !slugRe.MatchString(slug) {
+		return ErrInvalidInput
+	}
+	return nil
+}
+
+// SlugSafe reports whether s is safe as a single path segment: no empty,
+// no "." / "..", and no path separators (including after Clean).
+func SlugSafe(s string) bool {
+	if s == "" || s == "." || s == ".." {
+		return false
+	}
+	if strings.ContainsAny(s, `/\`) {
+		return false
+	}
+	// path.Clean of a single segment must stay that segment.
+	if ValidateSlug(s) != nil {
+		return false
+	}
+	return true
+}
+
+// ArticleSlugFromID builds a deterministic export slug from a new article id
+// when the staff API does not yet collect a human slug.
+func ArticleSlugFromID(id uuid.UUID) string {
+	// The whole id: a UUIDv7 prefix is mostly timestamp, so a short prefix
+	// collides for articles created in the same millisecond.
+	return "a_" + strings.ReplaceAll(id.String(), "-", "")
 }
 
 // ValidateContent checks title, body and optional source URL lengths and UTF-8.

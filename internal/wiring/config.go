@@ -40,6 +40,7 @@ const (
 	CommandWorker    Command = "worker"
 	CommandMigrate   Command = "migrate"
 	CommandKBReindex Command = "kb-reindex"
+	CommandKBExport  Command = "kb-export"
 )
 
 // Assistant / retrieval defaults (docs/development.md § Configuration).
@@ -205,6 +206,10 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 	}
 	if cmd == CommandKBReindex {
 		l.retrieval(&cfg, true)
+		return cfg, l.result()
+	}
+	if cmd == CommandKBExport {
+		// Only DATABASE_URL is required (already loaded above).
 		return cfg, l.result()
 	}
 	if !api && !worker {

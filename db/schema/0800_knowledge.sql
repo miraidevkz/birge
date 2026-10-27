@@ -20,13 +20,17 @@ CREATE TABLE knowledge.topics (
 );
 
 -- One question (article) under a topic. Kind is denormalised from the topic
--- so version queries do not join for role checks.
+-- so version queries do not join for role checks. Slug is the export path
+-- segment under the topic code (ADR-0022 repository export).
 CREATE TABLE knowledge.articles (
     id         uuid        PRIMARY KEY DEFAULT uuidv7(),
     topic_id   uuid        NOT NULL REFERENCES knowledge.topics (id),
     kind       text        NOT NULL
                            CHECK (kind IN ('rights', 'selfhelp')),
-    created_at timestamptz NOT NULL DEFAULT now()
+    slug       text        NOT NULL
+                           CHECK (slug ~ '^[a-z0-9_]{2,60}$'),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT articles_topic_slug_key UNIQUE (topic_id, slug)
 );
 
 CREATE INDEX articles_topic_idx ON knowledge.articles (topic_id);
@@ -48,6 +52,8 @@ CREATE TABLE knowledge.versions (
     reviewer_id     uuid,
     reviewed_at     timestamptz,
     expires_at      timestamptz,
+    -- Set when knowledge.ReviewDue fires; staff review-due queue lists these.
+    review_due_at   timestamptz,
     reject_reason   text        CHECK (reject_reason IS NULL OR reject_reason IN (
                                     'inaccurate', 'outdated_law', 'unclear',
                                     'unsafe_advice', 'missing_source', 'other')),
@@ -58,6 +64,8 @@ CREATE TABLE knowledge.versions (
     created_at      timestamptz NOT NULL,
     updated_at      timestamptz NOT NULL,
     CONSTRAINT versions_author_idempotency_key UNIQUE (author_id, idempotency_key),
+    -- review_due_at is cleared in RetirePublished; non-published rows keep it NULL
+    -- by application convention (avoid DROP CONSTRAINT on the published-fields check).
     CONSTRAINT versions_published_fields_check CHECK (
         (status <> 'published'
             AND reviewer_id IS NULL AND reviewed_at IS NULL AND expires_at IS NULL)
@@ -68,6 +76,10 @@ CREATE TABLE knowledge.versions (
         reject_reason IS NULL OR status = 'draft'
     )
 );
+
+CREATE INDEX versions_review_due_expires_idx
+    ON knowledge.versions (expires_at ASC, id ASC)
+    WHERE status = 'published' AND review_due_at IS NOT NULL;
 
 -- One live answer per article and language (ADR-0022).
 CREATE UNIQUE INDEX versions_one_published_per_article_lang

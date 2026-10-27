@@ -113,8 +113,11 @@ func (t *postgresTx) ListMemberTopics(ctx context.Context, kind, lang string) ([
 // InsertArticle implements port.Tx.
 func (t *postgresTx) InsertArticle(ctx context.Context, a model.Article) (model.Article, error) {
 	row, err := t.q.InsertArticle(ctx, knowledgestore.InsertArticleParams{
-		ID: a.ID, TopicID: a.TopicID, Kind: a.Kind, CreatedAt: a.CreatedAt,
+		ID: a.ID, TopicID: a.TopicID, Kind: a.Kind, Slug: a.Slug, CreatedAt: a.CreatedAt,
 	})
+	if isUniqueViolation(err) {
+		return model.Article{}, model.ErrConflict
+	}
 	if err != nil {
 		return model.Article{}, fmt.Errorf("insert article: %w", err)
 	}
@@ -244,7 +247,7 @@ func (t *postgresTx) GetVersionWithArticle(ctx context.Context, id uuid.UUID, fo
 			return model.Version{}, notFound(err, "get version")
 		}
 		return mapVersionWith(row.ID, row.ArticleID, row.Lang, row.Status, row.Title, row.Body, row.SourceUrl,
-			row.AuthorID, row.ReviewerID, row.ReviewedAt, row.ExpiresAt, row.RejectReason, row.NeedsSync,
+			row.AuthorID, row.ReviewerID, row.ReviewedAt, row.ExpiresAt, row.ReviewDueAt, row.RejectReason, row.NeedsSync,
 			row.IdempotencyKey, row.CreatedAt, row.UpdatedAt, row.TopicID, row.Kind), nil
 	}
 	row, err := t.q.GetVersionWithArticle(ctx, id)
@@ -252,7 +255,7 @@ func (t *postgresTx) GetVersionWithArticle(ctx context.Context, id uuid.UUID, fo
 		return model.Version{}, notFound(err, "get version")
 	}
 	return mapVersionWith(row.ID, row.ArticleID, row.Lang, row.Status, row.Title, row.Body, row.SourceUrl,
-		row.AuthorID, row.ReviewerID, row.ReviewedAt, row.ExpiresAt, row.RejectReason, row.NeedsSync,
+		row.AuthorID, row.ReviewerID, row.ReviewedAt, row.ExpiresAt, row.ReviewDueAt, row.RejectReason, row.NeedsSync,
 		row.IdempotencyKey, row.CreatedAt, row.UpdatedAt, row.TopicID, row.Kind), nil
 }
 
@@ -340,8 +343,62 @@ func (t *postgresTx) ListStaffVersions(ctx context.Context, f model.VersionFilte
 	out := make([]model.Version, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, mapVersionWith(r.ID, r.ArticleID, r.Lang, r.Status, r.Title, r.Body, r.SourceUrl,
-			r.AuthorID, r.ReviewerID, r.ReviewedAt, r.ExpiresAt, r.RejectReason, r.NeedsSync,
+			r.AuthorID, r.ReviewerID, r.ReviewedAt, r.ExpiresAt, r.ReviewDueAt, r.RejectReason, r.NeedsSync,
 			r.IdempotencyKey, r.CreatedAt, r.UpdatedAt, r.TopicID, r.Kind))
+	}
+	return out, nil
+}
+
+// MarkReviewDue implements port.Tx.
+func (t *postgresTx) MarkReviewDue(ctx context.Context, versionID uuid.UUID, at time.Time) (model.Version, error) {
+	due := at
+	row, err := t.q.MarkReviewDue(ctx, knowledgestore.MarkReviewDueParams{
+		ReviewDueAt: &due, UpdatedAt: at, ID: versionID,
+	})
+	if err != nil {
+		return model.Version{}, notFound(err, "mark review due")
+	}
+	return mapVersion(row), nil
+}
+
+// ListReviewDue implements port.Tx.
+func (t *postgresTx) ListReviewDue(ctx context.Context, f model.ReviewDueFilter) ([]model.Version, error) {
+	var kind *string
+	if f.Kind != "" {
+		kind = &f.Kind
+	}
+	rows, err := t.q.ListReviewDue(ctx, knowledgestore.ListReviewDueParams{
+		Kind: kind, CursorExpiresAt: f.CursorExpiresAt, CursorID: f.CursorID, PageLimit: f.Limit,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list review due: %w", err)
+	}
+	out := make([]model.Version, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, mapVersionWith(r.ID, r.ArticleID, r.Lang, r.Status, r.Title, r.Body, r.SourceUrl,
+			r.AuthorID, r.ReviewerID, r.ReviewedAt, r.ExpiresAt, r.ReviewDueAt, r.RejectReason, r.NeedsSync,
+			r.IdempotencyKey, r.CreatedAt, r.UpdatedAt, r.TopicID, r.Kind))
+	}
+	return out, nil
+}
+
+// ListExportVersions implements port.Tx.
+func (t *postgresTx) ListExportVersions(ctx context.Context, now time.Time) ([]model.ExportArticle, error) {
+	n := now
+	rows, err := t.q.ListExportVersions(ctx, &n)
+	if err != nil {
+		return nil, fmt.Errorf("list export versions: %w", err)
+	}
+	out := make([]model.ExportArticle, 0, len(rows))
+	for _, r := range rows {
+		if r.ReviewedAt == nil || r.ExpiresAt == nil {
+			return nil, fmt.Errorf("list export versions: missing review fields")
+		}
+		out = append(out, model.ExportArticle{
+			Lang: r.Lang, TopicCode: r.TopicCode, ArticleSlug: r.ArticleSlug, Kind: r.Kind,
+			Title: r.Title, Body: r.Body, SourceURL: r.SourceUrl,
+			ReviewedAt: *r.ReviewedAt, ExpiresAt: *r.ExpiresAt,
+		})
 	}
 	return out, nil
 }
@@ -384,24 +441,25 @@ func mapTopic(r knowledgestore.KnowledgeTopic) model.Topic {
 }
 
 func mapArticle(r knowledgestore.KnowledgeArticle) model.Article {
-	return model.Article{ID: r.ID, TopicID: r.TopicID, Kind: r.Kind, CreatedAt: r.CreatedAt}
+	return model.Article{ID: r.ID, TopicID: r.TopicID, Kind: r.Kind, Slug: r.Slug, CreatedAt: r.CreatedAt}
 }
 
 func mapVersion(r knowledgestore.KnowledgeVersion) model.Version {
 	return mapVersionWith(r.ID, r.ArticleID, r.Lang, r.Status, r.Title, r.Body, r.SourceUrl,
-		r.AuthorID, r.ReviewerID, r.ReviewedAt, r.ExpiresAt, r.RejectReason, r.NeedsSync,
+		r.AuthorID, r.ReviewerID, r.ReviewedAt, r.ExpiresAt, r.ReviewDueAt, r.RejectReason, r.NeedsSync,
 		r.IdempotencyKey, r.CreatedAt, r.UpdatedAt, uuid.Nil, "")
 }
 
 func mapVersionWith(
 	id, articleID uuid.UUID, lang, status, title, body string, sourceURL *string,
-	authorID uuid.UUID, reviewerID *uuid.UUID, reviewedAt, expiresAt *time.Time, rejectReason *string,
+	authorID uuid.UUID, reviewerID *uuid.UUID, reviewedAt, expiresAt, reviewDueAt *time.Time, rejectReason *string,
 	needsSync bool, idempotencyKey *uuid.UUID, createdAt, updatedAt time.Time, topicID uuid.UUID, kind string,
 ) model.Version {
 	return model.Version{
 		ID: id, ArticleID: articleID, TopicID: topicID, Kind: kind, Lang: lang, Status: status,
 		Title: title, Body: body, SourceURL: sourceURL, AuthorID: authorID, ReviewerID: reviewerID,
-		ReviewedAt: reviewedAt, ExpiresAt: expiresAt, RejectReason: rejectReason, NeedsSync: needsSync,
+		ReviewedAt: reviewedAt, ExpiresAt: expiresAt, ReviewDueAt: reviewDueAt,
+		RejectReason: rejectReason, NeedsSync: needsSync,
 		IdempotencyKey: idempotencyKey, CreatedAt: createdAt, UpdatedAt: updatedAt,
 	}
 }

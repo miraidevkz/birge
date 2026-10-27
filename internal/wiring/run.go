@@ -174,7 +174,7 @@ func seedDemoKnowledge(ctx context.Context, logger *slog.Logger, databaseURL str
 		})
 	}
 	for _, a := range k.Articles {
-		da := knowledgeadapter.DemoArticle{TopicCode: a.TopicCode}
+		da := knowledgeadapter.DemoArticle{TopicCode: a.TopicCode, Slug: a.Slug}
 		for _, v := range a.Versions {
 			da.Versions = append(da.Versions, knowledgeadapter.DemoVersion{
 				Lang: v.Lang, Title: v.Title, Body: v.Body, SourceURL: v.SourceURL,

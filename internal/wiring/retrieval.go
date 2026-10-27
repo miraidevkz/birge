@@ -9,6 +9,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	knowledgeadapter "birge/internal/domains/knowledge/adapter"
+	knowledgeexport "birge/internal/domains/knowledge/export"
 	"birge/internal/domains/knowledge/retrieval"
 	"birge/internal/platform/clock"
 	platformdb "birge/internal/platform/db"
@@ -81,5 +82,25 @@ func RunKBReindex(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		return fmt.Errorf("kb-reindex: %w", err)
 	}
 	logger.Info("kb-reindex finished", "versions", n, "collection", cfg.QdrantCollection())
+	return nil
+}
+
+// RunKBExport writes every current published knowledge version as markdown
+// under outDir (ADR-0022). Requires DATABASE_URL only.
+func RunKBExport(ctx context.Context, logger *slog.Logger, cfg Config, outDir string) error {
+	pool, err := platformdb.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("kb-export: %w", err)
+	}
+	defer pool.Close()
+	w := &knowledgeexport.Writer{
+		Store: &knowledgeadapter.PostgresStore{Pool: pool},
+		Now:   clock.System{}.Now,
+	}
+	n, err := w.Export(ctx, outDir)
+	if err != nil {
+		return fmt.Errorf("kb-export: %w", err)
+	}
+	logger.Info("kb-export finished", "versions", n, "out", outDir)
 	return nil
 }

@@ -13,7 +13,7 @@ import (
 )
 
 const getArticle = `-- name: GetArticle :one
-SELECT id, topic_id, kind, created_at
+SELECT id, topic_id, kind, slug, created_at
 FROM knowledge.articles
 WHERE id = $1
 `
@@ -25,6 +25,7 @@ func (q *Queries) GetArticle(ctx context.Context, id uuid.UUID) (KnowledgeArticl
 		&i.ID,
 		&i.TopicID,
 		&i.Kind,
+		&i.Slug,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -78,15 +79,16 @@ func (q *Queries) GetPublishedArticle(ctx context.Context, arg GetPublishedArtic
 }
 
 const insertArticle = `-- name: InsertArticle :one
-INSERT INTO knowledge.articles (id, topic_id, kind, created_at)
-VALUES ($1, $2, $3, $4)
-RETURNING id, topic_id, kind, created_at
+INSERT INTO knowledge.articles (id, topic_id, kind, slug, created_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, topic_id, kind, slug, created_at
 `
 
 type InsertArticleParams struct {
 	ID        uuid.UUID
 	TopicID   uuid.UUID
 	Kind      string
+	Slug      string
 	CreatedAt time.Time
 }
 
@@ -95,6 +97,7 @@ func (q *Queries) InsertArticle(ctx context.Context, arg InsertArticleParams) (K
 		arg.ID,
 		arg.TopicID,
 		arg.Kind,
+		arg.Slug,
 		arg.CreatedAt,
 	)
 	var i KnowledgeArticle
@@ -102,6 +105,7 @@ func (q *Queries) InsertArticle(ctx context.Context, arg InsertArticleParams) (K
 		&i.ID,
 		&i.TopicID,
 		&i.Kind,
+		&i.Slug,
 		&i.CreatedAt,
 	)
 	return i, err

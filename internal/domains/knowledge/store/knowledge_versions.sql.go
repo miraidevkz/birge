@@ -14,7 +14,7 @@ import (
 
 const getVersion = `-- name: GetVersion :one
 SELECT id, article_id, lang, status, title, body, source_url,
-       author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+       author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
        needs_sync, idempotency_key, created_at, updated_at
 FROM knowledge.versions
 WHERE id = $1
@@ -35,6 +35,7 @@ func (q *Queries) GetVersion(ctx context.Context, id uuid.UUID) (KnowledgeVersio
 		&i.ReviewerID,
 		&i.ReviewedAt,
 		&i.ExpiresAt,
+		&i.ReviewDueAt,
 		&i.RejectReason,
 		&i.NeedsSync,
 		&i.IdempotencyKey,
@@ -46,7 +47,7 @@ func (q *Queries) GetVersion(ctx context.Context, id uuid.UUID) (KnowledgeVersio
 
 const getVersionByIdempotencyKey = `-- name: GetVersionByIdempotencyKey :one
 SELECT id, article_id, lang, status, title, body, source_url,
-       author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+       author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
        needs_sync, idempotency_key, created_at, updated_at
 FROM knowledge.versions
 WHERE author_id = $1
@@ -73,6 +74,7 @@ func (q *Queries) GetVersionByIdempotencyKey(ctx context.Context, arg GetVersion
 		&i.ReviewerID,
 		&i.ReviewedAt,
 		&i.ExpiresAt,
+		&i.ReviewDueAt,
 		&i.RejectReason,
 		&i.NeedsSync,
 		&i.IdempotencyKey,
@@ -84,7 +86,7 @@ func (q *Queries) GetVersionByIdempotencyKey(ctx context.Context, arg GetVersion
 
 const getVersionForUpdate = `-- name: GetVersionForUpdate :one
 SELECT id, article_id, lang, status, title, body, source_url,
-       author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+       author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
        needs_sync, idempotency_key, created_at, updated_at
 FROM knowledge.versions
 WHERE id = $1
@@ -106,6 +108,7 @@ func (q *Queries) GetVersionForUpdate(ctx context.Context, id uuid.UUID) (Knowle
 		&i.ReviewerID,
 		&i.ReviewedAt,
 		&i.ExpiresAt,
+		&i.ReviewDueAt,
 		&i.RejectReason,
 		&i.NeedsSync,
 		&i.IdempotencyKey,
@@ -117,8 +120,8 @@ func (q *Queries) GetVersionForUpdate(ctx context.Context, id uuid.UUID) (Knowle
 
 const getVersionWithArticle = `-- name: GetVersionWithArticle :one
 SELECT v.id, v.article_id, v.lang, v.status, v.title, v.body, v.source_url,
-       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.reject_reason,
-       v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
+       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.review_due_at,
+       v.reject_reason, v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
        a.topic_id, a.kind
 FROM knowledge.versions v
 JOIN knowledge.articles a ON a.id = v.article_id
@@ -137,6 +140,7 @@ type GetVersionWithArticleRow struct {
 	ReviewerID     *uuid.UUID
 	ReviewedAt     *time.Time
 	ExpiresAt      *time.Time
+	ReviewDueAt    *time.Time
 	RejectReason   *string
 	NeedsSync      bool
 	IdempotencyKey *uuid.UUID
@@ -161,6 +165,7 @@ func (q *Queries) GetVersionWithArticle(ctx context.Context, id uuid.UUID) (GetV
 		&i.ReviewerID,
 		&i.ReviewedAt,
 		&i.ExpiresAt,
+		&i.ReviewDueAt,
 		&i.RejectReason,
 		&i.NeedsSync,
 		&i.IdempotencyKey,
@@ -174,8 +179,8 @@ func (q *Queries) GetVersionWithArticle(ctx context.Context, id uuid.UUID) (GetV
 
 const getVersionWithArticleForUpdate = `-- name: GetVersionWithArticleForUpdate :one
 SELECT v.id, v.article_id, v.lang, v.status, v.title, v.body, v.source_url,
-       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.reject_reason,
-       v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
+       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.review_due_at,
+       v.reject_reason, v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
        a.topic_id, a.kind
 FROM knowledge.versions v
 JOIN knowledge.articles a ON a.id = v.article_id
@@ -195,6 +200,7 @@ type GetVersionWithArticleForUpdateRow struct {
 	ReviewerID     *uuid.UUID
 	ReviewedAt     *time.Time
 	ExpiresAt      *time.Time
+	ReviewDueAt    *time.Time
 	RejectReason   *string
 	NeedsSync      bool
 	IdempotencyKey *uuid.UUID
@@ -219,6 +225,7 @@ func (q *Queries) GetVersionWithArticleForUpdate(ctx context.Context, id uuid.UU
 		&i.ReviewerID,
 		&i.ReviewedAt,
 		&i.ExpiresAt,
+		&i.ReviewDueAt,
 		&i.RejectReason,
 		&i.NeedsSync,
 		&i.IdempotencyKey,
@@ -241,7 +248,7 @@ VALUES (
 )
 ON CONFLICT (author_id, idempotency_key) DO NOTHING
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at
 `
 
@@ -288,6 +295,7 @@ func (q *Queries) InsertVersion(ctx context.Context, arg InsertVersionParams) (K
 		&i.ReviewerID,
 		&i.ReviewedAt,
 		&i.ExpiresAt,
+		&i.ReviewDueAt,
 		&i.RejectReason,
 		&i.NeedsSync,
 		&i.IdempotencyKey,
@@ -297,10 +305,164 @@ func (q *Queries) InsertVersion(ctx context.Context, arg InsertVersionParams) (K
 	return i, err
 }
 
+const listExportVersions = `-- name: ListExportVersions :many
+SELECT v.id AS version_id, v.article_id, v.lang, v.title, v.body, v.source_url,
+       v.reviewed_at, v.expires_at, a.kind, a.slug AS article_slug, t.code AS topic_code
+FROM knowledge.versions v
+JOIN knowledge.articles a ON a.id = v.article_id
+JOIN knowledge.topics t ON t.id = a.topic_id
+WHERE v.status = 'published'
+  AND (a.kind <> 'rights' OR v.expires_at > $1)
+ORDER BY v.lang ASC, t.code ASC, a.slug ASC
+`
+
+type ListExportVersionsRow struct {
+	VersionID   uuid.UUID
+	ArticleID   uuid.UUID
+	Lang        string
+	Title       string
+	Body        string
+	SourceUrl   *string
+	ReviewedAt  *time.Time
+	ExpiresAt   *time.Time
+	Kind        string
+	ArticleSlug string
+	TopicCode   string
+}
+
+// Current published versions for repository export (ADR-0022). Drafts,
+// in-review and retired are excluded; expired rights are excluded; expired
+// self-help stays until replaced.
+func (q *Queries) ListExportVersions(ctx context.Context, now *time.Time) ([]ListExportVersionsRow, error) {
+	rows, err := q.db.Query(ctx, listExportVersions, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExportVersionsRow
+	for rows.Next() {
+		var i ListExportVersionsRow
+		if err := rows.Scan(
+			&i.VersionID,
+			&i.ArticleID,
+			&i.Lang,
+			&i.Title,
+			&i.Body,
+			&i.SourceUrl,
+			&i.ReviewedAt,
+			&i.ExpiresAt,
+			&i.Kind,
+			&i.ArticleSlug,
+			&i.TopicCode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReviewDue = `-- name: ListReviewDue :many
+SELECT v.id, v.article_id, v.lang, v.status, v.title, v.body, v.source_url,
+       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.review_due_at,
+       v.reject_reason, v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
+       a.topic_id, a.kind
+FROM knowledge.versions v
+JOIN knowledge.articles a ON a.id = v.article_id
+WHERE v.status = 'published'
+  AND v.review_due_at IS NOT NULL
+  AND ($1::text IS NULL OR a.kind = $1::text)
+  AND (
+      $2::timestamptz IS NULL
+      OR (v.expires_at, v.id) > ($2::timestamptz, $3::uuid)
+  )
+ORDER BY v.expires_at ASC, v.id ASC
+LIMIT $4
+`
+
+type ListReviewDueParams struct {
+	Kind            *string
+	CursorExpiresAt *time.Time
+	CursorID        *uuid.UUID
+	PageLimit       int32
+}
+
+type ListReviewDueRow struct {
+	ID             uuid.UUID
+	ArticleID      uuid.UUID
+	Lang           string
+	Status         string
+	Title          string
+	Body           string
+	SourceUrl      *string
+	AuthorID       uuid.UUID
+	ReviewerID     *uuid.UUID
+	ReviewedAt     *time.Time
+	ExpiresAt      *time.Time
+	ReviewDueAt    *time.Time
+	RejectReason   *string
+	NeedsSync      bool
+	IdempotencyKey *uuid.UUID
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	TopicID        uuid.UUID
+	Kind           string
+}
+
+// Published versions marked review-due, oldest expiry first. kind filter is
+// optional (NULL = all kinds the caller may see).
+func (q *Queries) ListReviewDue(ctx context.Context, arg ListReviewDueParams) ([]ListReviewDueRow, error) {
+	rows, err := q.db.Query(ctx, listReviewDue,
+		arg.Kind,
+		arg.CursorExpiresAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReviewDueRow
+	for rows.Next() {
+		var i ListReviewDueRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ArticleID,
+			&i.Lang,
+			&i.Status,
+			&i.Title,
+			&i.Body,
+			&i.SourceUrl,
+			&i.AuthorID,
+			&i.ReviewerID,
+			&i.ReviewedAt,
+			&i.ExpiresAt,
+			&i.ReviewDueAt,
+			&i.RejectReason,
+			&i.NeedsSync,
+			&i.IdempotencyKey,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TopicID,
+			&i.Kind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStaffVersions = `-- name: ListStaffVersions :many
 SELECT v.id, v.article_id, v.lang, v.status, v.title, v.body, v.source_url,
-       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.reject_reason,
-       v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
+       v.author_id, v.reviewer_id, v.reviewed_at, v.expires_at, v.review_due_at,
+       v.reject_reason, v.needs_sync, v.idempotency_key, v.created_at, v.updated_at,
        a.topic_id, a.kind
 FROM knowledge.versions v
 JOIN knowledge.articles a ON a.id = v.article_id
@@ -332,6 +494,7 @@ type ListStaffVersionsRow struct {
 	ReviewerID     *uuid.UUID
 	ReviewedAt     *time.Time
 	ExpiresAt      *time.Time
+	ReviewDueAt    *time.Time
 	RejectReason   *string
 	NeedsSync      bool
 	IdempotencyKey *uuid.UUID
@@ -367,6 +530,7 @@ func (q *Queries) ListStaffVersions(ctx context.Context, arg ListStaffVersionsPa
 			&i.ReviewerID,
 			&i.ReviewedAt,
 			&i.ExpiresAt,
+			&i.ReviewDueAt,
 			&i.RejectReason,
 			&i.NeedsSync,
 			&i.IdempotencyKey,
@@ -405,6 +569,49 @@ func (q *Queries) MarkOtherLanguagesNeedsSync(ctx context.Context, arg MarkOther
 	return err
 }
 
+const markReviewDue = `-- name: MarkReviewDue :one
+UPDATE knowledge.versions
+SET review_due_at = COALESCE(review_due_at, $1),
+    updated_at = $2
+WHERE id = $3
+  AND status = 'published'
+RETURNING id, article_id, lang, status, title, body, source_url,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
+          needs_sync, idempotency_key, created_at, updated_at
+`
+
+type MarkReviewDueParams struct {
+	ReviewDueAt *time.Time
+	UpdatedAt   time.Time
+	ID          uuid.UUID
+}
+
+// Sets review_due_at when the knowledge.ReviewDue timer fires (idempotent).
+func (q *Queries) MarkReviewDue(ctx context.Context, arg MarkReviewDueParams) (KnowledgeVersion, error) {
+	row := q.db.QueryRow(ctx, markReviewDue, arg.ReviewDueAt, arg.UpdatedAt, arg.ID)
+	var i KnowledgeVersion
+	err := row.Scan(
+		&i.ID,
+		&i.ArticleID,
+		&i.Lang,
+		&i.Status,
+		&i.Title,
+		&i.Body,
+		&i.SourceUrl,
+		&i.AuthorID,
+		&i.ReviewerID,
+		&i.ReviewedAt,
+		&i.ExpiresAt,
+		&i.ReviewDueAt,
+		&i.RejectReason,
+		&i.NeedsSync,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const publishVersion = `-- name: PublishVersion :one
 UPDATE knowledge.versions
 SET status = 'published',
@@ -417,7 +624,7 @@ SET status = 'published',
 WHERE id = $5
   AND status = 'in_review'
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at
 `
 
@@ -450,6 +657,7 @@ func (q *Queries) PublishVersion(ctx context.Context, arg PublishVersionParams) 
 		&i.ReviewerID,
 		&i.ReviewedAt,
 		&i.ExpiresAt,
+		&i.ReviewDueAt,
 		&i.RejectReason,
 		&i.NeedsSync,
 		&i.IdempotencyKey,
@@ -467,7 +675,7 @@ SET status = 'draft',
 WHERE id = $3
   AND status = 'in_review'
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at
 `
 
@@ -492,6 +700,7 @@ func (q *Queries) RejectVersion(ctx context.Context, arg RejectVersionParams) (K
 		&i.ReviewerID,
 		&i.ReviewedAt,
 		&i.ExpiresAt,
+		&i.ReviewDueAt,
 		&i.RejectReason,
 		&i.NeedsSync,
 		&i.IdempotencyKey,
@@ -507,13 +716,14 @@ SET status = 'retired',
     reviewer_id = NULL,
     reviewed_at = NULL,
     expires_at = NULL,
+    review_due_at = NULL,
     updated_at = $1
 WHERE article_id = $2
   AND lang = $3
   AND status = 'published'
   AND id <> $4
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at
 `
 
@@ -544,6 +754,7 @@ func (q *Queries) RetirePublished(ctx context.Context, arg RetirePublishedParams
 		&i.ReviewerID,
 		&i.ReviewedAt,
 		&i.ExpiresAt,
+		&i.ReviewDueAt,
 		&i.RejectReason,
 		&i.NeedsSync,
 		&i.IdempotencyKey,
@@ -562,7 +773,7 @@ WHERE id = $2
   AND status = 'draft'
   AND author_id = $3
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at
 `
 
@@ -587,6 +798,7 @@ func (q *Queries) SubmitVersion(ctx context.Context, arg SubmitVersionParams) (K
 		&i.ReviewerID,
 		&i.ReviewedAt,
 		&i.ExpiresAt,
+		&i.ReviewDueAt,
 		&i.RejectReason,
 		&i.NeedsSync,
 		&i.IdempotencyKey,
@@ -607,7 +819,7 @@ WHERE id = $5
   AND status = 'draft'
   AND author_id = $6
 RETURNING id, article_id, lang, status, title, body, source_url,
-          author_id, reviewer_id, reviewed_at, expires_at, reject_reason,
+          author_id, reviewer_id, reviewed_at, expires_at, review_due_at, reject_reason,
           needs_sync, idempotency_key, created_at, updated_at
 `
 
@@ -642,6 +854,7 @@ func (q *Queries) UpdateDraft(ctx context.Context, arg UpdateDraftParams) (Knowl
 		&i.ReviewerID,
 		&i.ReviewedAt,
 		&i.ExpiresAt,
+		&i.ReviewDueAt,
 		&i.RejectReason,
 		&i.NeedsSync,
 		&i.IdempotencyKey,

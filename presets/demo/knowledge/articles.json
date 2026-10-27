@@ -41,6 +41,7 @@
   "articles": [
     {
       "topic_code": "demo_pmpk",
+      "slug": "apply",
       "versions": [
         {
           "lang": "kk",
@@ -64,6 +65,7 @@
     },
     {
       "topic_code": "demo_benefits",
+      "slug": "disability_benefit",
       "versions": [
         {
           "lang": "kk",
@@ -87,6 +89,7 @@
     },
     {
       "topic_code": "demo_burnout",
+      "slug": "burnout_rest",
       "versions": [
         {
           "lang": "kk",
@@ -107,6 +110,7 @@
     },
     {
       "topic_code": "demo_boundaries",
+      "slug": "set_boundary",
       "versions": [
         {
           "lang": "kk",

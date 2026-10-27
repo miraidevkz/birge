@@ -14,6 +14,7 @@ type KnowledgeArticle struct {
 	ID        uuid.UUID
 	TopicID   uuid.UUID
 	Kind      string
+	Slug      string
 	CreatedAt time.Time
 }
 
@@ -39,6 +40,7 @@ type KnowledgeVersion struct {
 	ReviewerID     *uuid.UUID
 	ReviewedAt     *time.Time
 	ExpiresAt      *time.Time
+	ReviewDueAt    *time.Time
 	RejectReason   *string
 	NeedsSync      bool
 	IdempotencyKey *uuid.UUID
