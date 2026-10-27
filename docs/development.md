@@ -49,6 +49,8 @@ A fresh deployment can start with no configuration or reference data files: when
 | `consent_versions` | `presets/demo/settings.json` | `BIRGE_CONSENT_VERSIONS` |
 | `crisis_phones` | `presets/demo/settings.json` | `BIRGE_CRISIS_PHONES` |
 | `reference` | `presets/demo/reference.json` | seeded by `birge migrate` only when membership cities, districts and needs are all empty (never overwrites) |
+| `knowledge` | `presets/demo/knowledge/articles.json` | seeded by `birge migrate` only when knowledge tables are empty (never overwrites) |
+| `assistant_prompt` | `presets/demo/prompts/assistant.v1.md` (DEMO, not approved) | `BIRGE_ASSISTANT_PROMPT_FILE` |
 
 | Variable | Commands | Default | Meaning |
 |---|---|---|---|
@@ -94,6 +96,21 @@ A fresh deployment can start with no configuration or reference data files: when
 | `BIRGE_DELIVERY_MODE` | worker | required | `dev` only: push and SMS are logged (notification ID and channel), not sent. There are no real providers yet, so any other value refuses to start rather than drop notifications |
 | `BIRGE_EVENTS_MAX_AGE` | worker | `720h` | JetStream EVENTS stream MaxAge (how long events are retained) |
 | `BIRGE_EVENTS_MAX_BYTES` | worker | `1073741824` (1 GiB) | JetStream EVENTS stream MaxBytes (size cap; oldest messages discarded first) |
+| `BIRGE_LLM_MODEL` | api | `claude-opus-5-5` | Anthropic model id for the assistant (logged with every reply) |
+| `BIRGE_LLM_API_KEY_FILE` | api | unset | path to the Anthropic API key file; unset or unreadable → Warn `LLMDisabled`, every reply `degraded=true`, process still starts |
+| `BIRGE_LLM_BASE_URL` | api | SDK default | optional Messages API base URL (tests, in-jurisdiction gateway); SDK env vars are ignored |
+| `BIRGE_ASSISTANT_DAILY_LIMIT` | api | `50` | member assistant messages per calendar day in `BIRGE_TIME_ZONE` |
+| `BIRGE_ASSISTANT_PROMPT_FILE` | api | DEMO preset | path to the versioned system prompt (version = file stem); unset → `presets/demo/prompts/assistant.v1.md` (not approved) |
+| `BIRGE_ASSISTANT_NAMES_FILE` | api | unset | optional common-names list for anonymization (one name per line, `#` comments); empty → only structural patterns (phone, IIN, e-mail, …) |
+| `BIRGE_TEI_URL` | api, worker, kb-reindex | unset | self-hosted text-embeddings-inference base URL (`POST {base}/embed`); together with Qdrant and model id enables retrieval (ADR-0010). Any one missing → Warn `RetrievalDisabled`, assistant gets no fragments |
+| `BIRGE_TEI_QUERY_PREFIX` | api, worker, kb-reindex | `query: ` | prepended to search queries (e5-style models); set explicitly when the model needs a different or empty prefix |
+| `BIRGE_TEI_PASSAGE_PREFIX` | api, worker, kb-reindex | `passage: ` | prepended to indexed chunks (e5-style models) |
+| `BIRGE_EMBEDDING_MODEL_ID` | api, worker, kb-reindex | unset | embedding model id; the Qdrant collection name is `{alias}--{model_id with / → _}`. A model change uses a new collection + alias switch (see `internal/domains/knowledge/retrieval` package doc); then `birge kb-reindex` |
+| `BIRGE_QDRANT_URL` | api, worker, kb-reindex | unset | Qdrant REST base URL |
+| `BIRGE_QDRANT_ALIAS` | api, worker, kb-reindex | `birge-kb` | Qdrant alias Search uses; physical collection includes the model id |
+| `BIRGE_QDRANT_SCORE_THRESHOLD` | api, worker, kb-reindex | `0.3` | minimum cosine score for a retrieval hit (0..1) |
+
+`birge kb-reindex` rebuilds the current model's Qdrant collection from every published, non-expired knowledge fragment. It requires `DATABASE_URL`, `BIRGE_TEI_URL`, `BIRGE_QDRANT_URL` and `BIRGE_EMBEDDING_MODEL_ID`.
 
 Health: `GET /healthz` answers 204 while the process runs; `GET /readyz` answers 204 when the database (and, for the worker, NATS) is reachable and 503 otherwise.
 

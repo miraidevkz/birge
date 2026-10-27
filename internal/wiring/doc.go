@@ -1,8 +1,8 @@
 // Package wiring assembles the Birge backend from environment configuration:
-// it is what cmd/birge runs for `birge api`, `birge worker` and
-// `birge migrate` (keygen lives in cmd/birge and needs no wiring). It owns
-// no data and no business rules; it chooses the adapters behind every port
-// and the order of the HTTP middleware.
+// it is what cmd/birge runs for `birge api`, `birge worker`, `birge migrate`
+// and `birge kb-reindex` (keygen lives in cmd/birge and needs no wiring). It
+// owns no data and no business rules; it chooses the adapters behind every
+// port and the order of the HTTP middleware.
 //
 // What it owns:
 //
@@ -14,31 +14,39 @@
 //   - The API stack (NewAPIHandler): request log → /auth/ gateway → /v1 rate
 //     limit → authentication (staffauth for /v1/staff/, the member session
 //     everywhere else) → request validation → generated handlers (meta,
-//     membership, privacy, notify, safety, wellbeing, emergency).
+//     membership, privacy, notify, safety, wellbeing, emergency, assistant,
+//     knowledge, circle).
 //   - The worker (RunWorker): outbox relay to JetStream, the notify
 //     DeliveryRequested consumer, the emergency.SosShared district-push
-//     consumer and the timers worker with notify, privacy,
-//     safety.EscalationBackup, wellbeing.Reminder and emergency.SosAutoClose
-//     (ADR-0007, ADR-0020), stopped together on shutdown or on the first failure.
+//     consumer, the knowledge retrieval indexer (when TEI+Qdrant are set)
+//     and the timers worker with notify, privacy, safety.EscalationBackup,
+//     wellbeing.Reminder, emergency.SosAutoClose, assistant.RetentionPurge,
+//     knowledge review/expire and circle match/expire/ask-met (ADR-0007,
+//     ADR-0020), stopped together on shutdown or on the first failure.
 //   - Migrate: the migrations embedded in the binary (package birge/db),
 //     applied with goose under a PostgreSQL session lock, then db/roles.sql
-//     when asked (ADR-0006), then DEMO membership reference seed when those
-//     tables are empty (presets; never overwrites).
+//     when asked (ADR-0006), then DEMO membership reference and knowledge
+//     seed when those tables are empty (presets; never overwrites).
+//   - kb-reindex: rebuilds the Qdrant collection from PublishedFragments
+//     (ADR-0010); requires TEI, Qdrant and BIRGE_EMBEDDING_MODEL_ID.
 //   - Adapters between contexts and platform: the membership Encryptor on the
-//     platform envelope, safety/wellbeing/emergency Sealer (same envelope with
-//     per-column associated data), safety MemberDirectory (membership +
-//     Kratos phone), emergency MemberInfo/Blocks (membership; first name only)
-//     and NeverMet Acquaintances (circle not wired; Met always false),
-//     wellbeing CrisisOpener → safety.OpenEscalation, the notify Recipients
-//     (membership, safety.ResolveStaffRole/ShiftPhone, emergency
+//     platform envelope, safety/wellbeing/emergency/assistant Sealer (same
+//     envelope with per-column associated data), safety MemberDirectory
+//     (membership + Kratos phone), emergency MemberInfo/Blocks (membership;
+//     first name only) and CircleMet Acquaintances (circle.Met), circle
+//     MemberInfo/Blocks, assistant consent/lexicon/profiles/retrieval/LLM,
+//     wellbeing/assistant CrisisOpener → safety.OpenEscalation, the notify
+//     Recipients (membership, safety.ResolveStaffRole/ShiftPhone, emergency
 //     TrustedContactTarget/ContactPhone), and the log-only push and SMS senders.
 //   - EVENTS stream retention (BIRGE_EVENTS_MAX_AGE / BIRGE_EVENTS_MAX_BYTES)
 //     applied in EnsureStream on worker start.
 //   - Crisis lexicon and other configuration presets: when BIRGE_* variables
-//     for lexicon, questionnaire, SMS texts, consent versions or crisis phones
-//     are unset, the embedded DEMO/EXAMPLE values from package presets are
-//     used and logged once at Warn (event=DemoPreset). An empty or unloadable
-//     lexicon still refuses to start (ADR-0023). Keys stay required.
+//     for lexicon, questionnaire, SMS texts, consent versions, crisis phones
+//     or the assistant prompt are unset, the embedded DEMO/EXAMPLE values
+//     from package presets are used and logged once at Warn (event=DemoPreset).
+//     An empty or unloadable lexicon still refuses to start (ADR-0023). Keys
+//     stay required. Missing LLM key or TEI/Qdrant logs Warn LLMDisabled /
+//     RetrievalDisabled and continues (degraded assistant / empty retrieval).
 //
 // Invariants:
 //

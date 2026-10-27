@@ -28,7 +28,7 @@ Operations of tag `knowledge` in `contracts/openapi/birge.yaml`.
 | `POST …/publish` | Matching reviewer role, not the author; rights require `sourceUrl`; retires previous published of same article+lang; marks other languages `needs_sync`; schedules timers; audit; `knowledge.ArticlePublished`. |
 | `POST …/reject` | Matching reviewer role, not the author; reason code; back to `draft`. |
 
-Handler wiring into `birge api` is out of scope for this brief; the seeding hook is wired in `birge migrate`.
+Handlers are mounted in `birge api` (member + staff through staffauth). Seeding is wired in `birge migrate`. Retrieval adapters live in `knowledge/retrieval` (TEI + Qdrant); the worker indexes `ArticlePublished` / `ArticleExpired`; `birge kb-reindex` rebuilds from `PublishedFragments`.
 
 ## Events
 
@@ -49,7 +49,7 @@ Handler wiring into `birge api` is out of scope for this brief; the seeding hook
 
 | Function | Callers may rely on |
 |---|---|
-| `Service.PublishedFragments(ctx, lang, kind) ([]Fragment, error)` | Only current (non-expired) published versions of that kind/lang for the future retriever (ADR-0010). |
+| `Service.PublishedFragments(ctx, lang, kind) ([]Fragment, error)` | Only current (non-expired) published versions of that kind/lang for the retriever / `birge kb-reindex` (ADR-0010). |
 
 ## Configuration
 

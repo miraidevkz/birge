@@ -13,6 +13,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"birge/internal/domains/assistant/anonymize"
+	assistantservice "birge/internal/domains/assistant/service"
+	"birge/internal/domains/knowledge/retrieval"
 	"birge/internal/domains/membership/authgw"
 	"birge/internal/domains/notify/sms/guard"
 	privacymodel "birge/internal/domains/privacy/model"
@@ -32,9 +35,20 @@ type Command string
 
 // Subcommands.
 const (
-	CommandAPI     Command = "api"
-	CommandWorker  Command = "worker"
-	CommandMigrate Command = "migrate"
+	CommandAPI       Command = "api"
+	CommandWorker    Command = "worker"
+	CommandMigrate   Command = "migrate"
+	CommandKBReindex Command = "kb-reindex"
+)
+
+// Assistant / retrieval defaults (docs/development.md § Configuration).
+const (
+	defaultLLMModel            = "claude-opus-5-5"
+	defaultAssistantDailyLimit = 50
+	defaultQdrantAlias         = "birge-kb"
+	defaultTEIQueryPrefix      = "query: "
+	defaultTEIPassagePrefix    = "passage: "
+	defaultQdrantScoreThresh   = float32(0.3)
 )
 
 // DeliveryModeDev enables the log-only push and SMS senders (development only).
@@ -132,6 +146,27 @@ type Config struct {
 	// staff routes then answer 503 and never fall back to member sessions.
 	// Clock, Logger and Client are filled in by NewAPIHandler.
 	StaffAuth *staffauth.Config
+
+	// Assistant (Talk / Ask in my own words). LLMAPIKey empty → degraded mode
+	// (Warn LLMDisabled); never refuses to start.
+	LLMModel            string
+	LLMAPIKey           string
+	LLMBaseURL          string
+	AssistantDailyLimit int
+	AssistantPrompt     assistantservice.Prompt
+	AssistantNames      []string
+
+	// Retrieval (ADR-0010). When TEIURL, QdrantURL or EmbeddingModelID is
+	// unset, RetrievalEnabled is false and the API uses NoRetrieval
+	// (Warn RetrievalDisabled).
+	TEIURL               string
+	TEIQueryPrefix       string
+	TEIPassagePrefix     string
+	EmbeddingModelID     string
+	QdrantURL            string
+	QdrantAlias          string
+	QdrantScoreThreshold float32
+	RetrievalEnabled     bool
 }
 
 // String redacts the configuration so that an accidental %v cannot print secrets.
@@ -155,6 +190,10 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 	cfg.DatabaseURL = l.databaseURL("DATABASE_URL")
 	cfg.ApplyRoles = l.flag("BIRGE_APPLY_ROLES")
 	if cmd == CommandMigrate {
+		return cfg, l.result()
+	}
+	if cmd == CommandKBReindex {
+		l.retrieval(&cfg, true)
 		return cfg, l.result()
 	}
 	if !api && !worker {
@@ -198,6 +237,8 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		cfg.Wellbeing.TimeZone = cfg.TimeZone
 		cfg.Wellbeing.CrisisPhones = wellbeingCrisisPhones(cfg.CrisisPhones)
 		cfg.StaffAuth = l.staffAuth()
+		l.assistant(&cfg)
+		l.retrieval(&cfg, false)
 	}
 	if worker {
 		cfg.NATSURL = l.natsURL("NATS_URL")
@@ -231,11 +272,142 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		if cfg.DeliveryMode != DeliveryModeDev && len(cfg.SMSTexts) == 0 {
 			l.fail("BIRGE_SMS_TEXTS is required when BIRGE_DELIVERY_MODE is not dev")
 		}
+		// Worker runs the retrieval indexer when TEI+Qdrant are configured.
+		l.retrieval(&cfg, false)
 	}
 	if err := l.result(); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// assistant loads the LLM, prompt, names dictionary and daily limit.
+// A missing API key is allowed: the assistant runs degraded (LLMDisabled).
+func (l *loader) assistant(cfg *Config) {
+	cfg.LLMModel = strings.TrimSpace(l.getenv("BIRGE_LLM_MODEL"))
+	if cfg.LLMModel == "" {
+		cfg.LLMModel = defaultLLMModel
+	}
+	cfg.LLMBaseURL = l.httpURL("BIRGE_LLM_BASE_URL", false)
+	cfg.LLMAPIKey = l.secretFileOptional("BIRGE_LLM_API_KEY_FILE")
+	cfg.AssistantDailyLimit = l.positiveInt("BIRGE_ASSISTANT_DAILY_LIMIT", defaultAssistantDailyLimit)
+	cfg.AssistantPrompt = l.assistantPromptOrDemo(cfg)
+	cfg.AssistantNames = l.assistantNames()
+}
+
+func (l *loader) assistantPromptOrDemo(cfg *Config) assistantservice.Prompt {
+	path := strings.TrimSpace(l.getenv("BIRGE_ASSISTANT_PROMPT_FILE"))
+	if path != "" {
+		b, err := l.readFile(path)
+		if err != nil {
+			l.fail("BIRGE_ASSISTANT_PROMPT_FILE: cannot read the prompt file")
+			return assistantservice.Prompt{}
+		}
+		text := strings.TrimSpace(string(b))
+		if text == "" {
+			l.fail("BIRGE_ASSISTANT_PROMPT_FILE: the prompt file is empty")
+			return assistantservice.Prompt{}
+		}
+		base := path
+		if i := strings.LastIndexAny(path, `/\`); i >= 0 {
+			base = path[i+1:]
+		}
+		version := base
+		if i := strings.LastIndex(base, "."); i > 0 {
+			version = base[:i]
+		}
+		return assistantservice.Prompt{Version: version, Text: text}
+	}
+	version, text, err := presets.AssistantPrompt()
+	if err != nil {
+		l.fail("BIRGE_ASSISTANT_PROMPT_FILE: " + err.Error())
+		return assistantservice.Prompt{}
+	}
+	cfg.DemoPresets = append(cfg.DemoPresets, presets.NameAssistantPrompt)
+	return assistantservice.Prompt{Version: version, Text: strings.TrimSpace(string(text))}
+}
+
+func (l *loader) assistantNames() []string {
+	path := strings.TrimSpace(l.getenv("BIRGE_ASSISTANT_NAMES_FILE"))
+	if path == "" {
+		return nil
+	}
+	b, err := l.readFile(path)
+	if err != nil {
+		l.fail("BIRGE_ASSISTANT_NAMES_FILE: cannot read the names file")
+		return nil
+	}
+	names, err := anonymize.ParseNameList(strings.NewReader(string(b)))
+	if err != nil {
+		l.fail("BIRGE_ASSISTANT_NAMES_FILE: " + err.Error())
+		return nil
+	}
+	return names
+}
+
+// retrieval loads TEI + Qdrant settings. required makes all of them mandatory
+// (kb-reindex). Otherwise missing any one disables retrieval.
+func (l *loader) retrieval(cfg *Config, required bool) {
+	cfg.TEIURL = l.httpURL("BIRGE_TEI_URL", required)
+	cfg.QdrantURL = l.httpURL("BIRGE_QDRANT_URL", required)
+	cfg.EmbeddingModelID = strings.TrimSpace(l.getenv("BIRGE_EMBEDDING_MODEL_ID"))
+	if required && cfg.EmbeddingModelID == "" {
+		l.fail("BIRGE_EMBEDDING_MODEL_ID is required")
+	}
+	cfg.QdrantAlias = strings.TrimSpace(l.getenv("BIRGE_QDRANT_ALIAS"))
+	if cfg.QdrantAlias == "" {
+		cfg.QdrantAlias = defaultQdrantAlias
+	}
+	if v := l.getenv("BIRGE_TEI_QUERY_PREFIX"); v != "" {
+		cfg.TEIQueryPrefix = v
+	} else {
+		cfg.TEIQueryPrefix = defaultTEIQueryPrefix
+	}
+	if v := l.getenv("BIRGE_TEI_PASSAGE_PREFIX"); v != "" {
+		cfg.TEIPassagePrefix = v
+	} else {
+		cfg.TEIPassagePrefix = defaultTEIPassagePrefix
+	}
+	cfg.QdrantScoreThreshold = l.float32("BIRGE_QDRANT_SCORE_THRESHOLD", defaultQdrantScoreThresh)
+	cfg.RetrievalEnabled = cfg.TEIURL != "" && cfg.QdrantURL != "" && cfg.EmbeddingModelID != ""
+}
+
+// QdrantCollection is the physical collection name for the configured model.
+func (c Config) QdrantCollection() string {
+	return retrieval.CollectionName(c.QdrantAlias, c.EmbeddingModelID)
+}
+
+// secretFileOptional reads a secret from the file named by name; empty path
+// returns "" without failing (assistant LLM key).
+func (l *loader) secretFileOptional(name string) string {
+	path := strings.TrimSpace(l.getenv(name))
+	if path == "" {
+		return ""
+	}
+	b, err := l.readFile(path)
+	if err != nil {
+		l.fail(name + ": cannot read the secret file")
+		return ""
+	}
+	defer clear(b)
+	s := string(bytes.TrimRight(b, " \t\r\n"))
+	if s == "" {
+		l.fail(name + ": the secret file is empty")
+	}
+	return s
+}
+
+func (l *loader) float32(name string, def float32) float32 {
+	v := strings.TrimSpace(l.getenv(name))
+	if v == "" {
+		return def
+	}
+	n, err := strconv.ParseFloat(v, 32)
+	if err != nil || n < 0 || n > 1 {
+		l.fail(name + ": must be a number between 0 and 1")
+		return def
+	}
+	return float32(n)
 }
 
 // LogDemoPresets emits one Warn line per embedded preset in use. Call once at

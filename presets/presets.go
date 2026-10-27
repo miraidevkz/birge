@@ -24,6 +24,7 @@ const (
 	NameCrisisPhones    = "crisis_phones"
 	NameReference       = "reference"
 	NameKnowledge       = "knowledge"
+	NameAssistantPrompt = "assistant_prompt"
 )
 
 //go:embed demo
@@ -156,6 +157,16 @@ type KnowledgeArticle struct {
 type Knowledge struct {
 	Topics   []KnowledgeTopic   `json:"topics"`
 	Articles []KnowledgeArticle `json:"articles"`
+}
+
+// AssistantPrompt returns the DEMO system prompt (not approved; see the file
+// header). Version name is the file stem: assistant.v1.
+func AssistantPrompt() (version string, text []byte, err error) {
+	b, err := demoFS.ReadFile("demo/prompts/assistant.v1.md")
+	if err != nil {
+		return "", nil, fmt.Errorf("presets: assistant prompt: %w", err)
+	}
+	return "assistant.v1", b, nil
 }
 
 // LoadKnowledge reads the DEMO knowledge articles (titles/bodies contain DEMO).

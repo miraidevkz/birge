@@ -11,9 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"birge/contracts/openapi"
+	assistantadapter "birge/internal/domains/assistant/adapter"
+	"birge/internal/domains/assistant/adapter/anthropic"
+	assistantapi "birge/internal/domains/assistant/api"
+	assistantmodel "birge/internal/domains/assistant/model"
+	assistantservice "birge/internal/domains/assistant/service"
+	circleadapter "birge/internal/domains/circle/adapter"
+	circleapi "birge/internal/domains/circle/api"
+	circleservice "birge/internal/domains/circle/service"
 	emergencyadapter "birge/internal/domains/emergency/adapter"
 	emergencyapi "birge/internal/domains/emergency/api"
 	emergencyservice "birge/internal/domains/emergency/service"
+	knowledgeadapter "birge/internal/domains/knowledge/adapter"
+	knowledgeapi "birge/internal/domains/knowledge/api"
+	knowledgeservice "birge/internal/domains/knowledge/service"
 	membershipadapter "birge/internal/domains/membership/adapter"
 	membershipapi "birge/internal/domains/membership/api"
 	"birge/internal/domains/membership/authgw"
@@ -68,7 +79,8 @@ type APIDeps struct {
 //     per-IP, per-number and global limits and the proof of work);
 //  3. /v1/: per-IP rate limit → authentication → request validation → the
 //     generated handlers of meta, membership, privacy, notify, safety,
-//     wellbeing and emergency on one mux. Authentication depends on the route:
+//     wellbeing, emergency, assistant, knowledge and circle on one mux.
+//     Authentication depends on the route:
 //     /v1/staff/ goes through staffauth (OIDC token introspection, MFA
 //     required; 503 when no provider is configured), everything else
 //     through the member session middleware (anonymous operations pass).
@@ -76,7 +88,7 @@ type APIDeps struct {
 //     route is just an unknown token to the IdP (401), and a staff token on
 //     a member route is unknown to Kratos (401);
 //  4. /healthz (process alive) and /readyz (database reachable).
-func NewAPIHandler(d APIDeps) (http.Handler, error) {
+func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	if d.Pool == nil || d.Envelope == nil || d.Logger == nil {
 		return nil, errors.New("wiring: API needs a pool, an envelope and a logger")
 	}
@@ -166,19 +178,42 @@ func NewAPIHandler(d APIDeps) (http.Handler, error) {
 		Logger:   d.Logger,
 		Settings: cfg.Wellbeing,
 	}
+	circle := &circleservice.Service{
+		Store:   &circleadapter.PostgresStore{Pool: d.Pool},
+		Members: &CircleMembers{Members: members},
+		Blocks:  &EmergencyBlocks{Members: members},
+		Clock:   d.Clock,
+		Logger:  d.Logger,
+	}
 	emergency := &emergencyservice.Service{
 		Store:         &emergencyadapter.PostgresStore{Pool: d.Pool},
 		Sealer:        d.Envelope,
 		Members:       &EmergencyMembers{Members: members},
 		Blocks:        &EmergencyBlocks{Members: members},
-		Acquaintances: NeverMet{},
+		Acquaintances: &CircleMet{Circle: circle},
 		Clock:         d.Clock,
 		Logger:        d.Logger,
 		Settings:      emergencyservice.Settings{AutoCloseAfter: cfg.SosAutoCloseAfter},
 	}
+	knowledge := &knowledgeservice.Service{
+		Store:  &knowledgeadapter.PostgresStore{Pool: d.Pool},
+		Clock:  d.Clock,
+		Logger: d.Logger,
+	}
+	searcher, _ := NewRetrieval(cfg, d.Pool, nil, d.Clock, d.Logger)
+	if !cfg.RetrievalEnabled {
+		d.Logger.Warn("retrieval disabled: TEI or Qdrant not configured", "event", "RetrievalDisabled")
+	}
+	assistantSvc, err := newAssistantService(cfg, d.Pool, d.Envelope, privacy, safety, members, searcher, d.Clock, d.Logger)
+	if err != nil {
+		return nil, err
+	}
+	if err := assistantSvc.EnsureRetentionPurge(ctx); err != nil {
+		return nil, fmt.Errorf("wiring: assistant retention: %w", err)
+	}
 
 	api := http.NewServeMux()
-	mountAPI(api, cfg, members, privacy, notify, safety, wellbeing, emergency, d.Logger)
+	mountAPI(api, cfg, members, privacy, notify, safety, wellbeing, emergency, assistantSvc, knowledge, circle, d.Logger)
 
 	// Validation runs after the session (anonymous callers cannot probe the
 	// validator) and before the generated handlers, which do not enforce the
@@ -214,12 +249,60 @@ func NewAPIHandler(d APIDeps) (http.Handler, error) {
 	return logRequests(d.Logger, root, api), nil
 }
 
+// newAssistantService builds the assistant service and its LLM (or leaves LLM
+// nil for degraded mode when no API key is configured).
+func newAssistantService(
+	cfg Config, pool *pgxpool.Pool, env *crypto.Envelope,
+	privacy *privacyservice.Service, safety *safetyservice.Service,
+	members *membershipservice.Service, searcher retrievalSearcher,
+	clk clock.Clock, logger *slog.Logger,
+) (*assistantservice.Service, error) {
+	phones := make([]assistantmodel.CrisisPhone, 0, len(cfg.CrisisPhones))
+	for _, p := range cfg.CrisisPhones {
+		phones = append(phones, assistantmodel.CrisisPhone{Number: p.Number, Label: p.Label})
+	}
+	svc := &assistantservice.Service{
+		Store:       &assistantadapter.PostgresStore{Pool: pool},
+		Sealer:      env,
+		Consent:     privacy,
+		Crisis:      LexiconCrisis{Lex: cfg.Lexicon},
+		Escalations: &CrisisOpener{Safety: safety},
+		Profiles:    &AssistantProfiles{Members: members},
+		Retriever:   &KnowledgeRetriever{Inner: searcher},
+		Clock:       clk,
+		Logger:      logger,
+		Settings: assistantservice.Settings{
+			DailyLimit:     cfg.AssistantDailyLimit,
+			TimeZone:       cfg.TimeZone,
+			CrisisPhones:   phones,
+			NameDictionary: cfg.AssistantNames,
+			Prompt:         cfg.AssistantPrompt,
+		},
+	}
+	if cfg.LLMAPIKey == "" {
+		logger.Warn("LLM disabled: no API key; every reply will be degraded", "event", "LLMDisabled")
+		return svc, nil
+	}
+	client, err := anthropic.New(anthropic.Config{
+		APIKey:  cfg.LLMAPIKey,
+		BaseURL: cfg.LLMBaseURL,
+		Model:   cfg.LLMModel,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("wiring: llm: %w", err)
+	}
+	svc.LLM = client
+	return svc, nil
+}
+
 // mountAPI registers the generated /v1 handlers of every API area on mux,
 // with the shared problem+json error handlers.
 func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service,
 	privacy *privacyservice.Service, notify *notifyservice.Service,
 	safety *safetyservice.Service, wellbeing *wellbeingservice.Service,
-	emergency *emergencyservice.Service, logger *slog.Logger,
+	emergency *emergencyservice.Service, assistant *assistantservice.Service,
+	knowledge *knowledgeservice.Service, circle *circleservice.Service,
+	logger *slog.Logger,
 ) {
 	const base = "/v1"
 	phones := make([]meta.CrisisPhone, 0, len(cfg.CrisisPhones))
@@ -286,6 +369,33 @@ func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service
 		emergencyapi.StdHTTPServerOptions{
 			BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler,
 			Middlewares: []emergencyapi.MiddlewareFunc{toMember},
+		},
+	)
+	assistantapi.HandlerWithOptions(
+		assistantapi.NewStrictHandlerWithOptions(&assistantapi.Server{Service: assistant}, nil, assistantapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
+		}),
+		assistantapi.StdHTTPServerOptions{
+			BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler,
+			Middlewares: []assistantapi.MiddlewareFunc{toMember},
+		},
+	)
+	knowledgeapi.HandlerWithOptions(
+		knowledgeapi.NewStrictHandlerWithOptions(&knowledgeapi.Server{Service: knowledge}, nil, knowledgeapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
+		}),
+		knowledgeapi.StdHTTPServerOptions{
+			BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler,
+			Middlewares: []knowledgeapi.MiddlewareFunc{toMember},
+		},
+	)
+	circleapi.HandlerWithOptions(
+		circleapi.NewStrictHandlerWithOptions(&circleapi.Server{Service: circle}, nil, circleapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
+		}),
+		circleapi.StdHTTPServerOptions{
+			BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler,
+			Middlewares: []circleapi.MiddlewareFunc{toMember},
 		},
 	)
 }

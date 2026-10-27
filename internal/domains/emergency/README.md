@@ -107,6 +107,6 @@ Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS 
 - Contact alerts on raise use class `critical` (member contacts get the SMS fallback); the brief fixed the class only for the moderator alert.
 - There is no endpoint for a trusted contact to read the SOS text, for moderators to see SOS in the admin, or for an invited member to list or decline invitations (she learns the `contact_id` from the invitation notification).
 - The shared plan shows the owner's current card, not a snapshot of the sent one.
-- Circle does not exist yet: wiring's `NeverMet` Acquaintances adapter returns false for every pair, so member trusted contacts cannot be added; external contacts work.
+- Member trusted contacts require `Acquaintances.Met` (wired to `circle.Service.Met`); external contacts work without it.
 - `MemberInfo.DisplayName` must be the first name only (contract: never address or location); the wiring adapter splits membership's display name at the first space.
 - Adding and removing member contacts repeatedly can send repeated invitation pushes; there is no per-hour limit on invitations yet.

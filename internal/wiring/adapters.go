@@ -308,19 +308,6 @@ func (b *EmergencyBlocks) IsBlocked(ctx context.Context, a, bID uuid.UUID) (bool
 	return b.Members.IsBlocked(ctx, a, bID)
 }
 
-// NeverMet implements emergency's Acquaintances while the circle context does
-// not exist. Met always returns false: members cannot yet add member trusted
-// contacts (Acquaintances.Met is required on invite and accept); external
-// contacts work without it.
-type NeverMet struct{}
-
-var _ emergencyport.Acquaintances = NeverMet{}
-
-// Met always returns false; circle is not wired yet.
-func (NeverMet) Met(context.Context, uuid.UUID, uuid.UUID) (bool, error) {
-	return false, nil
-}
-
 // MemberDirectory implements safety's MemberDirectory from membership and Kratos.
 // Contact results are never logged.
 type MemberDirectory struct {

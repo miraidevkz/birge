@@ -94,21 +94,22 @@ func testQuestionnaireJSON() []byte {
 func validEnv(t *testing.T) map[string]string {
 	t.Helper()
 	return map[string]string{
-		"DATABASE_URL":               secretDatabaseURL,
-		"NATS_URL":                   "nats://nats.example.invalid:4222",
-		"KRATOS_PUBLIC_URL":          "http://kratos.example.invalid:4433/",
-		"KRATOS_ADMIN_URL":           "http://kratos.example.invalid:4434",
-		"BIRGE_KEK_ID":               "local-1",
-		"BIRGE_KEK_KEYSET_FILE":      "/keys/kek.json",
-		"BIRGE_POW_KEY_FILE":         "/keys/pow",
-		"BIRGE_HASH_KEY_FILE":        "/keys/hash",
-		"BIRGE_SMS_ALLOWED_PREFIXES": "+7700, +7701",
-		"BIRGE_CONSENT_VERSIONS":     "data_processing=v1,ai_crossborder=v1,research=v2",
-		"BIRGE_DELIVERY_MODE":        "dev",
-		"BIRGE_CRISIS_LEXICON_DIR":   testLexiconDir(t),
-		"BIRGE_QUESTIONNAIRE_FILE":   "/keys/questionnaire.json",
-		"BIRGE_PRACTICES_BASE_URL":   "https://objects.example.invalid/practices",
-		"BIRGE_CRISIS_PHONES":        `[{"number":"+77001112233","label":"Example line"}]`,
+		"DATABASE_URL":                secretDatabaseURL,
+		"NATS_URL":                    "nats://nats.example.invalid:4222",
+		"KRATOS_PUBLIC_URL":           "http://kratos.example.invalid:4433/",
+		"KRATOS_ADMIN_URL":            "http://kratos.example.invalid:4434",
+		"BIRGE_KEK_ID":                "local-1",
+		"BIRGE_KEK_KEYSET_FILE":       "/keys/kek.json",
+		"BIRGE_POW_KEY_FILE":          "/keys/pow",
+		"BIRGE_HASH_KEY_FILE":         "/keys/hash",
+		"BIRGE_SMS_ALLOWED_PREFIXES":  "+7700, +7701",
+		"BIRGE_CONSENT_VERSIONS":      "data_processing=v1,ai_crossborder=v1,research=v2",
+		"BIRGE_DELIVERY_MODE":         "dev",
+		"BIRGE_CRISIS_LEXICON_DIR":    testLexiconDir(t),
+		"BIRGE_QUESTIONNAIRE_FILE":    "/keys/questionnaire.json",
+		"BIRGE_PRACTICES_BASE_URL":    "https://objects.example.invalid/practices",
+		"BIRGE_CRISIS_PHONES":         `[{"number":"+77001112233","label":"Example line"}]`,
+		"BIRGE_ASSISTANT_PROMPT_FILE": "/keys/assistant.v1.md",
 	}
 }
 
@@ -119,6 +120,7 @@ func validFiles(t *testing.T) fakeFiles {
 		"/keys/pow":                append(randomKey(t), '\n'),
 		"/keys/hash":               randomKey(t),
 		"/keys/questionnaire.json": testQuestionnaireJSON(),
+		"/keys/assistant.v1.md":    []byte("# TEST assistant prompt\n\nReply in JSON only.\n"),
 	}
 }
 
@@ -274,6 +276,7 @@ func TestDemoPresetsWhenUnset(t *testing.T) {
 			delete(env, "BIRGE_SMS_TEXTS")
 			delete(env, "BIRGE_CONSENT_VERSIONS")
 			delete(env, "BIRGE_CRISIS_PHONES")
+			delete(env, "BIRGE_ASSISTANT_PROMPT_FILE")
 			cfg, err := load(env, files, cmd)
 			if err != nil {
 				t.Fatal(err)
@@ -285,6 +288,7 @@ func TestDemoPresetsWhenUnset(t *testing.T) {
 			if cmd == CommandAPI {
 				want["questionnaire"] = true
 				want["consent_versions"] = true
+				want["assistant_prompt"] = true
 			}
 			if cmd == CommandWorker {
 				want["sms_texts"] = true

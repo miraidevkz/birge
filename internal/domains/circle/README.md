@@ -50,7 +50,7 @@ Operations of tag `circle` in `contracts/openapi/birge.yaml`. All are member-onl
 | `Service.SetRoomID(ctx, matchID, roomID)` | Stores the private room id once. **TODO:** wire from chat after it handles `circle.MatchAccepted`. |
 | `Service.HandleMatchRun` / `HandleRequestExpire` / `HandleAskMet` | Timer handlers; used by `adapter.TimerHandlers`. |
 
-Ports used by this context (wired later): `MemberInfo` (membership: verification, district, language, children birth years/needs, first name), `Blocks` (membership `IsBlocked`, both directions), `Store` (PostgreSQL adapter).
+Ports used by this context (wired in `internal/wiring`): `MemberInfo` (membership: verification, district, language, children birth years/needs, first name), `Blocks` (membership `IsBlocked`, both directions), `Store` (PostgreSQL adapter). `Service.Met` backs emergency's `Acquaintances` port for member trusted contacts.
 
 ## Configuration
 

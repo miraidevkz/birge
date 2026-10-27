@@ -266,13 +266,6 @@ func TestFirstName(t *testing.T) {
 	}
 }
 
-func TestNeverMet(t *testing.T) {
-	met, err := (NeverMet{}).Met(context.Background(), uuid.New(), uuid.New())
-	if err != nil || met {
-		t.Fatalf("NeverMet.Met = %v, %v; want false, nil", met, err)
-	}
-}
-
 func TestKratosIdentitiesFailure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

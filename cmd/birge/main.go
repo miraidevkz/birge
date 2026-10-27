@@ -1,9 +1,10 @@
 // Command birge runs the Birge backend, selected by the first argument:
 //
-//	birge api      the HTTP API (with the /auth/ sign-in gateway)
-//	birge worker   outbox relay, event consumers and timers
-//	birge migrate  apply the embedded database migrations
-//	birge keygen   write local development keys (see -dir)
+//	birge api         the HTTP API (with the /auth/ sign-in gateway)
+//	birge worker      outbox relay, event consumers and timers
+//	birge migrate     apply the embedded database migrations
+//	birge kb-reindex  rebuild the knowledge retrieval index (TEI + Qdrant)
+//	birge keygen      write local development keys (see -dir)
 //
 // Configuration comes from the environment; see docs/development.md
 // § Configuration and package internal/wiring. keygen needs no environment.
@@ -26,7 +27,7 @@ func main() {
 
 func run() int {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: birge <api|worker|migrate|keygen>")
+		fmt.Fprintln(os.Stderr, "usage: birge <api|worker|migrate|kb-reindex|keygen>")
 		return 2
 	}
 	if os.Args[1] == "keygen" {
@@ -34,9 +35,9 @@ func run() int {
 	}
 	cmd := wiring.Command(os.Args[1])
 	switch cmd {
-	case wiring.CommandAPI, wiring.CommandWorker, wiring.CommandMigrate:
+	case wiring.CommandAPI, wiring.CommandWorker, wiring.CommandMigrate, wiring.CommandKBReindex:
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command %q\nusage: birge <api|worker|migrate|keygen>\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown command %q\nusage: birge <api|worker|migrate|kb-reindex|keygen>\n", os.Args[1])
 		return 2
 	}
 
@@ -60,6 +61,8 @@ func run() int {
 		err = wiring.RunWorker(ctx, logger, cfg)
 	case wiring.CommandMigrate:
 		err = wiring.Migrate(ctx, logger, cfg)
+	case wiring.CommandKBReindex:
+		err = wiring.RunKBReindex(ctx, logger, cfg)
 	}
 	if err != nil {
 		logger.Error("exit", "error", err)

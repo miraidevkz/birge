@@ -187,7 +187,7 @@ func newE2E(t *testing.T) *e2e {
 
 func (e *e2e) handler(cfg Config) http.Handler {
 	e.t.Helper()
-	h, err := NewAPIHandler(APIDeps{
+	h, err := NewAPIHandler(context.Background(), APIDeps{
 		Config: cfg, Pool: e.pool, Envelope: e.envelope,
 		Logger: slog.New(slog.NewJSONHandler(e.logs, nil)),
 	})

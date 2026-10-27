@@ -34,7 +34,7 @@ Escalations are opened through `safety.OpenEscalation` (source `assistant`), whi
 
 ## Service API for other contexts
 
-none. Ports implemented by other contexts (wired in `internal/wiring`, not yet done):
+none. Ports implemented by other contexts (wired in `internal/wiring`):
 
 | Port | Implemented by |
 |---|---|
@@ -42,8 +42,8 @@ none. Ports implemented by other contexts (wired in `internal/wiring`, not yet d
 | `CrisisDetector` | `safety/crisis` `Lexicon.Detect(...).Crisis` |
 | `CrisisOpener` | `safety.Service.OpenEscalation` (source `assistant`) |
 | `Profiles` | `membership.Service.Member` (display name, language) |
-| `Retriever` | knowledge context (later; `assistanttest.FakeRetriever` until then) |
-| `LLM` | `adapter/anthropic` (official Anthropic Go SDK) |
+| `Retriever` | `knowledge/retrieval` via wiring `KnowledgeRetriever` (`NoRetrieval` when TEI/Qdrant unset) |
+| `LLM` | `adapter/anthropic` (official Anthropic Go SDK); missing key → nil LLM, degraded replies |
 | `Sealer` | platform envelope (`crypto.Envelope`) |
 
 ## Configuration
@@ -66,7 +66,7 @@ none. Ports implemented by other contexts (wired in `internal/wiring`, not yet d
 | `anthropic.Config.Effort` / `MaxTokens` / `MaxRetries` | `low` / 4096 / 1 | Adaptive thinking is always on; effort bounds it |
 | `anthropic.Config.BaseURL` | SDK default | SDK environment variables are ignored on purpose |
 
-Environment variable names are assigned when the context is wired (`docs/development.md` § Configuration).
+Environment variables: `BIRGE_LLM_MODEL`, `BIRGE_LLM_API_KEY_FILE`, `BIRGE_LLM_BASE_URL`, `BIRGE_ASSISTANT_DAILY_LIMIT`, `BIRGE_ASSISTANT_PROMPT_FILE`, `BIRGE_ASSISTANT_NAMES_FILE` (`docs/development.md` § Configuration).
 
 **The prompt is DEMO and not approved.** `presets/demo/prompts/assistant.v1.md` encodes the behaviour rules of § 5 and the untrusted-data framing; it must be approved by the project psychologist and the product owner before use, and every change runs the evaluation sets (ADR-0017).
 

@@ -18,9 +18,14 @@ import (
 	"github.com/pressly/goose/v3/lock"
 
 	birgedb "birge/db"
+	assistantadapter "birge/internal/domains/assistant/adapter"
+	assistantservice "birge/internal/domains/assistant/service"
+	circleadapter "birge/internal/domains/circle/adapter"
+	circleservice "birge/internal/domains/circle/service"
 	emergencyadapter "birge/internal/domains/emergency/adapter"
 	emergencyservice "birge/internal/domains/emergency/service"
 	knowledgeadapter "birge/internal/domains/knowledge/adapter"
+	knowledgeservice "birge/internal/domains/knowledge/service"
 	membershipadapter "birge/internal/domains/membership/adapter"
 	membershipmodel "birge/internal/domains/membership/model"
 	membershipservice "birge/internal/domains/membership/service"
@@ -205,7 +210,7 @@ func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	h, err := NewAPIHandler(APIDeps{Config: cfg, Pool: pool, Envelope: env, Clock: clk, Logger: logger})
+	h, err := NewAPIHandler(ctx, APIDeps{Config: cfg, Pool: pool, Envelope: env, Clock: clk, Logger: logger})
 	if err != nil {
 		return err
 	}
@@ -273,12 +278,19 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		logger.Warn("BIRGE_SMS_TEXTS is empty: every SMS will be skipped (no text)")
 	}
 	logger.Warn("log-only delivery: push and SMS are logged, not sent", "mode", cfg.DeliveryMode)
+	circle := &circleservice.Service{
+		Store:   &circleadapter.PostgresStore{Pool: pool},
+		Members: &CircleMembers{Members: members},
+		Blocks:  &EmergencyBlocks{Members: members},
+		Clock:   clk,
+		Logger:  logger,
+	}
 	emergency := &emergencyservice.Service{
 		Store:         &emergencyadapter.PostgresStore{Pool: pool},
 		Sealer:        env,
 		Members:       &EmergencyMembers{Members: members},
 		Blocks:        &EmergencyBlocks{Members: members},
-		Acquaintances: NeverMet{},
+		Acquaintances: &CircleMet{Circle: circle},
 		Clock:         clk,
 		Logger:        logger,
 		Settings:      emergencyservice.Settings{AutoCloseAfter: cfg.SosAutoCloseAfter},
@@ -310,12 +322,31 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		Logger:   logger,
 		Settings: cfg.Wellbeing,
 	}
+	knowledge := &knowledgeservice.Service{
+		Store:  &knowledgeadapter.PostgresStore{Pool: pool},
+		Clock:  clk,
+		Logger: logger,
+	}
+	assistant := &assistantservice.Service{
+		Store:  &assistantadapter.PostgresStore{Pool: pool},
+		Sealer: env,
+		Clock:  clk,
+		Logger: logger,
+		Settings: assistantservice.Settings{
+			DailyLimit: cfg.AssistantDailyLimit, TimeZone: cfg.TimeZone,
+			RetentionDays:  assistantservice.DefaultRetentionDays,
+			PurgeBatchSize: assistantservice.DefaultPurgeBatchSize,
+		},
+	}
 	handlers, err := mergeHandlers(
 		(&notifyadapter.TimerHandlers{Service: notify}).Handlers(),
 		(&privacyadapter.TimerHandlers{Service: privacy}).Handlers(),
 		(&safetyadapter.TimerHandlers{Service: safety}).Handlers(),
 		(&wellbeingadapter.TimerHandlers{Service: wellbeing}).Handlers(),
 		(&emergencyadapter.TimerHandlers{Service: emergency}).Handlers(),
+		(&assistantadapter.TimerHandlers{Service: assistant}).Handlers(),
+		(&knowledgeadapter.TimerHandlers{Service: knowledge}).Handlers(),
+		(&circleadapter.TimerHandlers{Service: circle}).Handlers(),
 	)
 	if err != nil {
 		return err
@@ -335,13 +366,22 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	health.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	health.Handle("GET /readyz", readiness(logger, poolCheck(pool), natsCheck(nc)))
 
-	return runAll(ctx, logger, map[string]func(context.Context) error{
+	loops := map[string]func(context.Context) error{
 		"outbox relay":     relay.Run,
 		"notify consumer":  consumer.Run,
 		"sos shared":       sosShared.Run,
 		"timers":           timerWorker.Run,
 		"health endpoints": func(ctx context.Context) error { return serve(ctx, logger, cfg.HTTPAddr, health) },
-	})
+	}
+	if !cfg.RetrievalEnabled {
+		logger.Warn("retrieval disabled: TEI or Qdrant not configured", "event", "RetrievalDisabled")
+	} else {
+		_, indexer := NewRetrieval(cfg, pool, js, clk, logger)
+		if indexer != nil {
+			loops["retrieval indexer"] = indexer.Run
+		}
+	}
+	return runAll(ctx, logger, loops)
 }
 
 // EnsureStream creates or updates the events stream: file storage, the
