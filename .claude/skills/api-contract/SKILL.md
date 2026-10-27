@@ -13,7 +13,8 @@ Contracts come before code (ADR-0005). The contract PR is separate from the impl
 2. Validate inputs in the schema: lengths, formats, enums, `additionalProperties: false`.
 3. Never put personal data in paths or query strings; use the body.
 4. Run `make contracts`: lint, breaking-change diff against `main`, regenerate the Go server and the TypeScript client.
-5. A breaking change needs a new version of the operation; mobile apps in the wild still use the old one.
+5. A breaking change needs a new version of the operation; mobile apps in the wild still use the old one. CI also diffs against every snapshot in `contracts/openapi/released/` within the support window (ADR-0018).
+6. Crisis and SOS endpoints must keep accepting requests from blocked app versions and old offline-queue payloads.
 
 ## Events (JSON Schema, `contracts/events/`)
 

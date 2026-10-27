@@ -106,6 +106,7 @@ docs/                 # architecture, ADRs, requirements, threat model
 | UI | RN Reusables + NativeWind, Reanimated, Expo Router; accessibility first | [0014](adr/0014-ui-stack.md) |
 | Chat | own module: WebSocket + push, PostgreSQL + NATS, server-side moderation, no E2EE | [0016](adr/0016-chat.md) |
 | AI evaluation | own Go runner over the real pipeline; deterministic sets per PR, LLM sets on AI changes, nightly, release | [0017](adr/0017-ai-evaluation.md) |
+| Client compatibility | additive `/v1`, snapshots of released contracts, 6 months / 3 versions, signed self-hosted OTA | [0018](adr/0018-client-compatibility.md) |
 | Object storage | S3 API only; Garage for dev/MVP, local S3-compatible provider in production | [0015](adr/0015-object-storage.md) |
 
 ## Replication to other countries
@@ -120,7 +121,7 @@ CI workflows are thin wrappers around `make` targets, so the same checks run loc
 |---|---|
 | Always | gitleaks (secrets), editorconfig |
 | Go | gofmt, go vet, golangci-lint (incl. depguard, gosec), govulncheck, `go test -race` |
-| Contracts | OpenAPI lint, breaking-change diff against `main`, generated code is up to date |
+| Contracts | OpenAPI lint, breaking-change diff against `main` and every released contract in the support window, generated code is up to date |
 | Database | migration lint, destructive-operation gate, apply on an ephemeral PostgreSQL, sqlc diff |
 | AI | deterministic eval sets; LLM eval sets when prompts, model config, knowledge base or pipeline change |
 | Clients | tsc, eslint, unit tests |
