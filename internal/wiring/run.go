@@ -114,6 +114,9 @@ func Migrate(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	if err := seedDemoReference(ctx, logger, cfg.DatabaseURL); err != nil {
 		return err
 	}
+	if err := seedDemoChat(ctx, logger, cfg.DatabaseURL); err != nil {
+		return err
+	}
 	return seedDemoKnowledge(ctx, logger, cfg.DatabaseURL)
 }
 

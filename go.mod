@@ -4,6 +4,7 @@ go 1.27
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.80.0
+	github.com/coder/websocket v1.8.15
 	github.com/getkin/kin-openapi v0.150.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0

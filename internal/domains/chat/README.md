@@ -1,0 +1,119 @@
+# chat
+
+In-app chats (ADR-0016, `docs/requirements/mvp.md` § 4.4 «Chats»): district rooms and topic rooms (by special-needs type) that verified members join and leave themselves, and private rooms opened after a mutual tea match, after the mother accepted an SOS responder, or after a listing author accepted a contact request. Every message passes the safety crisis lexicon before it can be seen; filters and newcomer holds feed moderation; blocks hide members from each other both ways (ADR-0019). Text only. Delivery is a WebSocket while the app is open and a content-free push otherwise.
+
+## Owns
+
+| Table (schema `chat`) | Purpose | Personal data |
+|---|---|---|
+| `rooms` | District room (one per membership district id), topic room (one per needs code), direct room (one per origin `circle.match` / `emergency.sos` / `sharing.listing`, origin id and ordered pair); `slow_mode_seconds`; `last_seq`, the per-room sequence counter | IDs and locale keys only |
+| `room_members` | Membership (`left_at` when she leaves; never deleted), push mute, `last_push_at` (throttle), `connected_until` (gateway presence) | IDs only |
+| `room_restrictions` | Ban (`banned_at`) and `mute_1h` (`muted_until`) per room and member | IDs only |
+| `room_mentors` | Mentors assigned to group rooms by staff (`removed_at`) | IDs only |
+| `messages` | Message with `seq` (unique per room), `client_id` (unique per author), status `visible`/`held`/`hidden`, `hold_reason` `crisis`/`newcomer`/`link`/`phone`, the crisis `escalation_id`, `legal_hold`, `purged_at` | `body`: the text sealed with the **author's** key (AD `chat.messages.text\|<message id>`); NULL once purged |
+| `reports` | One report per reporter and message; `closed_at` | IDs and the reason code |
+
+Uses `platform.processed_events` (consumer `chat.DirectRoomOpener`), `platform.outbox`, `platform.timers` and `platform.audit_log`.
+
+## API
+
+Operations of tag `chat` in `contracts/openapi/birge.yaml`, plus the WebSocket `GET /v1/chat/ws` (`contracts/realtime/chat.v1.md`, package `gateway`). Members only: the caller is `auth.Principal.MemberID` (staff, anonymous and `uuid.Nil` → 401), except `moderateRoom`.
+
+| Operation | Rules not in the contract |
+|---|---|
+| `GET /chat/rooms` | `joined=true`: her rooms (direct-room title = the other member's first name); `joined=false`: group rooms she may join — only when verified: her district's room and every topic room; unset: both. |
+| `POST /chat/rooms/{id}/join` | Group rooms: verified only (403); a district room only of her own district (403); banned → 403 `banned`. Direct rooms: only their two members (404 otherwise). Idempotent. |
+| `POST /chat/rooms/{id}/leave` | Idempotent; ends her live subscriptions (a `left` notice). |
+| `PUT /chat/rooms/{id}/mute` | Push mute only; not in the room → 403 `not_member`. |
+| `GET /chat/rooms/{id}/messages` | Members of the room only (403 `not_member`). `after` and `before` are exclusive of each other. Held messages of others and messages of members blocked either way are left out; the page is filled from further rows, so a page shorter than `limit` means the end. Purged or shredded texts read as `deleted`. |
+| `POST /chat/rooms/{id}/messages` | See *Sending*. 429 `rate_limited` / `slow_mode`; 403 `banned` (ban or `mute_1h`) / `not_member`. |
+| `POST /chat/messages/{id}/report` | Only a message she can see (404 otherwise, also her own → 400). One per reporter and message; the first publishes `chat.MessageReported`. |
+| `POST /chat/rooms/{id}/moderation` | Staff with role `moderator` or `admin`: every action. A member who holds the membership role `mentor` **and** is assigned to this room: `hide_message`, `restore_message`, `mute_1h` only. Anyone else 403. `ban` also removes her from the room; a crisis-held message is never restored (409). Every applied action writes `platform.audit_log` in the same transaction (actor role `staff` or `mentor`; object `chat.message`, `chat.member` or `chat.room`). |
+| `GET /v1/chat/ws` | First frame `auth` within 10 s, else close 4401. `subscribe` replays every visible message after `afterSeq`, then live. `send` = the HTTP send; the `crisis` frame comes before the `ack`. Error frame codes: `rate_limited`, `slow_mode`, `banned`, `not_member` (also unknown room), `invalid`; an unexpected failure closes with 1011 (the client retries the same `clientId`). Slow consumer → close 1013. Read limit 16 KiB, idle timeout 90 s, write timeout 10 s, bounded queue of 256 live items. |
+
+### Sending
+
+1. Validate (`clientId` a UUIDv7; text 1..2000 characters, not blank, UTF-8).
+2. **Crisis lexicon** (safety, local, before any network call; every loaded language is checked). A hit: the message is stored `held` (reason `crisis`; never shown to others, never published to moderation, no live fan-out notice — the author's other devices see it on their next catch-up), bypassing rate limit, slow mode, ban and mute; the author gets the crisis notice (`crisis` frame: crisis phones from safety's configuration and the escalation id); safety `OpenEscalation(member, "chat")` runs right after commit, and a `chat.CrisisEscalation` timer created in the insert transaction retries it. If the message cannot be stored (not a member, database down) the notice is still returned and the escalation attempted directly.
+3. Otherwise: ban / `mute_1h` → `banned`; more than `RateLimit` messages in `RateWindow` across all rooms → `rate_limited`; slow mode → `slow_mode`.
+4. Holds, published as `chat.MessageHeld`: a link → `link`, a phone-like number (≥ 10 digits) → `phone`, a newcomer's first `NewcomerHeld` group-room messages → `newcomer` (direct rooms have no newcomer hold).
+5. One transaction: the author's advisory lock, idempotency check, `NextSeq` (room row lock), insert, event or timer. A repeated `clientId` returns the stored message (`Replayed`) and changes nothing.
+
+## Events
+
+| Direction | Event | When | Guarantees |
+|---|---|---|---|
+| publishes | `chat.MessageHeld` v1 | message held for `newcomer`, `link` or `phone` (never `crisis`) | outbox, same transaction as the insert |
+| publishes | `chat.MessageReported` v1 | first report of a message by a member | outbox, same transaction as the report |
+| publishes | `notify.DeliveryRequested` v1 | `chat.PushFanout` timer: one per eligible member (class `normal`, template `chat.new_message`, params `{room_id}`) | outbox, the timer's transaction; `request_id` = SHA-1 UUID of message + template + member |
+| consumes | `circle.MatchAccepted` v1, `emergency.SosResponseAccepted` v1, `sharing.ContactAccepted` v1 | open the direct room of the pair | JetStream durable consumer `chat-direct-rooms`; deduplicated by event id in `platform.processed_events` and by the room's natural key; needs only the chat database |
+
+Fan-out (not domain events): NATS **core** subjects `birge.chat.room.<room id>` carry notices `{kind: new|changed|left, room_id, message_id?, seq?, member_id?}` — IDs only, published after commit, best-effort.
+
+## Timers
+
+| Kind | Scheduled when | Handler does | Idempotency |
+|---|---|---|---|
+| `chat.CrisisEscalation` | crisis message stored; due 30 s later; cancelled when the synchronous escalation succeeded | opens the escalation if the message has none and records it | message row locked; `OpenEscalation` idempotent per member; a failure retries with backoff |
+| `chat.PushFanout` | visible message stored, or a held message restored | pushes to members who are in the room, not the author, not muted, not connected (`connected_until`), not pushed for the room within `PushInterval`, not blocked with the author | deterministic request ids; `last_push_at` |
+| `chat.RetentionPurge` | `EnsureRetentionTimer` (worker start), then by each run for the next day at `RetentionAt` UTC; dedup key `retention\|<date>` | clears texts of group messages older than `RetentionGroup` and direct messages older than `RetentionDirect`, except under legal hold or an open report; the row stays as a `deleted` tombstone | batches of 1000 with `SKIP LOCKED`; re-running purges nothing twice |
+
+## Service API for other contexts
+
+| Function | Callers may rely on |
+|---|---|
+| `EnsureDistrictRoom(ctx, districtID, titleKey)` / `EnsureTopicRoom(ctx, code, titleKey)` | One room per district / needs code, also under concurrency; returns the existing one. For reference-data seeding (`birge migrate` seeds DEMO rooms into an empty table). |
+| `HandleRoomEvent(ctx, eventID, type, data)` / `OpenDirectRoom(...)` | One direct room per origin, origin id and pair; both members added once. |
+| `HandleCrisisEscalation`, `HandlePush`, `HandleRetention` | Timer handlers (`adapter.TimerHandlers`). `EnsureRetentionTimer` must be called once at worker start. |
+| `CloseReports(ctx, staff, messageID)`, `SetLegalHold(ctx, staff, messageID, on)` | Staff (`moderator`/`admin`), audited. For the moderation context's decisions (no HTTP operation yet). |
+| `AssignMentor(ctx, staff, roomID, memberID, assign)` | Staff, audited; the member must hold the mentor role. No HTTP operation yet. |
+
+Ports used (wired later): `Sealer` (platform crypto), `MemberInfo` (membership: verified, first name, language, district), `Blocks` (membership `IsBlocked`), `Mentors` (membership role `mentor`), `Crisis` (safety `Detect`, `CrisisPhones`, `OpenEscalation`), `Fanout`/`Bus` (`adapter.NATSFanout`), `Authenticator` (session validator), `Store` (`adapter.PostgresStore`).
+
+## Configuration
+
+| Variable (`service.Settings`) | Default | Meaning |
+|---|---|---|
+| `RetentionGroup` | 365 days | Text retention in district and topic rooms (ADR-0016) |
+| `RetentionDirect` | 90 days | Text retention in direct rooms (ADR-0016) |
+| `RetentionAt` | 03:00 UTC | Daily retention run |
+| `NewcomerHeld` | 3 | First group-room messages of a member that are held (negative: off) |
+| `RateLimit` / `RateWindow` | 20 / 1 min | Messages per member across all rooms |
+| `PushInterval` | 10 min | At most one push per room per member per interval |
+| `PresenceTTL` | 90 s | A gateway heartbeat (every TTL/3) counts as connected for this long |
+
+Gateway (`gateway.Options`): `QueueSize` 256, `AuthTimeout` 10 s, `IdleTimeout` 90 s, `WriteTimeout` 10 s, `OriginPatterns` (web origins; native apps send none). Fixed by the contract: 2000 characters, pages of 1..100 (default 50), slow mode 0..3600 s, mute 1 h.
+
+## Invariants
+
+- **Sequence:** per room strictly increasing and gap-free in committed rows: `last_seq` is incremented by `UPDATE … RETURNING` in the insert transaction, whose row lock serialises senders and whose rollback returns the number (a `SEQUENCE` would leave gaps). Lock order: author advisory lock, then room row. `UNIQUE (room_id, seq)`. Test: `TestSeqUnderConcurrencyPostgres` (50 concurrent senders → 1..50).
+- **Idempotent send:** `UNIQUE (author_id, client_id)`; the existence check runs under the author's lock; a concurrent duplicate in another room rolls back (no sequence gap). `TestIdempotentSendPostgres`.
+- **Crisis first:** the lexicon runs before filters, limits and any membership call; crisis messages are never visible to others, never in `chat.MessageHeld`, never restorable; the escalation has a durable retry. `TestCrisisMessageHeldEscalatedPostgres`, `TestHappyPathAcrossReplicas`.
+- **Blocks:** messages of members blocked either way are never listed, rendered for the WebSocket, reportable or pushed; lookups fail closed. `TestBlockedFilteringBothDirectionsPostgres`.
+- **Moderation:** staff all actions, mentors only hide/restore/mute_1h in rooms they are assigned to and only while holding the role; every applied action audited. `TestMentorLimitsPostgres`.
+- **Privacy:** texts sealed with the author's key; events, notices, logs and pushes carry IDs and codes only (tests check logs, outbox and tables for fake text). Display names are first names only; never phones.
+- **No deletion path:** members leave, reports close, retention clears the text and keeps the row.
+
+## Failure modes
+
+- Database down: sends, history and moderation fail (500 / WebSocket 1011); the crisis notice is still returned to the author with the error and the escalation is attempted directly (safety needs the same database, so it usually fails too and is logged as `ChatCrisisEscalationFailed`).
+- Safety down: the crisis message is stored held, the author gets the phones, `ChatCrisisEscalationDeferred` is logged at Error, and the timer retries until the escalation opens.
+- Membership down: the crisis check still runs (it never waits for membership); listing, rendering and pushes fail closed (no message is shown without a block check); a WebSocket whose render fails is closed so the client resumes instead of missing a message.
+- NATS down: messages are stored; live delivery stops; clients see new messages on the next notice (gap fill) or reconnect (resume by `afterSeq`).
+- JetStream / broker down: direct rooms open when the events arrive (outbox of the origin context).
+- A gateway replica dies: its clients reconnect to any replica and resume by sequence.
+
+## Tests
+
+- Unit: `model/model_test.go` (filters, visibility, moderation matrix, validation, push ids, retention schedule); `api/handler_test.go` (error mapping).
+- Integration (`adapter/integration_test.go`, `testinfra.Postgres`, `testinfra.NATS`): idempotent send incl. concurrent replays; 50 concurrent sends; crisis held + escalation + author notice + timer retry while safety is down + replay; link/phone holds and restore; newcomer hold; rate limit and slow mode; blocks both ways in history, rendering, reports and push; push throttle, mute and presence; mentor limits and audit; retention with report and legal-hold exemptions; shredded author; room join/list rules; direct rooms exactly once per origin (redelivery and re-publish) and through the JetStream consumer; DEMO seed.
+- Gateway (`gateway/gateway_test.go`): two replicas over real NATS (happy path, crisis frame private, errors, ping), resume by seq and gap fill after a lost notice, leave ends the subscription, 4401 on a bad token, slow client disconnected (1013) while a fast client in the same room receives every message.
+
+## Open questions
+
+- **Crisis over HTTP:** `ChatMessage` (the `sendMessage` response) has no crisis field; over HTTP the author only sees `held`. The `crisis` frame exists only on the WebSocket.
+- **Escalation source `chat`:** used through the port (safety model `SourceChat` on main since 117e099); this branch predates it.
+- **Missing operations:** assigning mentors, closing reports and legal hold exist only as service methods.
+- **Muted vs banned:** a `mute_1h` member gets `banned` (no `muted` code in the contract).
+- **Partitioning:** ADR-0016 names a time-partitioned message table; this version uses one table with a retention index.
+- **Presence** is one row per member and room: closing one of two devices marks her disconnected until the other's next heartbeat (≤ 30 s), so one extra push is possible.
