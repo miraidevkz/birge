@@ -1,0 +1,27 @@
+# secrets and local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# build output
+/bin/
+/dist/
+coverage.out
+
+# Go
+*.test
+
+# JS / Expo
+node_modules/
+.expo/
+web-build/
+*.tsbuildinfo
+
+# editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
