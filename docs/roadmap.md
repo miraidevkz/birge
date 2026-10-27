@@ -69,7 +69,7 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 ## Remaining for the MVP (2026-10-27)
 
 ### Backend completion
-- [ ] Wire chat, sharing, directory and S3 object storage (in progress)
+- [x] Wire chat, sharing, directory and S3 object storage
 - [ ] Wire moderation: content sources per context, queue consumer
 - [ ] Apply moderation decisions: chat (held and reported messages, legal hold), membership (verification approves members, emits MemberVerified), member suspension for "block author"
 - [ ] Staff endpoints for mentor assignment, closing reports and legal hold
