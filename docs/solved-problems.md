@@ -38,10 +38,9 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 - **Take Expo SDK versions from `npx expo install`, not from an older `expo` patch.** The compatibility list bundled with an early patch can point at release candidates (SDK 58.0.9 listed `react-native` 0.88.0-rc.4), and mixing it with current modules fails to resolve. Install the SDK's current set with `expo install`, then pin each version exactly. (apps foundation)
 - **Testing Library for React Native 14 renders asynchronously.** `render`, `fireEvent.*` and `rerender` return promises; without `await` every query fails with "render function has not been called". (apps foundation)
 - **Reanimated 4 needs its Jest resolver.** Without `resolver: 'react-native-reanimated/jest/resolver'` any test that imports a component using Reanimated fails while loading the native worklets module. (apps foundation)
+- **Go targets never use a bare `./...`.** npm packages can ship Go sources (for example `flatted`), and `./...` under the module root then vets, tests and lints them as our code. The Makefile builds the package list once (`GO_PKGS`, `go list` without `node_modules`); new Go targets use it.
 
 ## Process
 
 - **Merge only on the check's exit code.** A pipeline that filters output with `grep` hides a failing test; read `$?` of `make go-check` before merging. (68739b9 fixed what this let through.)
 - **Task branches never contain migrations.** Agents edit their schema file; the tech lead generates the migration on the rebased branch, runs `make go-check` there and only then fast-forwards `main`, so `main` never holds a schema without its migration. (190cb6e review; 36e9631 fixed a merge that went first.)
-
-- **Go targets never use a bare `./...`.** npm packages can ship Go sources (for example `flatted`), and `./...` under the module root then vets, tests and lints them as our code. The Makefile builds the package list once (`GO_PKGS`, `go list` without `node_modules`); new Go targets use it.
