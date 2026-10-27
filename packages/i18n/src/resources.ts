@@ -3,6 +3,7 @@
 //
 // To add a namespace: create <ns>.json in kk/, ru/ and en/, then add it to the
 // three objects below. The parity test fails if a language misses a key.
+import enAdmin from './locales/en/admin.json';
 import enAssistant from './locales/en/assistant.json';
 import enAuth from './locales/en/auth.json';
 import enChat from './locales/en/chat.json';
@@ -20,6 +21,7 @@ import enSharing from './locales/en/sharing.json';
 import enSos from './locales/en/sos.json';
 import enUi from './locales/en/ui.json';
 import enWellbeing from './locales/en/wellbeing.json';
+import kkAdmin from './locales/kk/admin.json';
 import kkAssistant from './locales/kk/assistant.json';
 import kkAuth from './locales/kk/auth.json';
 import kkChat from './locales/kk/chat.json';
@@ -37,6 +39,7 @@ import kkSharing from './locales/kk/sharing.json';
 import kkSos from './locales/kk/sos.json';
 import kkUi from './locales/kk/ui.json';
 import kkWellbeing from './locales/kk/wellbeing.json';
+import ruAdmin from './locales/ru/admin.json';
 import ruAssistant from './locales/ru/assistant.json';
 import ruAuth from './locales/ru/auth.json';
 import ruChat from './locales/ru/chat.json';
@@ -60,6 +63,7 @@ export const namespaces = [
   'common',
   'ui',
   'auth',
+  'admin',
   'home',
   'inbox',
   'help',
@@ -85,6 +89,7 @@ export const resources = {
     common: kkCommon,
     ui: kkUi,
     auth: kkAuth,
+    admin: kkAdmin,
     home: kkHome,
     inbox: kkInbox,
     help: kkHelp,
@@ -104,6 +109,7 @@ export const resources = {
     common: ruCommon,
     ui: ruUi,
     auth: ruAuth,
+    admin: ruAdmin,
     home: ruHome,
     inbox: ruInbox,
     help: ruHelp,
@@ -123,6 +129,7 @@ export const resources = {
     common: enCommon,
     ui: enUi,
     auth: enAuth,
+    admin: enAdmin,
     home: enHome,
     inbox: enInbox,
     help: enHelp,

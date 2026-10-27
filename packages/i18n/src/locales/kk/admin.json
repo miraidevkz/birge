@@ -1,0 +1,135 @@
+{
+  "tabs": {
+    "escalations": "Эскалациялар",
+    "moderation": "Модерация",
+    "duty": "Кезекшілік",
+    "profile": "Профиль"
+  },
+  "signIn": {
+    "title": "Қызметкер кіруі",
+    "intro": "Ұйым аккаунтымен кіріңіз. Екінші фактор қажет.",
+    "button": "Кіру",
+    "cancelled": "Кіру болдырылмады. Қайта көріңіз.",
+    "failed": "Кіру мүмкін болмады. Қайта көріңіз."
+  },
+  "mfa": {
+    "title": "Екінші фактор қажет",
+    "body": "Ұйымыңыз екінші факторды талап етеді. Қайта кіріп, тексеруді аяқтаңыз.",
+    "button": "Кіру"
+  },
+  "escalations": {
+    "title": "Эскалациялар",
+    "status": {
+      "label": "Күйі",
+      "open": "Ашық",
+      "taken": "Алынған",
+      "closed": "Жабық"
+    },
+    "emptyTitle": "Эскалация жоқ",
+    "emptyDescription": "Бұл тізімде қазір ештеңе жоқ.",
+    "source": {
+      "assistant": "Көмекші",
+      "checkin": "Тексеру",
+      "sos": "SOS",
+      "menu": "Мәзір",
+      "chat": "Чат"
+    },
+    "openedAt": "Ашылған уақыты {{time}}",
+    "take": "Алу",
+    "revealContact": "Байланысты көрсету",
+    "hideContact": "Байланысты жасыру",
+    "contactName": "Аты: {{name}}",
+    "contactPhone": "Телефон: {{phone}}",
+    "contactLang": "Тіл: {{lang}}",
+    "close": "Жабу",
+    "closeTitle": "Эскалацияны жабу",
+    "outcome": {
+      "label": "Нәтиже",
+      "contacted": "Байланыстық",
+      "referred": "Басқаға жолдадық",
+      "emergency_services": "Төтенше қызметтер",
+      "no_answer": "Жауап жоқ",
+      "not_a_crisis": "Кризис емес"
+    },
+    "note": {
+      "label": "Жазба (міндетті емес)",
+      "hint": "2000 таңбаға дейін. Шифрланған түрде сақталады."
+    },
+    "confirmClose": "Эскалацияны жабу",
+    "takenByMe": "Сіз алдыңыз"
+  },
+  "moderation": {
+    "title": "Модерация",
+    "emptyTitle": "Кезек бос",
+    "emptyDescription": "Шешім күтетін материал жоқ.",
+    "kind": {
+      "listing": "Хабарлама",
+      "specialist": "Маман",
+      "review": "Пікір",
+      "report": "Шағым",
+      "chat_message": "Чат хабары",
+      "verification": "Тексеру"
+    },
+    "approve": "Мақұлдау",
+    "reject": "Қабылдамау",
+    "reason": {
+      "label": "Себебі",
+      "rules_medicine": "Медициналық кеңес",
+      "rules_money": "Ақша сұрау",
+      "person_in_photo": "Фотодағы адам",
+      "unsafe": "Қауіпті",
+      "spam": "Спам",
+      "inaccurate": "Дұрыс емес",
+      "duplicate": "Қайталама",
+      "other": "Басқа"
+    },
+    "rejectTitle": "Материалды қабылдамау",
+    "confirmReject": "Қабылдамау"
+  },
+  "duty": {
+    "title": "Кезекшілік",
+    "emptyTitle": "Осы аптада ауысым жоқ",
+    "emptyDescription": "Ағымдағы аптаға ауысым қосыңыз.",
+    "week": "{{from}} аптасы",
+    "role": {
+      "label": "Рөл",
+      "psychologist": "Психолог",
+      "moderator": "Модератор"
+    },
+    "backup": "Резерв",
+    "primary": "Негізгі",
+    "add": "Ауысым қосу",
+    "addTitle": "Жаңа ауысым",
+    "staffId": {
+      "label": "Қызметкер ID",
+      "hint": "Қызметкердің UUID"
+    },
+    "startsAt": {
+      "label": "Басталуы (UTC)",
+      "hint": "ISO күні мен уақыты, мысалы 2026-10-28T09:00:00Z"
+    },
+    "endsAt": {
+      "label": "Аяқталуы (UTC)",
+      "hint": "ISO күні мен уақыты, мысалы 2026-10-28T17:00:00Z"
+    },
+    "phone": {
+      "label": "Кезекші телефон",
+      "hint": "E.164, мысалы +70000000000. Шифрланып сақталады, қайта көрсетілмейді."
+    },
+    "backupChoice": {
+      "label": "Ауысым түрі",
+      "primary": "Негізгі",
+      "backup": "Резерв"
+    },
+    "confirmAdd": "Ауысымды сақтау",
+    "delete": "Жою",
+    "invalid": "Өрістерді тексеріп, қайта көріңіз."
+  },
+  "profile": {
+    "title": "Профиль",
+    "subject": "Идентификатор",
+    "roles": "Рөлдер",
+    "noRoles": "Токенде рөл жоқ",
+    "signOut": "Шығу"
+  }
+}

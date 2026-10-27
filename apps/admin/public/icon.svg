@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Placeholder icon until the design is final (Penpot, ADR-0014). -->
+  <rect width="512" height="512" rx="96" fill="#2F6B5E"/>
+  <circle cx="206" cy="256" r="104" fill="none" stroke="#FFFFFF" stroke-width="36"/>
+  <circle cx="306" cy="256" r="104" fill="none" stroke="#FFFFFF" stroke-width="36"/>
+</svg>

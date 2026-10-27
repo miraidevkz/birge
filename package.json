@@ -5,6 +5,7 @@
   "license": "Apache-2.0",
   "workspaces": [
     "apps/mobile",
+    "apps/admin",
     "packages/ui",
     "packages/api",
     "packages/i18n"
@@ -16,7 +17,7 @@
     "test": "jest",
     "api-gen": "npm run api-gen -w @birge/api",
     "api-check": "npm run api-check -w @birge/api",
-    "web-build": "npm run web-build -w @birge/mobile",
+    "web-build": "npm run web-build -w @birge/mobile && npm run web-build -w @birge/admin",
     "check": "npm run typecheck && npm run lint && npm run test && npm run api-check && npm run web-build"
   },
   "devDependencies": {

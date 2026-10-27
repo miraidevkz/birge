@@ -2,7 +2,7 @@
 
 Every user-visible string of the clients, in Kazakh, Russian and English ([ADR-0014](../../docs/adr/0014-ui-stack.md)). Code never contains UI text; it calls `useTranslation(namespace)` from this package.
 
-- One JSON file per feature namespace in `src/locales/<lang>/`; the list is in `src/resources.ts`.
+- One JSON file per feature namespace in `src/locales/<lang>/`; the list is in `src/resources.ts`. The staff console uses the `admin` namespace (with nested keys per screen).
 - Language: the first supported device language, otherwise Kazakh. Missing keys fall back to Kazakh.
 - Texts are bundled, so they work offline, including the fixed crisis screen.
 - `src/locales.test.ts` fails when a language misses a key or a file, a value is empty, or placeholders (`{{name}}`) differ between languages.

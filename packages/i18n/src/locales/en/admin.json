@@ -1,0 +1,135 @@
+{
+  "tabs": {
+    "escalations": "Escalations",
+    "moderation": "Moderation",
+    "duty": "Duty",
+    "profile": "Profile"
+  },
+  "signIn": {
+    "title": "Staff sign-in",
+    "intro": "Sign in with your organisation account. A second factor is required.",
+    "button": "Sign in",
+    "cancelled": "Sign-in was cancelled. Try again.",
+    "failed": "Could not sign in. Try again."
+  },
+  "mfa": {
+    "title": "Second factor required",
+    "body": "Your organisation requires a second factor. Sign in again and complete it.",
+    "button": "Sign in"
+  },
+  "escalations": {
+    "title": "Escalations",
+    "status": {
+      "label": "Status",
+      "open": "Open",
+      "taken": "Taken",
+      "closed": "Closed"
+    },
+    "emptyTitle": "No escalations",
+    "emptyDescription": "Nothing in this list right now.",
+    "source": {
+      "assistant": "Assistant",
+      "checkin": "Check-in",
+      "sos": "SOS",
+      "menu": "Menu",
+      "chat": "Chat"
+    },
+    "openedAt": "Opened {{time}}",
+    "take": "Take",
+    "revealContact": "Show contact",
+    "hideContact": "Hide contact",
+    "contactName": "Name: {{name}}",
+    "contactPhone": "Phone: {{phone}}",
+    "contactLang": "Language: {{lang}}",
+    "close": "Close",
+    "closeTitle": "Close escalation",
+    "outcome": {
+      "label": "Outcome",
+      "contacted": "Contacted",
+      "referred": "Referred",
+      "emergency_services": "Emergency services",
+      "no_answer": "No answer",
+      "not_a_crisis": "Not a crisis"
+    },
+    "note": {
+      "label": "Note (optional)",
+      "hint": "Up to 2000 characters. Stored encrypted."
+    },
+    "confirmClose": "Close escalation",
+    "takenByMe": "Taken by you"
+  },
+  "moderation": {
+    "title": "Moderation",
+    "emptyTitle": "Queue is empty",
+    "emptyDescription": "No items waiting for a decision.",
+    "kind": {
+      "listing": "Listing",
+      "specialist": "Specialist",
+      "review": "Review",
+      "report": "Report",
+      "chat_message": "Chat message",
+      "verification": "Verification"
+    },
+    "approve": "Approve",
+    "reject": "Reject",
+    "reason": {
+      "label": "Reason",
+      "rules_medicine": "Medical advice",
+      "rules_money": "Money request",
+      "person_in_photo": "Person in photo",
+      "unsafe": "Unsafe",
+      "spam": "Spam",
+      "inaccurate": "Inaccurate",
+      "duplicate": "Duplicate",
+      "other": "Other"
+    },
+    "rejectTitle": "Reject item",
+    "confirmReject": "Reject"
+  },
+  "duty": {
+    "title": "Duty roster",
+    "emptyTitle": "No shifts this week",
+    "emptyDescription": "Add a shift for the current week.",
+    "week": "Week of {{from}}",
+    "role": {
+      "label": "Role",
+      "psychologist": "Psychologist",
+      "moderator": "Moderator"
+    },
+    "backup": "Backup",
+    "primary": "Primary",
+    "add": "Add shift",
+    "addTitle": "Add duty shift",
+    "staffId": {
+      "label": "Staff ID",
+      "hint": "UUID of the staff member"
+    },
+    "startsAt": {
+      "label": "Starts at (UTC)",
+      "hint": "ISO date-time, for example 2026-10-28T09:00:00Z"
+    },
+    "endsAt": {
+      "label": "Ends at (UTC)",
+      "hint": "ISO date-time, for example 2026-10-28T17:00:00Z"
+    },
+    "phone": {
+      "label": "On-duty phone",
+      "hint": "E.164, for example +70000000000. Stored encrypted, never shown again."
+    },
+    "backupChoice": {
+      "label": "Shift type",
+      "primary": "Primary",
+      "backup": "Backup"
+    },
+    "confirmAdd": "Save shift",
+    "delete": "Delete",
+    "invalid": "Check the fields and try again."
+  },
+  "profile": {
+    "title": "Profile",
+    "subject": "Subject",
+    "roles": "Roles",
+    "noRoles": "No roles in the token",
+    "signOut": "Sign out"
+  }
+}
