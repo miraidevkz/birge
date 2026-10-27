@@ -5,7 +5,7 @@ description: Rules for any change that touches crisis detection, the crisis resp
 
 # Crisis path
 
-This is the part of the system that protects lives. Requirements: `docs/requirements/mvp.ru.md` § 5; ADR-0013, ADR-0017.
+This is the part of the system that protects lives. Requirements: `docs/requirements/mvp.md` § 5; ADR-0013, ADR-0017.
 
 ## Invariants
 

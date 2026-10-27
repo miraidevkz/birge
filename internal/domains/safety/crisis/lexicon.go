@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-// Languages the lexicon may contain (docs/requirements/mvp.ru.md § 5: kk/ru).
+// Languages the lexicon may contain (docs/requirements/mvp.md § 5: kk/ru/en).
 const (
 	LangKazakh  = "kk"
 	LangRussian = "ru"

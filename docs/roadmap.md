@@ -37,7 +37,7 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [ ] merge the wiring HTTP server back into platform/httpserver
 - [ ] Seed reference data (cities, districts, needs) per country; moderator side of verification
 - [ ] Kratos deployment and identity schema
-- [ ] `apps/mobile` and `apps/admin` skeletons (Expo, Expo Router, NativeWind, RN Reusables, i18n kk/ru); low-end Android performance budget measured
+- [ ] `apps/mobile` and `apps/admin` skeletons (Expo, Expo Router, NativeWind, RN Reusables, i18n kk/ru/en); low-end Android performance budget measured
 
 ## Wave 2: safety and AI
 
@@ -55,7 +55,7 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 
 ## Wave 4: acceptance
 
-- [ ] Acceptance checklist (`docs/requirements/mvp.ru.md` § 10), ASVS review, load test (API, chat gateway)
+- [ ] Acceptance checklist (`docs/requirements/mvp.md` § 10), ASVS review, load test (API, chat gateway)
 - [ ] Restore drill, key-recovery drill
 - [ ] Store builds (phased release), pilot
 

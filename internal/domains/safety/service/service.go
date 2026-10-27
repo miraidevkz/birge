@@ -54,7 +54,7 @@ type ExternalRecipient = model.ExternalRecipient
 // Settings is the safety runtime configuration.
 type Settings struct {
 	// BackupAfter is how long an escalation may stay open before the backup
-	// shift is alerted (default 15 minutes, docs/requirements/mvp.ru.md § 5).
+	// shift is alerted (default 15 minutes, docs/requirements/mvp.md § 5).
 	BackupAfter time.Duration
 	// CrisisPhones are the crisis lines returned with a help request; they
 	// come from configuration per country, never from code.

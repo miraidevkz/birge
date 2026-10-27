@@ -28,7 +28,7 @@ Caring for a child with special needs often leaves the parent exhausted and isol
 - [Architecture](docs/architecture.md)
 - [Development guide](docs/development.md)
 - [Architecture decision records](docs/adr/)
-- [MVP requirements](docs/requirements/mvp.ru.md) (Russian)
+- [MVP requirements](docs/requirements/mvp.md)
 - [Roadmap](docs/roadmap.md)
 - [Threat model](docs/threat-model.md)
 - [Security policy](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Code of conduct](CODE_OF_CONDUCT.md)

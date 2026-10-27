@@ -1,6 +1,6 @@
 # safety
 
-The crisis path (ADR-0023): level-1 crisis detection on a local lexicon, escalations to a person (`open → taken → closed`) with a 15-minute backup alert, and the duty roster that tells notify whom to text. Serves `docs/requirements/mvp.ru.md` § 5 (pipeline step 1 and step 6, crisis response and escalation) and § 6 (moderation queue: «Беру», «Закрыть с комментарием», duty roster). It never depends on the LLM or the network to it.
+The crisis path (ADR-0023): level-1 crisis detection on a local lexicon, escalations to a person (`open → taken → closed`) with a 15-minute backup alert, and the duty roster that tells notify whom to text. Serves `docs/requirements/mvp.md` § 5 (pipeline step 1 and step 6, crisis response and escalation) and § 6 (moderation queue: “Taking it” («Беру»), “Close with comment” («Закрыть с комментарием»), duty roster). It never depends on the LLM or the network to it.
 
 ## Owns
 

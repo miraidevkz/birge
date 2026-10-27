@@ -4,7 +4,7 @@ Rules for AI agents and human contributors working in this repository. Read this
 
 ## What this is
 
-Birge («Бірге», "together") is an open-source platform of peer support and mental-health help for mothers of children with special needs: weekly well-being check-ins, an AI assistant grounded in a reviewed knowledge base, peer matching, SOS with an emergency plan, and legal navigation. Kazakh and Russian first.
+Birge («Бірге», "together") is an open-source platform of peer support and mental-health help for mothers of children with special needs: weekly well-being check-ins, an AI assistant grounded in a reviewed knowledge base, peer matching, SOS with an emergency plan, and legal navigation. Interface languages at launch: Kazakh, Russian and English (`kk`, `ru`, `en`).
 
 ## Read in this order
 
@@ -13,7 +13,7 @@ Birge («Бірге», "together") is an open-source platform of peer support an
 3. [`docs/architecture.md`](docs/architecture.md): only the sections your task touches.
 4. ADRs in [`docs/adr/`](docs/adr/) for the area you change, and [`docs/solved-problems.md`](docs/solved-problems.md) (rules learned from real bugs; check your code against them).
 5. The contract for your module in `contracts/`, and the module's own `README.md`.
-6. [`docs/requirements/mvp.ru.md`](docs/requirements/mvp.ru.md): only the section your brief cites.
+6. [`docs/requirements/mvp.md`](docs/requirements/mvp.md): only the section your brief cites.
 
 Do not read the whole repository. Use `rg` to find what you need.
 
@@ -37,7 +37,7 @@ If a task conflicts with any of these, stop and report.
 - One task changes one bounded context (`internal/domains/<context>`) or one app (`apps/<app>`), plus its tests. Touching another context requires a contract change first, in a separate PR.
 - A context never reads or writes another context's tables and never imports its internals.
 - Contracts (`contracts/`) change before code. Generated code is regenerated, never edited by hand.
-- UI strings live only in locale files (`kk`, `ru`). Code, comments, docs and commit messages are in English.
+- UI strings live only in locale files (`kk`, `ru`, `en`). Code, comments, docs and commit messages are in English.
 
 ## Security rules
 

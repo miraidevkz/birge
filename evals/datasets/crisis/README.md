@@ -1,6 +1,6 @@
 # Crisis evaluation set
 
-Synthetic cases for the level-1 crisis detector (`internal/domains/safety/crisis`; ADR-0017, ADR-0023, `docs/requirements/mvp.ru.md` § 5).
+Synthetic cases for the level-1 crisis detector (`internal/domains/safety/crisis`; ADR-0017, ADR-0023, `docs/requirements/mvp.md` § 5).
 
 | File | Language of the member |
 |---|---|

@@ -1,6 +1,6 @@
 # wellbeing
 
-Weekly well-being check-ins («Как я»: PHQ-4 + PSS-4), reminder schedules, an 8-week score history and audio practices. Serves `docs/requirements/mvp.ru.md` § 4.2. Scoring thresholds and question texts are configuration; results are never a diagnosis.
+Weekly well-being check-ins (How am I («Как я»): PHQ-4 + PSS-4), reminder schedules, an 8-week score history and audio practices. Serves `docs/requirements/mvp.md` § 4.2. Scoring thresholds and question texts are configuration; results are never a diagnosis.
 
 ## Owns
 

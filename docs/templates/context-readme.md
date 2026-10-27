@@ -1,6 +1,6 @@
 # <context>
 
-One paragraph: what this bounded context is for and which requirement it serves (`docs/requirements/mvp.ru.md` § …).
+One paragraph: what this bounded context is for and which requirement it serves (`docs/requirements/mvp.md` § …).
 
 ## Owns
 

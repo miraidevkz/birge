@@ -1,6 +1,6 @@
 # privacy
 
-Versioned consents and account deletion via crypto-shredding (ADR-0009). Serves consents and «Удалить мои данные» in `docs/requirements/mvp.ru.md` § 4.1 and § privacy / deletion (≈ § 8 / acceptance).
+Versioned consents and account deletion via crypto-shredding (ADR-0009). Serves consents and Delete my data («Удалить мои данные») in `docs/requirements/mvp.md` § 4.1 and § privacy / deletion (≈ § 8 / acceptance).
 
 ## Owns
 

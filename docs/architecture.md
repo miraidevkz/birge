@@ -1,6 +1,6 @@
 # Architecture
 
-Status: draft, wave 0. Decisions are recorded in [`adr/`](adr/); requirements are in [`requirements/mvp.ru.md`](requirements/mvp.ru.md).
+Status: draft, wave 0. Decisions are recorded in [`adr/`](adr/); requirements are in [`requirements/mvp.md`](requirements/mvp.md).
 
 ## Principles
 
@@ -81,7 +81,7 @@ apps/
   mobile/             # mom app (Expo / React Native): iOS, Android, web
   admin/              # staff admin (Expo / react-native-web), separate bundle
 packages/             # shared TS: api-client, i18n, ui
-knowledge/{kk,ru}/    # published knowledge base, exported from the admin (ADR-0022)
+knowledge/{kk,ru,en}/ # published knowledge base, exported from the admin (ADR-0022)
 evals/datasets/       # AI regression sets (crisis, anonymization, behavior, false-positive)
 deploy/
   helm/               # primary deployment target (Kubernetes / k3s)

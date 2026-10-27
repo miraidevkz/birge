@@ -62,7 +62,7 @@ See [architecture § Repository layout](architecture.md#repository-layout-monore
 | `BIRGE_SMS_PER_NUMBER_LIMIT`, `BIRGE_SMS_PER_NUMBER_WINDOW` | worker | `5`, `1h` | notify SMS guard: sends per number per window |
 | `BIRGE_SMS_GLOBAL_LIMIT`, `BIRGE_SMS_GLOBAL_WINDOW` | worker | `60`, `1m` | notify SMS guard: sends per process per window |
 | `BIRGE_SMS_DAILY_BUDGET` | worker | `1000` | notify SMS guard: sends per UTC day (does not block critical SMS) |
-| `BIRGE_SMS_TEXTS` | worker | empty in `dev` | neutral fixed SMS bodies, JSON `{"<template>": {"kk": "...", "ru": "..."}}`; required when `BIRGE_DELIVERY_MODE` is not `dev`; an SMS for a template without a text is skipped (and logged) |
+| `BIRGE_SMS_TEXTS` | worker | empty in `dev` | neutral fixed SMS bodies, JSON `{"<template>": {"kk": "...", "ru": "...", "en": "..."}}`; required when `BIRGE_DELIVERY_MODE` is not `dev`; an SMS for a template without a text is skipped (and logged) |
 | `BIRGE_DELIVERY_MODE` | worker | required | `dev` only: push and SMS are logged (notification ID and channel), not sent. There are no real providers yet, so any other value refuses to start rather than drop notifications |
 | `BIRGE_EVENTS_MAX_AGE` | worker | `720h` | JetStream EVENTS stream MaxAge (how long events are retained) |
 | `BIRGE_EVENTS_MAX_BYTES` | worker | `1073741824` (1 GiB) | JetStream EVENTS stream MaxBytes (size cap; oldest messages discarded first) |

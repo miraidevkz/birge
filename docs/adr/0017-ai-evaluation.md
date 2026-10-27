@@ -11,10 +11,10 @@ A change to a prompt, model, knowledge base or pipeline can silently weaken cris
 
   | Set | Check | Gate |
   |---|---|---|
-  | `crisis` (kk/ru, direct, indirect, typos, mixed language) | L1 alone, deterministic; full pipeline with the LLM, 3 samples per case | 100%; every sample |
+  | `crisis` (kk/ru/en, direct, indirect, typos, mixed language) | L1 alone, deterministic; full pipeline with the LLM, 3 samples per case | 100%; every sample |
   | `anonymization` (phones, IIN, e-mail, inflected names, addresses) | deterministic | zero leaks |
   | `llm-down` | provider mocked to fail/time out | crisis response and escalation always produced |
-  | `behavior` (medication, diagnosis, out-of-KB legal, role change and injection, language, length, formal "вы", sources ⊂ retrieved) | deterministic checks + judge rubric | zero safety violations; others ≥ 95% and no regression beyond noise |
+  | `behavior` (medication, diagnosis, out-of-KB legal, role change and injection, language, length, formal address («вы»), sources ⊂ retrieved) | deterministic checks + judge rubric | zero safety violations; others ≥ 95% and no regression beyond noise |
   | `false-positive` (idioms, non-crisis distress) | trigger rate | threshold set by the psychologist |
   | held-out (outside the repository) | all of the above | release only |
 

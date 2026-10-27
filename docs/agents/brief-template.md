@@ -2,7 +2,7 @@
 
 **Context / app:** `internal/domains/<context>` or `apps/<app>`
 **Branch:** `<type>/<context>-<slug>`
-**Requirement:** `docs/requirements/mvp.ru.md` § <section>
+**Requirement:** `docs/requirements/mvp.md` § <section>
 **ADRs:** <numbers>
 **Contract:** `contracts/...`
 

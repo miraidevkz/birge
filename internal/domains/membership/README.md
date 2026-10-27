@@ -1,6 +1,6 @@
 # membership
 
-Members, children, verification requests, blocks (ADR-0019) and reference data (cities, districts, needs). Serves onboarding and profile in `docs/requirements/mvp.ru.md` § 4.1. Sign-in is handled by `authgw/` in front of Kratos (ADR-0008 addendum).
+Members, children, verification requests, blocks (ADR-0019) and reference data (cities, districts, needs). Serves onboarding and profile in `docs/requirements/mvp.md` § 4.1. Sign-in is handled by `authgw/` in front of Kratos (ADR-0008 addendum).
 
 ## Owns
 

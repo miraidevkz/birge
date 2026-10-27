@@ -1,5 +1,5 @@
 // Package crisis is the level-1 crisis detector of the AI pipeline
-// (docs/requirements/mvp.ru.md § 5 step 1; ADR-0023, ADR-0017): a local,
+// (docs/requirements/mvp.md § 5 step 1; ADR-0023, ADR-0017): a local,
 // deterministic lexicon match that runs before anonymization and before any
 // network call, so that the crisis response never depends on the LLM.
 //
