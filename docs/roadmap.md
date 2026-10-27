@@ -87,13 +87,13 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [ ] ASVS checklist, threat-model review, load test of API and chat gateway
 
 ### Deployment
-- [ ] Helm charts (k3s) and Compose: PostgreSQL (CloudNativePG), NATS, Kratos with the phone identity schema and courier hook, Hydra, Garage, TEI, Qdrant, OpenBao, observability
+- [ ] Helm charts (k3s); Compose dev stack done (PostgreSQL, NATS, Kratos, Hydra with a dev login app, web apps): PostgreSQL (CloudNativePG), NATS, Kratos with the phone identity schema and courier hook, Hydra, Garage, TEI, Qdrant, OpenBao, observability
 - [ ] Backup and restore drill, key-recovery drill
 
 ### Clients
-- [ ] TypeScript API client from the contract
-- [ ] Mom app (Expo / React Native, kk/ru/en, design system per ADR-0014)
-- [ ] Staff admin app
+- [x] TypeScript API client from the contract
+- [x] Mom app (Expo / React Native, kk/ru/en, design system per ADR-0014); texts need a native-speaker and psychologist review
+- [x] Staff admin app: escalations, moderation, duty roster, knowledge base (web, OIDC PKCE); role matrix and the remaining staff screens later
 
 ### Documentation for people
 - [ ] Overview, end-to-end scenarios with diagrams, moderator handbook
