@@ -81,7 +81,7 @@ apps/
   mobile/             # mom app (Expo / React Native): iOS, Android, web
   admin/              # staff admin (Expo / react-native-web), separate bundle
 packages/             # shared TS: api-client, i18n, ui
-knowledge/{kk,ru}/    # knowledge base markdown (reviewed content only is indexed)
+knowledge/{kk,ru}/    # published knowledge base, exported from the admin (ADR-0022)
 evals/datasets/       # AI regression sets (crisis, anonymization, behavior, false-positive)
 deploy/
   helm/               # primary deployment target (Kubernetes / k3s)
@@ -110,6 +110,7 @@ docs/                 # architecture, ADRs, requirements, threat model
 | Member safety | mutual-invisibility blocks across contexts, item-only photos, legal hold for illegal content | [0019](adr/0019-user-safety-and-media-policy.md) |
 | Timers | `timers` table, SKIP LOCKED workers, created in the domain transaction | [0020](adr/0020-scheduler.md) |
 | Observability | OpenTelemetry → Prometheus, Loki, Tempo, Grafana; GlitchTip; alerts via `notify` | [0021](adr/0021-observability.md) |
+| Knowledge base | admin editor with review, per-language publishing, expiry (legal 6 mo, self-help 12 mo), export to repo | [0022](adr/0022-knowledge-base-workflow.md) |
 | Object storage | S3 API only; Garage for dev/MVP, local S3-compatible provider in production | [0015](adr/0015-object-storage.md) |
 
 ## Replication to other countries
