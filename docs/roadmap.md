@@ -73,7 +73,7 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [x] Wire moderation: content sources per context, queue consumer
 - [x] Apply moderation decisions: chat (held and reported messages, legal hold), membership (verification approves members, emits MemberVerified), member suspension for "block author"
 - [x] Staff endpoints for mentor assignment, closing reports and legal hold
-- [ ] Account deletion in every context (consumers of `privacy.DataDeletionRequested`)
+- [x] Account deletion in every context (consumers of `privacy.DataDeletionRequested`)
 - [ ] Analytics: pseudonymous events and the aggregate metrics of requirements § 9 with CSV export
 - [ ] Push (FCM/APNs) and SMS provider plugins
 - [x] Knowledge: reviewer review-due queue before expiry, export of published content to `knowledge/`
