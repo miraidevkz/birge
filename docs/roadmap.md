@@ -18,7 +18,8 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [x] `make migration`, `make db-check` with the destructive-operation gate (`cmd/birge-dbtool`), first migration
 - [x] Boundary test (`internal/archtest`), golangci-lint config, `make go-check`
 - [ ] Remaining CI stages per `docs/architecture.md` (govulncheck, contracts, migrations, images)
-- [ ] `deploy/compose` (dev) and `deploy/helm` skeleton (k3s)
+- [x] `deploy/compose` (dev)
+- [ ] `deploy/helm` skeleton (k3s)
 - [ ] Synthetic data generator and demo mode plan
 
 ## Wave 1: identity, delivery, clients
@@ -36,7 +37,7 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [x] Require SMS texts outside dev mode
 - [ ] merge the wiring HTTP server back into platform/httpserver
 - [ ] Seed reference data (cities, districts, needs) per country; moderator side of verification
-- [ ] Kratos deployment and identity schema
+- [ ] Kratos deployment and identity schema (development config in `deploy/compose/kratos`; courier hook to notify still open)
 - [ ] `apps/mobile` and `apps/admin` skeletons (Expo, Expo Router, NativeWind, RN Reusables, i18n kk/ru/en); low-end Android performance budget measured
 
 ## Wave 2: safety and AI

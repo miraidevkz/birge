@@ -1,0 +1,108 @@
+# Development stack: PostgreSQL, NATS JetStream, Kratos and the birge api and
+# worker. Development only: trust authentication, generated keys, push and SMS
+# logged instead of sent. Only the API is published, on 127.0.0.1:8080.
+# Start with ./up.sh (it creates the git-ignored .env with the Kratos secret).
+name: birge-dev
+
+x-birge-env: &birge-env
+  DATABASE_URL: postgres://birge_app@postgres:5432/birge?sslmode=disable
+  NATS_URL: nats://nats:4222
+  KRATOS_PUBLIC_URL: http://kratos:4433
+  KRATOS_ADMIN_URL: http://kratos:4434
+  BIRGE_KEK_ID: local-1
+  BIRGE_KEK_KEYSET_FILE: /secrets/kek.json
+  BIRGE_BLIND_INDEX_KEY_FILE: /secrets/blind-index.key
+  BIRGE_POW_KEY_FILE: /secrets/pow.key
+  BIRGE_HASH_KEY_FILE: /secrets/hash.key
+  BIRGE_SMS_ALLOWED_PREFIXES: ${BIRGE_SMS_ALLOWED_PREFIXES:-+77}
+  BIRGE_PRACTICES_BASE_URL: https://objects.example.invalid
+  BIRGE_DELIVERY_MODE: dev
+
+services:
+  postgres:
+    image: postgres:18.0-alpine
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 2s
+      retries: 30
+
+  nats:
+    image: nats:2.11.9-alpine
+    command: ["-js", "-sd", "/data"]
+    volumes:
+      - natsdata:/data
+
+  kratos-migrate:
+    image: oryd/kratos:v1.3.1
+    command: ["migrate", "sql", "-e", "--yes"]
+    environment:
+      DSN: postgres://kratos@postgres:5432/kratos?sslmode=disable
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  kratos:
+    image: oryd/kratos:v1.3.1
+    command: ["serve", "-c", "/etc/config/kratos/kratos.yml", "--dev", "--watch-courier"]
+    environment:
+      DSN: postgres://kratos@postgres:5432/kratos?sslmode=disable
+      SECRETS_DEFAULT: ${KRATOS_SECRET:?run ./up.sh}
+      SECRETS_COOKIE: ${KRATOS_SECRET:?run ./up.sh}
+      SECRETS_CIPHER: ${KRATOS_CIPHER:?run ./up.sh}
+    volumes:
+      - ./kratos:/etc/config/kratos:ro
+    depends_on:
+      kratos-migrate: { condition: service_completed_successfully }
+
+  # Writes the development keys once into the secrets volume; keygen refuses
+  # to overwrite, so later starts keep the same keys (and readable data).
+  # Runs as root only to hand the new volume to the image's birge user.
+  keygen:
+    build: { context: ../.., dockerfile: deploy/compose/Dockerfile }
+    image: birge-dev:local
+    user: "0:0"
+    entrypoint: ["sh", "-c", "test -f /secrets/kek.json || { birge keygen -dir /secrets && chown -R birge /secrets; }"]
+    volumes:
+      - secrets:/secrets
+
+  migrate:
+    image: birge-dev:local
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://birge_migrator@postgres:5432/birge?sslmode=disable
+      BIRGE_APPLY_ROLES: "1"
+    depends_on:
+      postgres: { condition: service_healthy }
+      keygen: { condition: service_completed_successfully }
+
+  api:
+    image: birge-dev:local
+    command: ["api"]
+    environment: *birge-env
+    volumes:
+      - secrets:/secrets:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      kratos: { condition: service_started }
+      nats: { condition: service_started }
+
+  worker:
+    image: birge-dev:local
+    command: ["worker"]
+    environment: *birge-env
+    volumes:
+      - secrets:/secrets:ro
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      nats: { condition: service_started }
+
+volumes:
+  pgdata:
+  natsdata:
+  secrets:

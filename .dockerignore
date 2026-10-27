@@ -1,0 +1,11 @@
+# Only the Go backend goes into the image build context.
+*
+!go.mod
+!go.sum
+!cmd/
+!internal/
+!db/
+!presets/
+!contracts/
+**/node_modules
+**/*_test.go

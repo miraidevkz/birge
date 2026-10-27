@@ -128,7 +128,17 @@ Health: `GET /healthz` answers 204 while the process runs; `GET /readyz` answers
 
 ## Running locally
 
-Start PostgreSQL, NATS with JetStream and Kratos however you like (Compose files will come with `deploy/compose`). Create local development keys under `secrets/` (git-ignored; never commit keys). Production keys come from the secret store, not from `keygen`:
+The quickest way is the development stack in `deploy/compose` (Docker or Colima with the Compose plugin):
+
+```sh
+deploy/compose/up.sh          # PostgreSQL, NATS, Kratos (phone + SMS code), birge migrate, api, worker
+deploy/compose/up.sh codes    # latest SMS texts Kratos queued: there is no SMS provider in development
+deploy/compose/up.sh down     # stop; data volumes stay
+```
+
+It publishes only the API on `127.0.0.1:8080` (the auth gateway at `/auth/`). Keys are generated once into a volume, the Kratos secrets into the git-ignored `deploy/compose/.env`; push and SMS are logged, not sent. A phone on USB reaches it with `adb reverse tcp:8080 tcp:8080`, which matches the app's default URLs. Allowed sign-in prefixes default to `+77`; override with `BIRGE_SMS_ALLOWED_PREFIXES`.
+
+To run the binaries yourself instead, start PostgreSQL, NATS with JetStream and Kratos however you like. Create local development keys under `secrets/` (git-ignored; never commit keys). Production keys come from the secret store, not from `keygen`:
 
 ```sh
 go run ./cmd/birge keygen -dir secrets
