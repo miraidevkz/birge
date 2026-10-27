@@ -17,16 +17,18 @@
 //     everywhere else; chat WebSocket authenticates in its first frame) →
 //     request validation → generated handlers (meta, membership, privacy,
 //     notify, safety, wellbeing, emergency, assistant, knowledge, circle,
-//     chat, sharing, directory) and GET /v1/chat/ws.
+//     chat, sharing, directory, moderation) and GET /v1/chat/ws.
 //   - The worker (RunWorker): outbox relay to JetStream, the notify
 //     DeliveryRequested consumer, the emergency.SosShared district-push
-//     consumer, chat.RoomOpenerConsumer, sharing/directory moderation.Decided
-//     consumers, the knowledge retrieval indexer (when TEI+Qdrant are set)
-//     and the timers worker with notify, privacy, safety.EscalationBackup,
-//     wellbeing.Reminder, emergency.SosAutoClose, assistant.RetentionPurge,
-//     knowledge review/expire, circle match/expire/ask-met, chat crisis/push/
-//     retention and sharing ProcessPhoto/AutoClose (ADR-0007, ADR-0020),
-//     stopped together on shutdown or on the first failure.
+//     consumer, chat.RoomOpenerConsumer, moderation.QueueConsumer (five
+//     submission events), sharing/directory/chat/membership
+//     moderation.Decided consumers, the knowledge retrieval indexer (when
+//     TEI+Qdrant are set) and the timers worker with notify, privacy,
+//     safety.EscalationBackup, wellbeing.Reminder, emergency.SosAutoClose,
+//     assistant.RetentionPurge, knowledge review/expire, circle
+//     match/expire/ask-met, chat crisis/push/retention and sharing
+//     ProcessPhoto/AutoClose (ADR-0007, ADR-0020), stopped together on
+//     shutdown or on the first failure.
 //   - Migrate: the migrations embedded in the binary (package birge/db),
 //     applied with goose under a PostgreSQL session lock, then db/roles.sql
 //     when asked (ADR-0006), then DEMO membership reference and knowledge
@@ -40,12 +42,14 @@
 //     envelope with per-column associated data), safety MemberDirectory
 //     (membership + Kratos phone), emergency/circle/chat/sharing/directory
 //     MemberInfo/Blocks (membership; first name only where shown), chat Mentors
-//     (membership role mentor) and Crisis (safety Detect + CrisisPhones +
-//     OpenEscalation source chat), CircleMet Acquaintances (circle.Met),
-//     assistant consent/lexicon/profiles/retrieval/LLM, wellbeing/assistant
-//     CrisisOpener → safety.OpenEscalation, sharing ObjectStore
-//     (platform/objectstore; Disabled when BIRGE_S3_* unset), the notify
-//     Recipients (membership, safety.ResolveStaffRole/ShiftPhone, emergency
+//     (membership role mentor), AuthorSuspender (membership.SuspendAuthor) and
+//     Crisis (safety Detect + CrisisPhones + OpenEscalation source chat),
+//     moderation ContentSources (chat/sharing/directory/membership summaries),
+//     CircleMet Acquaintances (circle.Met), assistant
+//     consent/lexicon/profiles/retrieval/LLM, wellbeing/assistant CrisisOpener
+//     → safety.OpenEscalation, sharing ObjectStore (platform/objectstore;
+//     Disabled when BIRGE_S3_* unset), the notify Recipients (membership,
+//     safety.ResolveStaffRole/ShiftPhone, emergency
 //     TrustedContactTarget/ContactPhone), and the log-only push and SMS senders.
 //   - EVENTS stream retention (BIRGE_EVENTS_MAX_AGE / BIRGE_EVENTS_MAX_BYTES)
 //     applied in EnsureStream on worker start.

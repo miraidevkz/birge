@@ -42,15 +42,17 @@ type MembershipDistrict struct {
 }
 
 type MembershipMember struct {
-	ID           uuid.UUID
-	IdentityID   uuid.UUID
-	DisplayName  []byte
-	Lang         string
-	DistrictID   *uuid.UUID
-	Verification string
-	Roles        []string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID              uuid.UUID
+	IdentityID      uuid.UUID
+	DisplayName     []byte
+	Lang            string
+	DistrictID      *uuid.UUID
+	Verification    string
+	Roles           []string
+	SuspendedAt     *time.Time
+	SuspendedReason *string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type MembershipNeed struct {
@@ -60,9 +62,10 @@ type MembershipNeed struct {
 }
 
 type MembershipVerificationRequest struct {
-	ID        uuid.UUID
-	MemberID  uuid.UUID
-	Status    string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID           uuid.UUID
+	MemberID     uuid.UUID
+	Status       string
+	RejectReason *string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }

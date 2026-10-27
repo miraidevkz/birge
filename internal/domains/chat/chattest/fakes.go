@@ -1,7 +1,7 @@
 // Package chattest provides fakes of the chat ports for tests: a sealer
 // that binds associated data and can shred, member profiles, blocks and
-// the mentor role, the safety crisis path, the fan-out bus and the
-// WebSocket authenticator. Every name and text in tests is fake.
+// the mentor role, author suspension, the safety crisis path, the fan-out
+// bus and the WebSocket authenticator. Every name and text in tests is fake.
 package chattest
 
 import (
@@ -166,6 +166,35 @@ func (f *FakeMembers) IsMentor(_ context.Context, id uuid.UUID) (bool, error) {
 		return false, f.Err
 	}
 	return f.mentors[id], nil
+}
+
+// SuspendCall records one AuthorSuspender.SuspendAuthor invocation.
+type SuspendCall struct {
+	MemberID         uuid.UUID
+	Reason           string
+	ModerationItemID uuid.UUID
+}
+
+// FakeSuspender implements port.AuthorSuspender.
+type FakeSuspender struct {
+	mu    sync.Mutex
+	Calls []SuspendCall
+	Err   error
+}
+
+// SuspendAuthor implements port.AuthorSuspender.
+func (f *FakeSuspender) SuspendAuthor(_ context.Context, memberID uuid.UUID, reason string, moderationItemID uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Calls = append(f.Calls, SuspendCall{MemberID: memberID, Reason: reason, ModerationItemID: moderationItemID})
+	return f.Err
+}
+
+// Suspended returns a copy of recorded calls.
+func (f *FakeSuspender) Suspended() []SuspendCall {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]SuspendCall(nil), f.Calls...)
 }
 
 // FakeCrisis implements port.Crisis: it fires on CrisisWord and opens one

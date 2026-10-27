@@ -27,6 +27,30 @@ const (
 const (
 	EventMemberRegistered      = "membership.MemberRegistered"
 	EventVerificationRequested = "membership.VerificationRequested"
+	EventMemberVerified        = "membership.MemberVerified"
+	EventModerationDecided     = "moderation.Decided"
+)
+
+// ConsumerModerationDecided is the platform.processed_events consumer name.
+const ConsumerModerationDecided = "membership.moderation.Decided"
+
+// Audit codes for staff suspension and system application of decisions.
+const (
+	AuditObjectMember       = "membership.member"
+	AuditObjectVerification = "membership.verification_request"
+	AuditSuspend            = "membership.member.suspend"
+	AuditLiftSuspension     = "membership.member.lift_suspension"
+	AuditVerifyApprove      = "membership.verification.approve"
+	AuditVerifyReject       = "membership.verification.reject"
+	ActorRoleSystem         = "system"
+	ActorRoleStaff          = "staff"
+)
+
+// Verification request statuses.
+const (
+	VerificationRequestPending  = "pending"
+	VerificationRequestApproved = "approved"
+	VerificationRequestRejected = "rejected"
 )
 
 var codeRe = regexp.MustCompile(`^[a-z_]{2,40}$`)
@@ -57,16 +81,53 @@ const (
 // Member is a member profile. DisplayName is personal data: it is never logged
 // and never put into events.
 type Member struct {
-	ID           uuid.UUID
-	IdentityID   uuid.UUID
-	DisplayName  string // empty until the member sets one
-	Lang         Lang
-	CityID       *uuid.UUID
-	DistrictID   *uuid.UUID
-	Verification Verification
-	Roles        []string
-	Children     []Child
+	ID              uuid.UUID
+	IdentityID      uuid.UUID
+	DisplayName     string // empty until the member sets one
+	Lang            Lang
+	CityID          *uuid.UUID
+	DistrictID      *uuid.UUID
+	Verification    Verification
+	Roles           []string
+	Children        []Child
+	SuspendedAt     *time.Time
+	SuspendedReason string
 }
+
+// Suspended reports whether the member is currently suspended by staff.
+func (m Member) Suspended() bool { return m.SuspendedAt != nil }
+
+// Suspension is the staff view of a member's suspension state.
+type Suspension struct {
+	MemberID    uuid.UUID
+	Suspended   bool
+	SuspendedAt *time.Time
+	Reason      string
+}
+
+// VerificationRequest is one moderation object for a verification call.
+type VerificationRequest struct {
+	ID           uuid.UUID
+	MemberID     uuid.UUID
+	Status       string
+	RejectReason string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+// ModerationDecidedData is the payload of moderation.Decided v1.
+type ModerationDecidedData struct {
+	ItemID      uuid.UUID `json:"item_id"`
+	Kind        string    `json:"kind"`
+	ObjectID    uuid.UUID `json:"object_id"`
+	Approve     bool      `json:"approve"`
+	Reason      string    `json:"reason,omitempty"`
+	BlockAuthor bool      `json:"block_author"`
+	LegalHold   bool      `json:"legal_hold"`
+}
+
+// ModerationKindVerification is the Decided kind this context applies.
+const ModerationKindVerification = "verification"
 
 // LogValue keeps personal data out of logs when a Member is logged by accident.
 func (m Member) LogValue() slog.Value {

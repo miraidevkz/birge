@@ -15,6 +15,7 @@ import (
 	"birge/internal/domains/membership/model"
 	"birge/internal/domains/membership/port"
 	"birge/internal/domains/membership/store"
+	"birge/internal/platform/audit"
 	"birge/internal/platform/db"
 	"birge/internal/platform/outbox"
 	platformstore "birge/internal/platform/store"
@@ -75,11 +76,15 @@ func (t *pgTx) ListVerifiedInDistrict(ctx context.Context, districtID uuid.UUID)
 }
 
 func memberRecord(r store.GetMemberByIDRow) port.MemberRecord {
-	return port.MemberRecord{
+	rec := port.MemberRecord{
 		ID: r.ID, IdentityID: r.IdentityID, SealedName: r.DisplayName, Lang: model.Lang(r.Lang),
 		CityID: r.CityID, DistrictID: r.DistrictID, Verification: model.Verification(r.Verification),
-		Roles: r.Roles,
+		Roles: r.Roles, SuspendedAt: r.SuspendedAt,
 	}
+	if r.SuspendedReason != nil {
+		rec.SuspendedReason = *r.SuspendedReason
+	}
+	return rec
 }
 
 // LockMember locks the member row until the end of the transaction.
@@ -136,6 +141,65 @@ func (t *pgTx) SetVerification(ctx context.Context, id uuid.UUID, v model.Verifi
 		return model.ErrMemberNotFound
 	}
 	return nil
+}
+
+// SetSuspension sets or clears staff suspension.
+func (t *pgTx) SetSuspension(ctx context.Context, id uuid.UUID, at *time.Time, reason string, now time.Time) error {
+	var reasonPtr *string
+	if reason != "" {
+		reasonPtr = &reason
+	}
+	n, err := t.q.SetMemberSuspension(ctx, store.SetMemberSuspensionParams{
+		SuspendedAt: at, SuspendedReason: reasonPtr, Now: now, ID: id,
+	})
+	if err != nil {
+		return fmt.Errorf("membership: set suspension: %w", err)
+	}
+	if n == 0 {
+		return model.ErrMemberNotFound
+	}
+	return nil
+}
+
+// GetVerificationRequest loads a verification request by ID.
+func (t *pgTx) GetVerificationRequest(ctx context.Context, id uuid.UUID, forUpdate bool) (model.VerificationRequest, error) {
+	var (
+		r   store.MembershipVerificationRequest
+		err error
+	)
+	if forUpdate {
+		r, err = t.q.GetVerificationRequestForUpdate(ctx, id)
+	} else {
+		r, err = t.q.GetVerificationRequest(ctx, id)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.VerificationRequest{}, model.ErrMemberNotFound
+	}
+	if err != nil {
+		return model.VerificationRequest{}, fmt.Errorf("membership: get verification request: %w", err)
+	}
+	out := model.VerificationRequest{
+		ID: r.ID, MemberID: r.MemberID, Status: r.Status, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+	}
+	if r.RejectReason != nil {
+		out.RejectReason = *r.RejectReason
+	}
+	return out, nil
+}
+
+// DecideVerificationRequest marks a pending request approved or rejected.
+func (t *pgTx) DecideVerificationRequest(ctx context.Context, id uuid.UUID, status, rejectReason string, now time.Time) (bool, error) {
+	var reasonPtr *string
+	if rejectReason != "" {
+		reasonPtr = &rejectReason
+	}
+	n, err := t.q.DecideVerificationRequest(ctx, store.DecideVerificationRequestParams{
+		Status: status, RejectReason: reasonPtr, Now: now, ID: id,
+	})
+	if err != nil {
+		return false, fmt.Errorf("membership: decide verification: %w", err)
+	}
+	return n > 0, nil
 }
 
 // Children lists the member's child cards.
@@ -263,7 +327,8 @@ func (t *pgTx) IsBlocked(ctx context.Context, a, b uuid.UUID) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("membership: is blocked: %w", err)
 	}
-	return blocked, nil
+	// sqlc types the OR of EXISTS as *bool; a NULL would mean false.
+	return blocked != nil && *blocked, nil
 }
 
 // DistrictExists reports whether id is a known district.
@@ -363,6 +428,24 @@ func (p *Postgres) SeedReferenceIfEmpty(ctx context.Context, ref model.Reference
 func (t *pgTx) Publish(ctx context.Context, now time.Time, e outbox.Event) error {
 	_, err := outbox.Enqueue(ctx, t.outbox, now, "", e)
 	return err
+}
+
+// MarkProcessed records that consumer handled eventID.
+func (t *pgTx) MarkProcessed(ctx context.Context, consumer string, eventID uuid.UUID) (bool, error) {
+	n, err := t.outbox.MarkEventProcessed(ctx, platformstore.MarkEventProcessedParams{
+		Consumer: consumer, EventID: eventID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("membership: mark processed: %w", err)
+	}
+	return n == 1, nil
+}
+
+// Audit writes one platform.audit_log row in this transaction.
+func (t *pgTx) Audit(ctx context.Context, actorID uuid.UUID, actorRole, action, objectType string, objectID uuid.UUID, reason string) error {
+	return audit.Record(ctx, t.outbox, audit.Entry{
+		ActorID: actorID, ActorRole: actorRole, Action: action, ObjectType: objectType, ObjectID: objectID, Reason: reason,
+	})
 }
 
 func child(id uuid.UUID, birthYear int32, n []string) model.Child {

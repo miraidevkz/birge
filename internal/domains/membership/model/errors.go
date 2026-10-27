@@ -26,6 +26,7 @@ func (e *Error) Error() string { return "membership: " + e.Code }
 var (
 	ErrUnauthenticated       = &Error{KindUnauthenticated, "unauthenticated", "Sign-in required."}
 	ErrMemberSessionRequired = &Error{KindForbidden, "member_session_required", "A member session is required."}
+	ErrForbidden             = &Error{KindForbidden, "forbidden", "Not allowed."}
 
 	ErrInvalidRequest        = &Error{KindInvalid, "invalid_request", "The request is invalid."}
 	ErrEmptyUpdate           = &Error{KindInvalid, "empty_update", "Nothing to update."}
@@ -44,4 +45,8 @@ var (
 	ErrChildrenLimit   = &Error{KindConflict, "children_limit", "Too many children."}
 	ErrBlocksLimit     = &Error{KindConflict, "blocks_limit", "Too many blocked members."}
 	ErrAlreadyVerified = &Error{KindConflict, "already_verified", "The profile is already verified."}
+
+	// ErrMemberSuspended is returned when a suspended member's session tries
+	// a member route (moderation.block_author; ADR-0019).
+	ErrMemberSuspended = &Error{KindForbidden, "member_suspended", "Your account is suspended."}
 )

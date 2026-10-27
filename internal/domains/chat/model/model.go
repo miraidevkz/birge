@@ -64,6 +64,9 @@ const (
 const (
 	ModeratorStaff  = "staff"
 	ModeratorMentor = "mentor"
+	// ModeratorSystem is the audit actor role when applying moderation.Decided
+	// (ActorID = the moderation item id).
+	ModeratorSystem = "system"
 )
 
 // StaffModerationRoles are the staff roles with full chat moderation rights
@@ -101,12 +104,23 @@ const (
 	EventMatchAccepted       = "circle.MatchAccepted"
 	EventSosResponseAccepted = "emergency.SosResponseAccepted"
 	EventContactAccepted     = "sharing.ContactAccepted"
+	EventModerationDecided   = "moderation.Decided"
 	EventVersion             = 1
 )
 
 // ConsumerDirectRooms is the platform.processed_events consumer name of the
 // direct-room opener.
 const ConsumerDirectRooms = "chat.DirectRoomOpener"
+
+// ConsumerModerationDecided is the processed_events consumer name for
+// moderation.Decided (kinds chat_message and report).
+const ConsumerModerationDecided = "chat.moderation.Decided"
+
+// Moderation.Decided kinds this context applies.
+const (
+	ModerationKindChatMessage = "chat_message"
+	ModerationKindReport      = "report"
+)
 
 // Notify template and class of the content-free new-message push.
 const (
@@ -476,6 +490,17 @@ type ContactAcceptedData struct {
 	ListingID   uuid.UUID `json:"listing_id"`
 	AuthorID    uuid.UUID `json:"author_id"`
 	RequesterID uuid.UUID `json:"requester_id"`
+}
+
+// ModerationDecidedData is the payload of moderation.Decided v1 (subset used here).
+type ModerationDecidedData struct {
+	ItemID      uuid.UUID `json:"item_id"`
+	Kind        string    `json:"kind"`
+	ObjectID    uuid.UUID `json:"object_id"`
+	Approve     bool      `json:"approve"`
+	Reason      string    `json:"reason,omitempty"`
+	BlockAuthor bool      `json:"block_author"`
+	LegalHold   bool      `json:"legal_hold"`
 }
 
 // DeliveryRecipient is the recipient object of notify.DeliveryRequested v1.

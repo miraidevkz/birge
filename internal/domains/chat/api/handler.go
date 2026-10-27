@@ -1,8 +1,9 @@
 // Package api exposes the chat HTTP handlers (OpenAPI tag chat): rooms,
-// joining and leaving, mute, history, sending, reports and room moderation.
-// The WebSocket is in package gateway. Authorization is enforced in the
-// service; handlers validate the shape of the input, map errors to problem
-// responses and never echo message text into errors.
+// joining and leaving, mute, history, sending, reports, room moderation,
+// and staff mentor / legal-hold operations. The WebSocket is in package
+// gateway. Authorization is enforced in the service; handlers validate the
+// shape of the input, map errors to problem responses and never echo
+// message text into errors.
 package api
 
 import (
@@ -248,4 +249,67 @@ func (s *Server) ModerateRoom(ctx context.Context, req ModerateRoomRequestObject
 		return nil, err
 	}
 	return ModerateRoom204Response{}, nil
+}
+
+// AssignRoomMentor assigns a mentor to a group room (staff).
+func (s *Server) AssignRoomMentor(ctx context.Context, req AssignRoomMentorRequestObject) (AssignRoomMentorResponseObject, error) {
+	err := s.Service.AssignMentor(ctx, principal(ctx), req.RoomId, req.MemberId, true)
+	if err != nil {
+		if st, c, t, ok := problemFor(err); ok {
+			switch st {
+			case http.StatusForbidden:
+				return AssignRoomMentor403ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(problem(st, c, t))}, nil
+			case http.StatusConflict:
+				return AssignRoomMentor409ApplicationProblemPlusJSONResponse(problem(st, c, t)), nil
+			}
+			return AssignRoomMentordefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+		}
+		return nil, err
+	}
+	return AssignRoomMentor204Response{}, nil
+}
+
+// RemoveRoomMentor removes a mentor from a group room (staff).
+func (s *Server) RemoveRoomMentor(ctx context.Context, req RemoveRoomMentorRequestObject) (RemoveRoomMentorResponseObject, error) {
+	err := s.Service.AssignMentor(ctx, principal(ctx), req.RoomId, req.MemberId, false)
+	if err != nil {
+		if st, c, t, ok := problemFor(err); ok {
+			if st == http.StatusForbidden {
+				return RemoveRoomMentor403ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(problem(st, c, t))}, nil
+			}
+			return RemoveRoomMentordefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+		}
+		return nil, err
+	}
+	return RemoveRoomMentor204Response{}, nil
+}
+
+// PutMessageLegalHold puts a message under legal hold (staff).
+func (s *Server) PutMessageLegalHold(ctx context.Context, req PutMessageLegalHoldRequestObject) (PutMessageLegalHoldResponseObject, error) {
+	err := s.Service.SetLegalHold(ctx, principal(ctx), req.MessageId, true)
+	if err != nil {
+		if st, c, t, ok := problemFor(err); ok {
+			if st == http.StatusForbidden {
+				return PutMessageLegalHold403ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(problem(st, c, t))}, nil
+			}
+			return PutMessageLegalHolddefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+		}
+		return nil, err
+	}
+	return PutMessageLegalHold204Response{}, nil
+}
+
+// DeleteMessageLegalHold releases a message from legal hold (staff).
+func (s *Server) DeleteMessageLegalHold(ctx context.Context, req DeleteMessageLegalHoldRequestObject) (DeleteMessageLegalHoldResponseObject, error) {
+	err := s.Service.SetLegalHold(ctx, principal(ctx), req.MessageId, false)
+	if err != nil {
+		if st, c, t, ok := problemFor(err); ok {
+			if st == http.StatusForbidden {
+				return DeleteMessageLegalHold403ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(problem(st, c, t))}, nil
+			}
+			return DeleteMessageLegalHolddefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+		}
+		return nil, err
+	}
+	return DeleteMessageLegalHold204Response{}, nil
 }

@@ -147,6 +147,16 @@ type MemberRoles string
 // MemberVerification defines model for Member.Verification.
 type MemberVerification string
 
+// MemberSuspension defines model for MemberSuspension.
+type MemberSuspension struct {
+	MemberId openapi_types.UUID `json:"memberId"`
+
+	// Reason Reason code from the moderation decision that suspended her.
+	Reason      *string    `json:"reason,omitempty"`
+	Suspended   bool       `json:"suspended"`
+	SuspendedAt *time.Time `json:"suspendedAt,omitempty"`
+}
+
 // MemberUpdate defines model for MemberUpdate.
 type MemberUpdate struct {
 	DisplayName *string `json:"displayName,omitempty"`
@@ -257,6 +267,12 @@ type ServerInterface interface {
 	// ListNeeds Special-needs categories (localized labels come from locale files by code).
 	// (GET /reference/needs)
 	ListNeeds(w http.ResponseWriter, r *http.Request)
+	// LiftMemberSuspension Lift a member suspension. Staff admin, MFA. Audited.
+	// (DELETE /staff/members/{memberId}/suspension)
+	LiftMemberSuspension(w http.ResponseWriter, r *http.Request, memberId openapi_types.UUID)
+	// GetMemberSuspension Suspension status of a member. Staff moderator or admin, MFA.
+	// (GET /staff/members/{memberId}/suspension)
+	GetMemberSuspension(w http.ResponseWriter, r *http.Request, memberId openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -563,6 +579,58 @@ func (siw *ServerInterfaceWrapper) ListNeeds(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// LiftMemberSuspension operation middleware
+func (siw *ServerInterfaceWrapper) LiftMemberSuspension(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "memberId" -------------
+	var memberId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "memberId", r.PathValue("memberId"), &memberId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "memberId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LiftMemberSuspension(w, r, memberId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMemberSuspension operation middleware
+func (siw *ServerInterfaceWrapper) GetMemberSuspension(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "memberId" -------------
+	var memberId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "memberId", r.PathValue("memberId"), &memberId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "memberId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMemberSuspension(w, r, memberId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -694,6 +762,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/blocks/{memberId}", wrapper.BlockMember)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/reference/districts", wrapper.ListDistricts)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/reference/needs", wrapper.ListNeeds)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/staff/members/{memberId}/suspension", wrapper.LiftMemberSuspension)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/staff/members/{memberId}/suspension", wrapper.GetMemberSuspension)
 
 	return m
 }
@@ -1110,6 +1180,110 @@ func (response ListNeedsdefaultApplicationProblemPlusJSONResponse) VisitListNeed
 	return err
 }
 
+type LiftMemberSuspensionRequestObject struct {
+	MemberId openapi_types.UUID `json:"memberId"`
+}
+
+type LiftMemberSuspensionResponseObject interface {
+	VisitLiftMemberSuspensionResponse(w http.ResponseWriter) error
+}
+
+type LiftMemberSuspension204Response struct {
+}
+
+func (response LiftMemberSuspension204Response) VisitLiftMemberSuspensionResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type LiftMemberSuspension403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response LiftMemberSuspension403ApplicationProblemPlusJSONResponse) VisitLiftMemberSuspensionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LiftMemberSuspensiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response LiftMemberSuspensiondefaultApplicationProblemPlusJSONResponse) VisitLiftMemberSuspensionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMemberSuspensionRequestObject struct {
+	MemberId openapi_types.UUID `json:"memberId"`
+}
+
+type GetMemberSuspensionResponseObject interface {
+	VisitGetMemberSuspensionResponse(w http.ResponseWriter) error
+}
+
+type GetMemberSuspension200JSONResponse MemberSuspension
+
+func (response GetMemberSuspension200JSONResponse) VisitGetMemberSuspensionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMemberSuspension403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetMemberSuspension403ApplicationProblemPlusJSONResponse) VisitGetMemberSuspensionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetMemberSuspensiondefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetMemberSuspensiondefaultApplicationProblemPlusJSONResponse) VisitGetMemberSuspensionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetMe The signed-in member. Created on first call after sign-up.
@@ -1145,6 +1319,12 @@ type StrictServerInterface interface {
 	// ListNeeds Special-needs categories (localized labels come from locale files by code).
 	// (GET /reference/needs)
 	ListNeeds(ctx context.Context, request ListNeedsRequestObject) (ListNeedsResponseObject, error)
+	// LiftMemberSuspension Lift a member suspension. Staff admin, MFA. Audited.
+	// (DELETE /staff/members/{memberId}/suspension)
+	LiftMemberSuspension(ctx context.Context, request LiftMemberSuspensionRequestObject) (LiftMemberSuspensionResponseObject, error)
+	// GetMemberSuspension Suspension status of a member. Staff moderator or admin, MFA.
+	// (GET /staff/members/{memberId}/suspension)
+	GetMemberSuspension(ctx context.Context, request GetMemberSuspensionRequestObject) (GetMemberSuspensionResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -1478,6 +1658,58 @@ func (sh *strictHandler) ListNeeds(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListNeedsResponseObject); ok {
 		if err := validResponse.VisitListNeedsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LiftMemberSuspension operation middleware
+func (sh *strictHandler) LiftMemberSuspension(w http.ResponseWriter, r *http.Request, memberId openapi_types.UUID) {
+	var request LiftMemberSuspensionRequestObject
+
+	request.MemberId = memberId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LiftMemberSuspension(ctx, request.(LiftMemberSuspensionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LiftMemberSuspension")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LiftMemberSuspensionResponseObject); ok {
+		if err := validResponse.VisitLiftMemberSuspensionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMemberSuspension operation middleware
+func (sh *strictHandler) GetMemberSuspension(w http.ResponseWriter, r *http.Request, memberId openapi_types.UUID) {
+	var request GetMemberSuspensionRequestObject
+
+	request.MemberId = memberId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMemberSuspension(ctx, request.(GetMemberSuspensionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMemberSuspension")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMemberSuspensionResponseObject); ok {
+		if err := validResponse.VisitGetMemberSuspensionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -34,7 +34,8 @@ None.
 
 | Function | Callers may rely on |
 |---|---|
-| `Service.ApplyModerationDecided` | Applies `moderation.Decided` for specialist and review (wiring later). |
+| `Service.ApplyModerationDecided` | Applies `moderation.Decided` for specialist and review. |
+| `Service.SpecialistSummary` / `ReviewSummary` | ContentSource text without contacts. |
 
 Ports used by this context (wired later): `MemberInfo` (verification + first name), `Store` (PostgreSQL adapter).
 

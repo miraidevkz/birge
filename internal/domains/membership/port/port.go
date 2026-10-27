@@ -26,14 +26,16 @@ type Store interface {
 
 // MemberRecord is a stored member; the display name is still sealed.
 type MemberRecord struct {
-	ID           uuid.UUID
-	IdentityID   uuid.UUID
-	SealedName   []byte // nil until the member sets a name
-	Lang         model.Lang
-	CityID       *uuid.UUID
-	DistrictID   *uuid.UUID
-	Verification model.Verification
-	Roles        []string
+	ID              uuid.UUID
+	IdentityID      uuid.UUID
+	SealedName      []byte // nil until the member sets a name
+	Lang            model.Lang
+	CityID          *uuid.UUID
+	DistrictID      *uuid.UUID
+	Verification    model.Verification
+	Roles           []string
+	SuspendedAt     *time.Time
+	SuspendedReason string
 }
 
 // ProfilePatch changes the fields that are set.
@@ -66,6 +68,14 @@ type Tx interface {
 	UpdateProfile(ctx context.Context, id uuid.UUID, p ProfilePatch, now time.Time) error
 	// SetVerification writes the member's verification state.
 	SetVerification(ctx context.Context, id uuid.UUID, v model.Verification, now time.Time) error
+	// SetSuspension sets or clears staff suspension (both fields together).
+	SetSuspension(ctx context.Context, id uuid.UUID, at *time.Time, reason string, now time.Time) error
+
+	// GetVerificationRequest loads a verification request by ID.
+	GetVerificationRequest(ctx context.Context, id uuid.UUID, forUpdate bool) (model.VerificationRequest, error)
+	// DecideVerificationRequest marks a pending request approved or rejected.
+	// updated is false when it was not pending.
+	DecideVerificationRequest(ctx context.Context, id uuid.UUID, status, rejectReason string, now time.Time) (updated bool, err error)
 
 	// Children lists the member's child cards.
 	Children(ctx context.Context, memberID uuid.UUID) ([]model.Child, error)
@@ -105,4 +115,8 @@ type Tx interface {
 
 	// Publish stores e in the platform outbox in this transaction.
 	Publish(ctx context.Context, now time.Time, e outbox.Event) error
+	// MarkProcessed records that consumer handled eventID; newly is false for a duplicate.
+	MarkProcessed(ctx context.Context, consumer string, eventID uuid.UUID) (newly bool, err error)
+	// Audit writes one platform.audit_log row in this transaction.
+	Audit(ctx context.Context, actorID uuid.UUID, actorRole, action, objectType string, objectID uuid.UUID, reason string) error
 }

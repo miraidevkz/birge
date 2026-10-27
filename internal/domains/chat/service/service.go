@@ -73,6 +73,9 @@ type Service struct {
 	Members port.MemberInfo
 	Blocks  port.Blocks
 	Mentors port.Mentors
+	// Suspenders suspends a message author when moderation.Decided has
+	// block_author. Required when that flag is set; nil otherwise is fine.
+	Suspenders port.AuthorSuspender
 	// Crisis is required: without it Send fails rather than skipping the
 	// crisis check (AGENTS.md non-negotiable 1).
 	Crisis   port.Crisis

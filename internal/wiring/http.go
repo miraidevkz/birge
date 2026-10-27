@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,7 +40,11 @@ import (
 	membershipadapter "birge/internal/domains/membership/adapter"
 	membershipapi "birge/internal/domains/membership/api"
 	"birge/internal/domains/membership/authgw"
+	membershipmodel "birge/internal/domains/membership/model"
 	membershipservice "birge/internal/domains/membership/service"
+	moderationadapter "birge/internal/domains/moderation/adapter"
+	moderationapi "birge/internal/domains/moderation/api"
+	moderationservice "birge/internal/domains/moderation/service"
 	notifyadapter "birge/internal/domains/notify/adapter"
 	notifyapi "birge/internal/domains/notify/api"
 	notifyservice "birge/internal/domains/notify/service"
@@ -247,15 +252,16 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 		fanout, bus = n, n
 	}
 	chatSvc := &chatservice.Service{
-		Store:   &chatadapter.PostgresStore{Pool: d.Pool},
-		Sealer:  d.Envelope,
-		Members: &ChatMembers{Members: members},
-		Blocks:  &EmergencyBlocks{Members: members},
-		Mentors: &ChatMentors{Members: members},
-		Crisis:  &ChatCrisis{Safety: safety},
-		Fanout:  fanout,
-		Clock:   d.Clock,
-		Logger:  d.Logger,
+		Store:      &chatadapter.PostgresStore{Pool: d.Pool},
+		Sealer:     d.Envelope,
+		Members:    &ChatMembers{Members: members},
+		Blocks:     &EmergencyBlocks{Members: members},
+		Mentors:    &ChatMentors{Members: members},
+		Crisis:     &ChatCrisis{Safety: safety},
+		Fanout:     fanout,
+		Suspenders: &ChatAuthorSuspender{Members: members},
+		Clock:      d.Clock,
+		Logger:     d.Logger,
 	}
 	sharingSvc := &sharingservice.Service{
 		Store:   &sharingadapter.PostgresStore{Pool: d.Pool},
@@ -272,9 +278,15 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 		Clock:   d.Clock,
 		Logger:  d.Logger,
 	}
+	moderationSvc := &moderationservice.Service{
+		Store:   &moderationadapter.PostgresStore{Pool: d.Pool},
+		Sources: moderationSources(chatSvc, sharingSvc, directorySvc, members),
+		Clock:   d.Clock,
+		Logger:  d.Logger,
+	}
 
 	api := http.NewServeMux()
-	mountAPI(api, cfg, members, privacy, notify, safety, wellbeing, emergency, assistantSvc, knowledge, circle, chatSvc, sharingSvc, directorySvc, d.Logger)
+	mountAPI(api, cfg, members, privacy, notify, safety, wellbeing, emergency, assistantSvc, knowledge, circle, chatSvc, sharingSvc, directorySvc, moderationSvc, d.Logger)
 
 	chatGW := &gateway.Gateway{
 		Chat: chatSvc, Auth: &ChatAuthenticator{Sessions: sessions, Members: members},
@@ -384,9 +396,10 @@ func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service
 	emergency *emergencyservice.Service, assistant *assistantservice.Service,
 	knowledge *knowledgeservice.Service, circle *circleservice.Service,
 	chat *chatservice.Service, sharing *sharingservice.Service, directory *directoryservice.Service,
+	moderation *moderationservice.Service,
 	logger *slog.Logger,
 ) {
-	const base = "/v1"
+	const base = apiBase
 	phones := make([]meta.CrisisPhone, 0, len(cfg.CrisisPhones))
 	for _, p := range cfg.CrisisPhones {
 		phones = append(phones, meta.CrisisPhone{Number: p.Number, Label: p.Label})
@@ -507,7 +520,16 @@ func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service
 			Middlewares: []directoryapi.MiddlewareFunc{toMember},
 		},
 	)
+	moderationapi.HandlerWithOptions(
+		moderationapi.NewStrictHandlerWithOptions(&moderationapi.Server{Service: moderation}, nil, moderationapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
+		}),
+		moderationapi.StdHTTPServerOptions{BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler},
+	)
 }
+
+// apiBase is the path prefix of every HTTP route.
+const apiBase = "/v1"
 
 // memberPrincipal resolves the signed-in member (creating it on first use,
 // ADR-0008 addendum) and sets auth.Principal.MemberID for the handlers of
@@ -524,6 +546,21 @@ func memberPrincipal(members *membershipservice.Service, logger *slog.Logger) fu
 			}
 			m, err := members.Me(r.Context())
 			if err != nil {
+				if errors.Is(err, membershipmodel.ErrMemberSuspended) {
+					if !crisisExempt(strings.TrimPrefix(r.URL.Path, apiBase)) {
+						httpapi.WriteProblem(w, http.StatusForbidden, "member_suspended", "Your account is suspended.")
+						return
+					}
+					id, err := members.CrisisMemberID(r.Context())
+					if err != nil {
+						logger.Error("resolve suspended member", "pattern", r.Pattern, "error", err)
+						httpapi.WriteProblem(w, http.StatusInternalServerError, "internal", "Something went wrong.")
+						return
+					}
+					p.MemberID = id
+					next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), p)))
+					return
+				}
 				logger.Error("resolve member", "pattern", r.Pattern, "error", err)
 				httpapi.WriteProblem(w, http.StatusInternalServerError, "internal", "Something went wrong.")
 				return
@@ -532,6 +569,26 @@ func memberPrincipal(members *membershipservice.Service, logger *slog.Logger) fu
 			next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), p)))
 		})
 	}
+}
+
+// crisisExempt reports whether a suspended member may still call a route
+// (path without the API base). Suspension stops her reaching other members;
+// it never takes away help for herself (non-negotiable 1) or her rights over
+// her own data. Allowed: the help request to staff, raising and closing her
+// SOS (it goes to her trusted contacts), reading and sending her emergency
+// plan, consents and the deletion request. Sharing an SOS to the community
+// and answering responses stay closed.
+func crisisExempt(path string) bool {
+	switch {
+	case path == "/me/help-requests",
+		path == "/me/sos",
+		strings.HasPrefix(path, "/me/sos/") && strings.HasSuffix(path, "/close"),
+		path == "/me/emergency-plan", strings.HasPrefix(path, "/me/emergency-plan/"),
+		path == "/me/consents", strings.HasPrefix(path, "/me/consents/"),
+		path == "/me/deletion-request":
+		return true
+	}
+	return false
 }
 
 // statusRecorder captures the status code and size for the request log.

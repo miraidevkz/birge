@@ -44,7 +44,8 @@ Operations of tag `sharing` in `contracts/openapi/birge.yaml`. All are member-on
 
 | Function | Callers may rely on |
 |---|---|
-| `Service.ApplyModerationDecided` | Applies `moderation.Decided` for kind listing (wiring later). |
+| `Service.ApplyModerationDecided` | Applies `moderation.Decided` for kind listing. |
+| `Service.ModerationSummary` | Title, description and photo URL for the moderation ContentSource. |
 | `Service.HandleProcessPhoto` / `HandleAutoClose` | Timer handlers; used by `adapter.TimerHandlers`. |
 
 Ports used by this context: `MemberInfo`, `Blocks`, `ObjectStore` (`internal/platform/objectstore`), `ImageProcessor` (`imageproc`), `Store` (PostgreSQL adapter).

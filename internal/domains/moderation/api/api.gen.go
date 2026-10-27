@@ -101,12 +101,20 @@ type ModerationDecisionReason string
 
 // ModerationItem defines model for ModerationItem.
 type ModerationItem struct {
-	CreatedAt    time.Time          `json:"createdAt"`
-	Id           openapi_types.UUID `json:"id"`
-	Kind         ModerationKind     `json:"kind"`
-	ObjectId     openapi_types.UUID `json:"objectId"`
-	PhotoUrl     *string            `json:"photoUrl,omitempty"`
-	ReportReason *string            `json:"reportReason,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// HoldReason Hold reason code (newcomer, link, phone); only for kind chat_message.
+	HoldReason *string            `json:"holdReason,omitempty"`
+	Id         openapi_types.UUID `json:"id"`
+	Kind       ModerationKind     `json:"kind"`
+	ObjectId   openapi_types.UUID `json:"objectId"`
+	PhotoUrl   *string            `json:"photoUrl,omitempty"`
+
+	// ReportCount Open-report counter; only for kind report.
+	ReportCount *int `json:"reportCount,omitempty"`
+
+	// ReportReason First report reason code; only for kind report.
+	ReportReason *string `json:"reportReason,omitempty"`
 
 	// Summary The content under review (listing text, review text, held message); no contact data.
 	Summary string `json:"summary"`

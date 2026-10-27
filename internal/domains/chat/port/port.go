@@ -2,9 +2,10 @@
 // store (rooms, members, messages, reports, outbox, timers, audit,
 // processed events), field sealing, the room fan-out, member authentication
 // for the WebSocket, and what chat reads from other contexts (member
-// profiles, blocks and the mentor role from membership; crisis detection,
-// crisis phones and escalations from safety). Adapters onto other contexts
-// are wired later; tests use the fakes in chattest.
+// profiles, blocks and the mentor role from membership; author suspension
+// for moderation.Decided block_author; crisis detection, crisis phones and
+// escalations from safety). Adapters onto other contexts are wired later;
+// tests use the fakes in chattest.
 package port
 
 import (
@@ -43,6 +44,12 @@ type Blocks interface {
 type Mentors interface {
 	// IsMentor reports whether the member currently holds the mentor role.
 	IsMentor(ctx context.Context, memberID uuid.UUID) (bool, error)
+}
+
+// AuthorSuspender suspends a member when moderation.Decided has block_author.
+// Wired to membership; chat never writes membership tables itself.
+type AuthorSuspender interface {
+	SuspendAuthor(ctx context.Context, memberID uuid.UUID, reason string, moderationItemID uuid.UUID) error
 }
 
 // Crisis is the safety context's crisis path (ADR-0023). Detect and

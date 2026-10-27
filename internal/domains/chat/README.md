@@ -13,11 +13,11 @@ In-app chats (ADR-0016, `docs/requirements/mvp.md` § 4.4 «Chats»): district r
 | `messages` | Message with `seq` (unique per room), `client_id` (unique per author), status `visible`/`held`/`hidden`, `hold_reason` `crisis`/`newcomer`/`link`/`phone`, the crisis `escalation_id`, `legal_hold`, `purged_at` | `body`: the text sealed with the **author's** key (AD `chat.messages.text\|<message id>`); NULL once purged |
 | `reports` | One report per reporter and message; `closed_at` | IDs and the reason code |
 
-Uses `platform.processed_events` (consumer `chat.DirectRoomOpener`), `platform.outbox`, `platform.timers` and `platform.audit_log`.
+Uses `platform.processed_events` (consumers `chat.DirectRoomOpener`, `chat.moderation.Decided`), `platform.outbox`, `platform.timers` and `platform.audit_log`.
 
 ## API
 
-Operations of tag `chat` in `contracts/openapi/birge.yaml`, plus the WebSocket `GET /v1/chat/ws` (`contracts/realtime/chat.v1.md`, package `gateway`). Members only: the caller is `auth.Principal.MemberID` (staff, anonymous and `uuid.Nil` → 401), except `moderateRoom`.
+Operations of tag `chat` in `contracts/openapi/birge.yaml`, plus the WebSocket `GET /v1/chat/ws` (`contracts/realtime/chat.v1.md`, package `gateway`). Members only: the caller is `auth.Principal.MemberID` (staff, anonymous and `uuid.Nil` → 401), except `moderateRoom` and the staff mentor / legal-hold routes.
 
 | Operation | Rules not in the contract |
 |---|---|
@@ -29,6 +29,10 @@ Operations of tag `chat` in `contracts/openapi/birge.yaml`, plus the WebSocket `
 | `POST /chat/rooms/{id}/messages` | See *Sending*. 429 `rate_limited` / `slow_mode`; 403 `banned` (ban or `mute_1h`) / `not_member`. |
 | `POST /chat/messages/{id}/report` | Only a message she can see (404 otherwise, also her own → 400). One per reporter and message; the first publishes `chat.MessageReported`. |
 | `POST /chat/rooms/{id}/moderation` | Staff with role `moderator` or `admin`: every action. A member who holds the membership role `mentor` **and** is assigned to this room: `hide_message`, `restore_message`, `mute_1h` only. Anyone else 403. `ban` also removes her from the room; a crisis-held message is never restored (409). Every applied action writes `platform.audit_log` in the same transaction (actor role `staff` or `mentor`; object `chat.message`, `chat.member` or `chat.room`). |
+| `PUT /staff/chat/rooms/{id}/mentors/{memberId}` | Staff `moderator`/`admin`, MFA. Member must hold the mentor role (409 otherwise); group rooms only (409). Audited `chat.room.mentor_assign`. |
+| `DELETE /staff/chat/rooms/{id}/mentors/{memberId}` | Staff `moderator`/`admin`, MFA. Audited `chat.room.mentor_remove`. |
+| `PUT /staff/chat/messages/{id}/legal-hold` | Staff `moderator`/`admin`, MFA. Audited `chat.message.legal_hold_on`. |
+| `DELETE /staff/chat/messages/{id}/legal-hold` | Staff `moderator`/`admin`, MFA. Audited `chat.message.legal_hold_off`. |
 | `GET /v1/chat/ws` | First frame `auth` within 10 s, else close 4401. `subscribe` replays every visible message after `afterSeq`, then live. `send` = the HTTP send; the `crisis` frame comes before the `ack`. Error frame codes: `rate_limited`, `slow_mode`, `banned`, `not_member` (also unknown room), `invalid`; an unexpected failure closes with 1011 (the client retries the same `clientId`). Slow consumer → close 1013. Read limit 16 KiB, idle timeout 90 s, write timeout 10 s, bounded queue of 256 live items. |
 
 ### Sending
@@ -47,6 +51,16 @@ Operations of tag `chat` in `contracts/openapi/birge.yaml`, plus the WebSocket `
 | publishes | `chat.MessageReported` v1 | first report of a message by a member | outbox, same transaction as the report |
 | publishes | `notify.DeliveryRequested` v1 | `chat.PushFanout` timer: one per eligible member (class `normal`, template `chat.new_message`, params `{room_id}`) | outbox, the timer's transaction; `request_id` = SHA-1 UUID of message + template + member |
 | consumes | `circle.MatchAccepted` v1, `emergency.SosResponseAccepted` v1, `sharing.ContactAccepted` v1 | open the direct room of the pair | JetStream durable consumer `chat-direct-rooms`; deduplicated by event id in `platform.processed_events` and by the room's natural key; needs only the chat database |
+| consumes | `moderation.Decided` v1 | kinds `chat_message` and `report` only | JetStream durable `chat-moderation-decided` (filter `birge.events.moderation.Decided`); deduplicated as `chat.moderation.Decided`; object gone → no-op; audits as role `system` with ActorID = moderation item id |
+
+`moderation.Decided` application:
+
+| Kind | Approve | Reject |
+|---|---|---|
+| `chat_message` | held → `visible` (never restores a crisis hold); schedule push + fan-out when leaving held | → `hidden` |
+| `report` | `CloseReports` (dismiss) | → `hidden` + `CloseReports` |
+
+Also, when set on the decision: `legal_hold` → `SetLegalHold(true)`; `block_author` → `AuthorSuspender.SuspendAuthor` (membership; required when the flag is set — failure rolls back the chat transaction so the event is redelivered).
 
 Fan-out (not domain events): NATS **core** subjects `birge.chat.room.<room id>` carry notices `{kind: new|changed|left, room_id, message_id?, seq?, member_id?}` — IDs only, published after commit, best-effort.
 
@@ -65,10 +79,12 @@ Fan-out (not domain events): NATS **core** subjects `birge.chat.room.<room id>` 
 | `EnsureDistrictRoom(ctx, districtID, titleKey)` / `EnsureTopicRoom(ctx, code, titleKey)` | One room per district / needs code, also under concurrency; returns the existing one. For reference-data seeding (`birge migrate` seeds DEMO rooms into an empty table). |
 | `HandleRoomEvent(ctx, eventID, type, data)` / `OpenDirectRoom(...)` | One direct room per origin, origin id and pair; both members added once. |
 | `HandleCrisisEscalation`, `HandlePush`, `HandleRetention` | Timer handlers (`adapter.TimerHandlers`). `EnsureRetentionTimer` must be called once at worker start. |
-| `CloseReports(ctx, staff, messageID)`, `SetLegalHold(ctx, staff, messageID, on)` | Staff (`moderator`/`admin`), audited. For the moderation context's decisions (no HTTP operation yet). |
-| `AssignMentor(ctx, staff, roomID, memberID, assign)` | Staff, audited; the member must hold the mentor role. No HTTP operation yet. |
+| `ApplyModerationDecided(ctx, eventID, data)` | Applies `moderation.Decided` for `chat_message` / `report` (`adapter.ModerationConsumer`). |
+| `ModerationSummary(ctx, messageID)` | Opened message text for moderation's `ContentSource` (hidden still returns text; purged/gone → `ErrNotFound`; no contacts). |
+| `CloseReports(ctx, staff, messageID)`, `SetLegalHold(ctx, staff, messageID, on)` | Staff (`moderator`/`admin`), audited; also via staff HTTP legal-hold routes. |
+| `AssignMentor(ctx, staff, roomID, memberID, assign)` | Staff, audited; the member must hold the mentor role; also via staff HTTP mentor routes. |
 
-Ports used (wired later): `Sealer` (platform crypto), `MemberInfo` (membership: verified, first name, language, district), `Blocks` (membership `IsBlocked`), `Mentors` (membership role `mentor`), `Crisis` (safety `Detect`, `CrisisPhones`, `OpenEscalation`), `Fanout`/`Bus` (`adapter.NATSFanout`), `Authenticator` (session validator), `Store` (`adapter.PostgresStore`).
+Ports used (wired later): `Sealer` (platform crypto), `MemberInfo` (membership: verified, first name, language, district), `Blocks` (membership `IsBlocked`), `Mentors` (membership role `mentor`), `AuthorSuspender` (membership suspend for `block_author`), `Crisis` (safety `Detect`, `CrisisPhones`, `OpenEscalation`), `Fanout`/`Bus` (`adapter.NATSFanout`), `Authenticator` (session validator), `Store` (`adapter.PostgresStore`).
 
 ## Configuration
 
@@ -105,13 +121,12 @@ Gateway (`gateway.Options`): `QueueSize` 256, `AuthTimeout` 10 s, `IdleTimeout` 
 
 ## Tests
 
-- Unit: `model/model_test.go` (filters, visibility, moderation matrix, validation, push ids, retention schedule); `api/handler_test.go` (error mapping).
+- Unit: `model/model_test.go` (filters, visibility, moderation matrix, validation, push ids, retention schedule); `service/moderation_test.go` (ApplyModerationDecided early returns); `api/handler_test.go` (error mapping).
 - Integration (`adapter/integration_test.go`, `testinfra.Postgres`, `testinfra.NATS`): idempotent send incl. concurrent replays; 50 concurrent sends; crisis held + escalation + author notice + timer retry while safety is down + replay; link/phone holds and restore; newcomer hold; rate limit and slow mode; blocks both ways in history, rendering, reports and push; push throttle, mute and presence; mentor limits and audit; retention with report and legal-hold exemptions; shredded author; room join/list rules; direct rooms exactly once per origin (redelivery and re-publish) and through the JetStream consumer; DEMO seed.
 - Gateway (`gateway/gateway_test.go`): two replicas over real NATS (happy path, crisis frame private, errors, ping), resume by seq and gap fill after a lost notice, leave ends the subscription, 4401 on a bad token, slow client disconnected (1013) while a fast client in the same room receives every message.
 
 ## Open questions
 
-- **Missing operations:** assigning mentors, closing reports and legal hold exist only as service methods.
 - **Muted vs banned:** a `mute_1h` member gets `banned` (no `muted` code in the contract).
 - **Partitioning:** ADR-0016 names a time-partitioned message table; this version uses one table with a retention index.
 - **Presence** is one row per member and room: closing one of two devices marks her disconnected until the other's next heartbeat (≤ 30 s), so one extra push is possible.

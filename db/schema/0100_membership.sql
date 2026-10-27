@@ -41,8 +41,14 @@ CREATE TABLE membership.members (
     verification text        NOT NULL DEFAULT 'new' CHECK (verification IN ('new', 'pending', 'verified')),
     roles        text[]      NOT NULL DEFAULT '{mom}'
         CHECK (roles <@ ARRAY['mom', 'mentor', 'psychologist', 'lawyer', 'moderator', 'admin']::text[]),
+    -- Staff suspension from moderation.block_author (ADR-0019): session refused
+    -- and mutual invisibility like a block. Both set or both null.
+    suspended_at     timestamptz,
+    suspended_reason text
+        CHECK (suspended_reason IS NULL OR suspended_reason ~ '^[a-z][a-z0-9_]{0,39}$'),
     created_at   timestamptz NOT NULL DEFAULT now(),
-    updated_at   timestamptz NOT NULL DEFAULT now()
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    CHECK ((suspended_at IS NULL) = (suspended_reason IS NULL))
 );
 
 CREATE INDEX members_district_idx ON membership.members (district_id);
@@ -61,11 +67,14 @@ CREATE TABLE membership.children (
 );
 
 CREATE TABLE membership.verification_requests (
-    id         uuid        PRIMARY KEY DEFAULT uuidv7(),
-    member_id  uuid        NOT NULL REFERENCES membership.members (id) ON DELETE CASCADE,
-    status     text        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-    created_at timestamptz NOT NULL DEFAULT now(),
-    updated_at timestamptz NOT NULL DEFAULT now()
+    id            uuid        PRIMARY KEY DEFAULT uuidv7(),
+    member_id     uuid        NOT NULL REFERENCES membership.members (id) ON DELETE CASCADE,
+    status        text        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    -- Rejection reason code from moderation.Decided; null while pending or approved.
+    reject_reason text
+        CHECK (reject_reason IS NULL OR reject_reason ~ '^[a-z][a-z0-9_]{0,39}$'),
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX verification_requests_member_idx ON membership.verification_requests (member_id, created_at);

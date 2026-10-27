@@ -62,14 +62,17 @@ type fakeChild struct {
 type blockKey struct{ blocker, blocked uuid.UUID }
 
 type state struct {
-	members   map[uuid.UUID]port.MemberRecord
-	children  map[uuid.UUID]fakeChild
-	pending   map[uuid.UUID]uuid.UUID // member -> pending request
-	blocks    map[blockKey]time.Time
-	events    []outbox.Event
-	districts map[uuid.UUID]uuid.UUID // district -> city
-	cities    []model.City
-	needs     []string
+	members       map[uuid.UUID]port.MemberRecord
+	children      map[uuid.UUID]fakeChild
+	pending       map[uuid.UUID]uuid.UUID // member -> pending request
+	verifications map[uuid.UUID]model.VerificationRequest
+	processed     map[string]bool
+	audits        int
+	blocks        map[blockKey]time.Time
+	events        []outbox.Event
+	districts     map[uuid.UUID]uuid.UUID // district -> city
+	cities        []model.City
+	needs         []string
 }
 
 func (s state) clone() state {
@@ -77,6 +80,8 @@ func (s state) clone() state {
 	c.members = maps.Clone(s.members)
 	c.children = maps.Clone(s.children)
 	c.pending = maps.Clone(s.pending)
+	c.verifications = maps.Clone(s.verifications)
+	c.processed = maps.Clone(s.processed)
 	c.blocks = maps.Clone(s.blocks)
 	c.events = slices.Clone(s.events)
 	return c
@@ -94,7 +99,8 @@ type fakeStore struct {
 func newFakeStore() *fakeStore {
 	return &fakeStore{st: state{
 		members: map[uuid.UUID]port.MemberRecord{}, children: map[uuid.UUID]fakeChild{},
-		pending: map[uuid.UUID]uuid.UUID{}, blocks: map[blockKey]time.Time{}, districts: map[uuid.UUID]uuid.UUID{},
+		pending: map[uuid.UUID]uuid.UUID{}, verifications: map[uuid.UUID]model.VerificationRequest{},
+		processed: map[string]bool{}, blocks: map[blockKey]time.Time{}, districts: map[uuid.UUID]uuid.UUID{},
 	}, fail: map[string]error{}}
 }
 
@@ -274,7 +280,7 @@ func (t *fakeTx) DeleteChild(_ context.Context, memberID, childID uuid.UUID) (bo
 	return true, nil
 }
 
-func (t *fakeTx) InsertPendingVerification(_ context.Context, memberID uuid.UUID, _ time.Time) (uuid.UUID, bool, error) {
+func (t *fakeTx) InsertPendingVerification(_ context.Context, memberID uuid.UUID, now time.Time) (uuid.UUID, bool, error) {
 	if err := t.check("InsertPendingVerification"); err != nil {
 		return uuid.Nil, false, err
 	}
@@ -283,7 +289,73 @@ func (t *fakeTx) InsertPendingVerification(_ context.Context, memberID uuid.UUID
 	}
 	id := uuid.New()
 	t.f.st.pending[memberID] = id
+	t.f.st.verifications[id] = model.VerificationRequest{
+		ID: id, MemberID: memberID, Status: model.VerificationRequestPending, CreatedAt: now, UpdatedAt: now,
+	}
 	return id, true, nil
+}
+
+func (t *fakeTx) SetSuspension(_ context.Context, id uuid.UUID, at *time.Time, reason string, _ time.Time) error {
+	if err := t.check("SetSuspension"); err != nil {
+		return err
+	}
+	m, ok := t.f.st.members[id]
+	if !ok {
+		return model.ErrMemberNotFound
+	}
+	m.SuspendedAt, m.SuspendedReason = at, reason
+	if at == nil {
+		m.SuspendedReason = ""
+	}
+	t.f.st.members[id] = m
+	return nil
+}
+
+func (t *fakeTx) GetVerificationRequest(_ context.Context, id uuid.UUID, _ bool) (model.VerificationRequest, error) {
+	if err := t.check("GetVerificationRequest"); err != nil {
+		return model.VerificationRequest{}, err
+	}
+	r, ok := t.f.st.verifications[id]
+	if !ok {
+		return model.VerificationRequest{}, model.ErrMemberNotFound
+	}
+	return r, nil
+}
+
+func (t *fakeTx) DecideVerificationRequest(_ context.Context, id uuid.UUID, status, rejectReason string, now time.Time) (bool, error) {
+	if err := t.check("DecideVerificationRequest"); err != nil {
+		return false, err
+	}
+	r, ok := t.f.st.verifications[id]
+	if !ok || r.Status != model.VerificationRequestPending {
+		return false, nil
+	}
+	r.Status, r.RejectReason, r.UpdatedAt = status, rejectReason, now
+	t.f.st.verifications[id] = r
+	if status != model.VerificationRequestPending {
+		delete(t.f.st.pending, r.MemberID)
+	}
+	return true, nil
+}
+
+func (t *fakeTx) MarkProcessed(_ context.Context, consumer string, eventID uuid.UUID) (bool, error) {
+	if err := t.check("MarkProcessed"); err != nil {
+		return false, err
+	}
+	key := consumer + "|" + eventID.String()
+	if t.f.st.processed[key] {
+		return false, nil
+	}
+	t.f.st.processed[key] = true
+	return true, nil
+}
+
+func (t *fakeTx) Audit(_ context.Context, _ uuid.UUID, _, _, _ string, _ uuid.UUID, _ string) error {
+	if err := t.check("Audit"); err != nil {
+		return err
+	}
+	t.f.st.audits++
+	return nil
 }
 
 func (t *fakeTx) InsertBlock(_ context.Context, blocker, blocked uuid.UUID, now time.Time) (bool, error) {
@@ -336,7 +408,16 @@ func (t *fakeTx) IsBlocked(_ context.Context, a, b uuid.UUID) (bool, error) {
 	}
 	_, ab := t.f.st.blocks[blockKey{a, b}]
 	_, ba := t.f.st.blocks[blockKey{b, a}]
-	return ab || ba, nil
+	if ab || ba {
+		return true, nil
+	}
+	if ma, ok := t.f.st.members[a]; ok && ma.SuspendedAt != nil {
+		return true, nil
+	}
+	if mb, ok := t.f.st.members[b]; ok && mb.SuspendedAt != nil {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (t *fakeTx) ListVerifiedInDistrict(_ context.Context, districtID uuid.UUID) ([]uuid.UUID, error) {
@@ -345,7 +426,8 @@ func (t *fakeTx) ListVerifiedInDistrict(_ context.Context, districtID uuid.UUID)
 	}
 	var out []uuid.UUID
 	for id, m := range t.f.st.members {
-		if m.DistrictID != nil && *m.DistrictID == districtID && m.Verification == model.VerificationVerified {
+		if m.DistrictID != nil && *m.DistrictID == districtID &&
+			m.Verification == model.VerificationVerified && m.SuspendedAt == nil {
 			out = append(out, id)
 		}
 	}

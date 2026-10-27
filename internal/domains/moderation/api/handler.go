@@ -58,6 +58,14 @@ func toAPIItem(q model.QueueItem) ModerationItem {
 		r := q.Item.SourceReason
 		out.ReportReason = &r
 	}
+	if q.Item.Kind == model.KindChatMessage && q.Item.SourceReason != "" {
+		r := q.Item.SourceReason
+		out.HoldReason = &r
+	}
+	if q.Item.Kind == model.KindReport {
+		n := q.Item.ReportCount
+		out.ReportCount = &n
+	}
 	return out
 }
 

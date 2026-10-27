@@ -19,8 +19,15 @@ WHERE b.blocker = @blocker
 ORDER BY b.since DESC, b.blocked
 LIMIT @max_rows;
 
+-- A block either way, or either member suspended (mutual invisibility, ADR-0019).
 -- name: IsBlocked :one
-SELECT EXISTS (
-    SELECT 1 FROM membership.blocks
-    WHERE (blocker = @a AND blocked = @b) OR (blocker = @b AND blocked = @a)
+SELECT (
+    EXISTS (
+        SELECT 1 FROM membership.blocks
+        WHERE (blocker = @a AND blocked = @b) OR (blocker = @b AND blocked = @a)
+    )
+    OR EXISTS (
+        SELECT 1 FROM membership.members
+        WHERE id IN (@a, @b) AND suspended_at IS NOT NULL
+    )
 ) AS blocked;

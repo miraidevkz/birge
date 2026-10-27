@@ -1384,6 +1384,54 @@ paths:
         '204': {description: Applied.}
         '403': {$ref: '#/components/responses/Problem'}
         default: {$ref: '#/components/responses/Problem'}
+  /staff/chat/rooms/{roomId}/mentors/{memberId}:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+      - {name: memberId, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: assignRoomMentor
+      tags: [chat]
+      summary: Assign a mentor to a group room. Staff moderator or admin, MFA. Audited.
+      security:
+        - staffOidc: []
+      responses:
+        '204': {description: Assigned.}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: removeRoomMentor
+      tags: [chat]
+      summary: Remove a mentor from a group room. Staff moderator or admin, MFA. Audited.
+      security:
+        - staffOidc: []
+      responses:
+        '204': {description: Removed (idempotent).}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/chat/messages/{messageId}/legal-hold:
+    parameters:
+      - {name: messageId, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: putMessageLegalHold
+      tags: [chat]
+      summary: Put a message under legal hold (ADR-0019). Staff moderator or admin, MFA. Audited.
+      security:
+        - staffOidc: []
+      responses:
+        '204': {description: On legal hold.}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: deleteMessageLegalHold
+      tags: [chat]
+      summary: Release a message from legal hold. Staff moderator or admin, MFA. Audited.
+      security:
+        - staffOidc: []
+      responses:
+        '204': {description: Released.}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
   /listings:
     get:
       operationId: listListings
@@ -1566,6 +1614,33 @@ paths:
       responses:
         '204': {description: Decided.}
         '409': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/members/{memberId}/suspension:
+    parameters:
+      - {name: memberId, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getMemberSuspension
+      tags: [membership]
+      summary: Suspension status of a member. Staff moderator or admin, MFA.
+      security:
+        - staffOidc: []
+      responses:
+        '200':
+          description: Current suspension state.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MemberSuspension'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: liftMemberSuspension
+      tags: [membership]
+      summary: Lift a member suspension. Staff admin, MFA. Audited.
+      security:
+        - staffOidc: []
+      responses:
+        '204': {description: Lifted (idempotent when not suspended).}
+        '403': {$ref: '#/components/responses/Problem'}
         default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
@@ -2487,7 +2562,18 @@ components:
         createdAt: {type: string, format: date-time}
         summary: {type: string, maxLength: 2000, description: "The content under review (listing text, review text, held message); no contact data."}
         photoUrl: {type: string, format: uri, maxLength: 2048}
-        reportReason: {type: string, maxLength: 40}
+        reportReason: {type: string, maxLength: 40, description: "First report reason code; only for kind report."}
+        holdReason: {type: string, maxLength: 40, description: "Hold reason code (newcomer, link, phone); only for kind chat_message."}
+        reportCount: {type: integer, minimum: 0, maximum: 100000, description: "Open-report counter; only for kind report."}
+    MemberSuspension:
+      type: object
+      additionalProperties: false
+      required: [memberId, suspended]
+      properties:
+        memberId: {type: string, format: uuid}
+        suspended: {type: boolean}
+        suspendedAt: {type: string, format: date-time}
+        reason: {type: string, maxLength: 40, description: "Reason code from the moderation decision that suspended her."}
     ModerationPage:
       type: object
       additionalProperties: false

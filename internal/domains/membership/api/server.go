@@ -165,6 +165,56 @@ func (h *Server) ListNeeds(ctx context.Context, _ ListNeedsRequestObject) (ListN
 	return ListNeeds200JSONResponse(needs), nil
 }
 
+// GetMemberSuspension returns a member's suspension state (staff).
+func (h *Server) GetMemberSuspension(ctx context.Context, req GetMemberSuspensionRequestObject) (GetMemberSuspensionResponseObject, error) {
+	s, err := h.svc.GetSuspension(ctx, req.MemberId)
+	if err != nil {
+		if st, c, t, ok := staffProblem(err); ok {
+			if st == http.StatusForbidden {
+				return GetMemberSuspension403ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(problem(st, c, t))}, nil
+			}
+			return GetMemberSuspensiondefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+		}
+		return fail[GetMemberSuspensiondefaultApplicationProblemPlusJSONResponse](err)
+	}
+	out := MemberSuspension{MemberId: s.MemberID, Suspended: s.Suspended}
+	if s.SuspendedAt != nil {
+		at := *s.SuspendedAt
+		out.SuspendedAt = &at
+	}
+	if s.Reason != "" {
+		r := s.Reason
+		out.Reason = &r
+	}
+	return GetMemberSuspension200JSONResponse(out), nil
+}
+
+// LiftMemberSuspension lifts a suspension (staff admin).
+func (h *Server) LiftMemberSuspension(ctx context.Context, req LiftMemberSuspensionRequestObject) (LiftMemberSuspensionResponseObject, error) {
+	if err := h.svc.LiftSuspension(ctx, req.MemberId); err != nil {
+		if st, c, t, ok := staffProblem(err); ok {
+			if st == http.StatusForbidden {
+				return LiftMemberSuspension403ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(problem(st, c, t))}, nil
+			}
+			return LiftMemberSuspensiondefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+		}
+		return fail[LiftMemberSuspensiondefaultApplicationProblemPlusJSONResponse](err)
+	}
+	return LiftMemberSuspension204Response{}, nil
+}
+
+func problem(status int, code, title string) Problem {
+	return Problem{Type: "about:blank", Title: title, Status: status, Code: &code}
+}
+
+func staffProblem(err error) (status int, code, title string, ok bool) {
+	var e *model.Error
+	if !errors.As(err, &e) {
+		return 0, "", "", false
+	}
+	return statusOf(e.Kind), e.Code, e.Title, true
+}
+
 func member(m model.Member) Member {
 	roles := make([]MemberRoles, 0, len(m.Roles))
 	for _, r := range m.Roles {

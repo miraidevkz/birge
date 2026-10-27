@@ -60,9 +60,15 @@ func (q *Queries) InsertBlock(ctx context.Context, arg InsertBlockParams) (int64
 }
 
 const isBlocked = `-- name: IsBlocked :one
-SELECT EXISTS (
-    SELECT 1 FROM membership.blocks
-    WHERE (blocker = $1 AND blocked = $2) OR (blocker = $2 AND blocked = $1)
+SELECT (
+    EXISTS (
+        SELECT 1 FROM membership.blocks
+        WHERE (blocker = $1 AND blocked = $2) OR (blocker = $2 AND blocked = $1)
+    )
+    OR EXISTS (
+        SELECT 1 FROM membership.members
+        WHERE id IN ($1, $2) AND suspended_at IS NOT NULL
+    )
 ) AS blocked
 `
 
@@ -71,9 +77,10 @@ type IsBlockedParams struct {
 	B uuid.UUID
 }
 
-func (q *Queries) IsBlocked(ctx context.Context, arg IsBlockedParams) (bool, error) {
+// A block either way, or either member suspended (mutual invisibility, ADR-0019).
+func (q *Queries) IsBlocked(ctx context.Context, arg IsBlockedParams) (*bool, error) {
 	row := q.db.QueryRow(ctx, isBlocked, arg.A, arg.B)
-	var blocked bool
+	var blocked *bool
 	err := row.Scan(&blocked)
 	return blocked, err
 }

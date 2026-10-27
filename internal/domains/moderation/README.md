@@ -16,7 +16,7 @@ Operations of tag `moderation` in `contracts/openapi/birge.yaml` (`/v1/staff/*`,
 
 | Operation | Rules not in the contract |
 |---|---|
-| `GET /staff/moderation/queue` | Open items only, oldest first (`created_at`, then `id`), optional `kind`; pages of 50; the cursor is opaque (last `created_at` and `id`). `summary` comes from the kind's `ContentSource`, cut to 2000 characters; `photoUrl` only for listings; `reportReason` only for reports (the first report's code). Object gone or purged → empty summary; a source outage fails the page (500) rather than show an item without its content; other kinds can still be listed with `kind`. |
+| `GET /staff/moderation/queue` | Open items only, oldest first (`created_at`, then `id`), optional `kind`; pages of 50; the cursor is opaque (last `created_at` and `id`). `summary` comes from the kind's `ContentSource`, cut to 2000 characters; `photoUrl` only for listings; `reportReason` / `reportCount` only for reports; `holdReason` only for `chat_message`. Object gone or purged → empty summary; a source outage fails the page (500) rather than show an item without its content; other kinds can still be listed with `kind`. |
 | `POST /staff/moderation/items/{id}/decision` | Unknown item → 404; already decided → 409 `already_decided` (a decision is final). Validated against the kind (400): a rejection needs a `reason`, an approval carries none; `blockAuthor` and `legalHold` only for `report` and `chat_message` and only with a rejection (ADR-0019: the content is hidden). For a report, approve = keep the message (report dismissed), reject = take it down. |
 
 ## Events
@@ -42,7 +42,7 @@ None.
 |---|---|
 | `Service.HandleEvent(ctx, eventID, type, data)` / `Submit(ctx, eventID, submission)` | Idempotent item creation as above; unknown types ignored; `model.ErrInvalidInput` for a malformed payload. Used by `adapter.QueueConsumer`. |
 
-Ports (wired later): `ContentSource` per kind — chat (message text for `report` and `chat_message`), sharing (listing title and description, processed photo URL), directory (specialist card without contacts; review text), membership (verification: first name and district only). Implementations return no contact data and `model.ErrNotFound` for a gone object. `Store` is `adapter.PostgresStore`.
+Ports (wired in `internal/wiring`): `ContentSource` per kind — chat (message text for `report` and `chat_message`), sharing (listing title and description, processed photo URL), directory (specialist card without contacts; review text), membership (verification: first name and district only). Implementations return no contact data and `model.ErrNotFound` for a gone object. `Store` is `adapter.PostgresStore`.
 
 ## Configuration
 
@@ -71,7 +71,5 @@ None. Fixed: page size 50 (contract maximum 100), summary 2000 characters.
 
 ## Open questions
 
-- **chat** does not consume `moderation.Decided` yet: held message approve → visible / reject → hidden, report hide/keep (`CloseReports`), legal hold (`SetLegalHold`) exist as staff-principal service methods, not as an event consumer. No context applies `block_author`: membership blocks are member-to-member (`Service.Block`), and there is no platform-level block or suspension of a member by staff.
-- **membership** does not consume `moderation.Decided` and does not publish `membership.MemberVerified`; verification approve → verified is not applied. The item's object is the verification `request_id`.
-- **Hold reason** of a held chat message is stored but has no field in `ModerationItem`; the report counter is not in the contract either.
 - **Cursor across new items:** items are ordered by the time moderation received the event; an event redelivered late lands at its receive time, not its submission time.
+- **`membership.MemberVerified.verified_by`:** `moderation.Decided` carries no staff id, so consumers set `verified_by` to the moderation item id.

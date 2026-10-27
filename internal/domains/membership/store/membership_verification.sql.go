@@ -12,6 +12,75 @@ import (
 	"github.com/google/uuid"
 )
 
+const decideVerificationRequest = `-- name: DecideVerificationRequest :execrows
+UPDATE membership.verification_requests
+SET status = $1,
+    reject_reason = $2,
+    updated_at = $3
+WHERE id = $4 AND status = 'pending'
+`
+
+type DecideVerificationRequestParams struct {
+	Status       string
+	RejectReason *string
+	Now          time.Time
+	ID           uuid.UUID
+}
+
+func (q *Queries) DecideVerificationRequest(ctx context.Context, arg DecideVerificationRequestParams) (int64, error) {
+	result, err := q.db.Exec(ctx, decideVerificationRequest,
+		arg.Status,
+		arg.RejectReason,
+		arg.Now,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getVerificationRequest = `-- name: GetVerificationRequest :one
+SELECT id, member_id, status, reject_reason, created_at, updated_at
+FROM membership.verification_requests
+WHERE id = $1
+`
+
+func (q *Queries) GetVerificationRequest(ctx context.Context, id uuid.UUID) (MembershipVerificationRequest, error) {
+	row := q.db.QueryRow(ctx, getVerificationRequest, id)
+	var i MembershipVerificationRequest
+	err := row.Scan(
+		&i.ID,
+		&i.MemberID,
+		&i.Status,
+		&i.RejectReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getVerificationRequestForUpdate = `-- name: GetVerificationRequestForUpdate :one
+SELECT id, member_id, status, reject_reason, created_at, updated_at
+FROM membership.verification_requests
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetVerificationRequestForUpdate(ctx context.Context, id uuid.UUID) (MembershipVerificationRequest, error) {
+	row := q.db.QueryRow(ctx, getVerificationRequestForUpdate, id)
+	var i MembershipVerificationRequest
+	err := row.Scan(
+		&i.ID,
+		&i.MemberID,
+		&i.Status,
+		&i.RejectReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertPendingVerificationRequest = `-- name: InsertPendingVerificationRequest :one
 INSERT INTO membership.verification_requests (member_id, status, created_at, updated_at)
 VALUES ($1, 'pending', $2, $2)

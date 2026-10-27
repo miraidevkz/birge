@@ -96,20 +96,13 @@ func (s *Service) ModerateRoom(ctx context.Context, p auth.Principal, roomID uui
 				}
 				status, action = model.StatusVisible, model.AuditRestore
 			}
-			if m.Status != status {
-				updated, err := tx.SetMessageStatus(ctx, m.ID, status, now)
-				if err != nil {
-					return err
-				}
-				if m.Status == model.StatusHeld && status == model.StatusVisible {
-					if _, err := tx.Schedule(ctx, model.TimerPush, m.ID, m.ID.String(), now); err != nil {
-						return err
-					}
-				}
-				id := updated.ID
-				notices = append(notices, model.Notice{Kind: model.NoticeChanged, RoomID: room.ID, MessageID: &id, Seq: updated.Seq})
+			entry.Action = action
+			ns, err := applyMessageStatus(ctx, tx, m, status, entry, now)
+			if err != nil {
+				return err
 			}
-			entry.Action, entry.ObjectType, entry.ObjectID = action, model.AuditObjectMessage, m.ID
+			notices = append(notices, ns...)
+			return nil
 		case model.ActionMute1h, model.ActionBan, model.ActionUnban:
 			if in.MemberID == nil || *in.MemberID == uuid.Nil {
 				return model.ErrInvalidInput
@@ -135,6 +128,7 @@ func (s *Service) ModerateRoom(ctx context.Context, p auth.Principal, roomID uui
 				return err
 			}
 			entry.ObjectType, entry.ObjectID = model.AuditObjectMember, target
+			return tx.Audit(ctx, entry)
 		case model.ActionSetSlowMode:
 			if in.SlowModeSeconds == nil || *in.SlowModeSeconds < 0 || *in.SlowModeSeconds > model.MaxSlowModeSeconds {
 				return model.ErrInvalidInput
@@ -143,8 +137,9 @@ func (s *Service) ModerateRoom(ctx context.Context, p auth.Principal, roomID uui
 				return err
 			}
 			entry.Action, entry.ObjectType, entry.ObjectID = model.AuditSlowMode, model.AuditObjectRoom, room.ID
+			return tx.Audit(ctx, entry)
 		}
-		return tx.Audit(ctx, entry)
+		return nil
 	})
 	if err != nil {
 		return err
@@ -158,7 +153,7 @@ func (s *Service) ModerateRoom(ctx context.Context, p auth.Principal, roomID uui
 
 // AssignMentor assigns (assign = true) or removes a mentor of a group room.
 // Staff only (moderator or admin); the member must hold the mentor role to
-// be assigned. Audited. There is no HTTP operation for it yet.
+// be assigned. Audited.
 func (s *Service) AssignMentor(ctx context.Context, p auth.Principal, roomID, memberID uuid.UUID, assign bool) error {
 	if !p.Staff || !model.IsStaffModerator(p.Roles) || p.IdentityID == uuid.Nil {
 		return model.ErrForbidden
@@ -251,11 +246,10 @@ func (s *Service) ReportMessage(ctx context.Context, p auth.Principal, messageID
 }
 
 // CloseReports closes the open reports of a message (staff, audited), which
-// lets retention purge it again. For the moderation context's decisions.
+// lets retention purge it again.
 func (s *Service) CloseReports(ctx context.Context, p auth.Principal, messageID uuid.UUID) error {
-	return s.staffMessageAction(ctx, p, messageID, model.AuditReportsClose, func(tx port.Tx, now time.Time) error {
-		_, err := tx.CloseReports(ctx, messageID, now)
-		return err
+	return s.staffMessageAction(ctx, p, messageID, model.AuditReportsClose, func(tx port.Tx, now time.Time, actor model.AuditEntry) error {
+		return closeReportsInTx(ctx, tx, messageID, actor, now)
 	})
 }
 
@@ -266,24 +260,181 @@ func (s *Service) SetLegalHold(ctx context.Context, p auth.Principal, messageID 
 	if on {
 		action = model.AuditLegalHoldOn
 	}
-	return s.staffMessageAction(ctx, p, messageID, action, func(tx port.Tx, _ time.Time) error {
-		_, err := tx.SetLegalHold(ctx, messageID, on)
-		return err
+	return s.staffMessageAction(ctx, p, messageID, action, func(tx port.Tx, _ time.Time, actor model.AuditEntry) error {
+		return setLegalHoldInTx(ctx, tx, messageID, on, actor)
 	})
 }
 
-func (s *Service) staffMessageAction(ctx context.Context, p auth.Principal, messageID uuid.UUID, action string, fn func(port.Tx, time.Time) error) error {
+func (s *Service) staffMessageAction(ctx context.Context, p auth.Principal, messageID uuid.UUID, action string, fn func(port.Tx, time.Time, model.AuditEntry) error) error {
 	if !p.Staff || !model.IsStaffModerator(p.Roles) || p.IdentityID == uuid.Nil {
 		return model.ErrForbidden
 	}
 	now := s.now()
+	actor := model.AuditEntry{ActorID: p.IdentityID, ActorRole: model.ModeratorStaff, Action: action, ObjectType: model.AuditObjectMessage, ObjectID: messageID}
 	return s.Store.InTx(ctx, func(tx port.Tx) error {
 		if _, err := tx.GetMessage(ctx, messageID, true); err != nil {
 			return err
 		}
-		if err := fn(tx, now); err != nil {
+		return fn(tx, now, actor)
+	})
+}
+
+// ApplyModerationDecided applies moderation.Decided for kinds chat_message
+// and report. Deduplicated via platform.processed_events. Audits use role
+// system with ActorID = the moderation item id. A crisis-held message is
+// never restored. block_author requires Suspenders and runs inside the same
+// transaction so a membership failure redelivers the event.
+func (s *Service) ApplyModerationDecided(ctx context.Context, eventID uuid.UUID, data model.ModerationDecidedData) error {
+	switch data.Kind {
+	case model.ModerationKindChatMessage, model.ModerationKindReport:
+	default:
+		return nil
+	}
+	if eventID == uuid.Nil || data.ObjectID == uuid.Nil || data.ItemID == uuid.Nil {
+		return fmt.Errorf("%w: moderation event", model.ErrInvalidInput)
+	}
+	if data.BlockAuthor && s.Suspenders == nil {
+		return errors.New("chat: author suspender not configured")
+	}
+	now := s.now()
+	var notices []model.Notice
+	err := s.Store.InTx(ctx, func(tx port.Tx) error {
+		newly, err := tx.MarkProcessed(ctx, model.ConsumerModerationDecided, eventID)
+		if err != nil {
 			return err
 		}
-		return tx.Audit(ctx, model.AuditEntry{ActorID: p.IdentityID, ActorRole: model.ModeratorStaff, Action: action, ObjectType: model.AuditObjectMessage, ObjectID: messageID})
+		if !newly {
+			return nil
+		}
+		m, err := tx.GetMessage(ctx, data.ObjectID, true)
+		if err != nil {
+			if errors.Is(err, model.ErrNotFound) {
+				return nil
+			}
+			return err
+		}
+		system := func(action string) model.AuditEntry {
+			return model.AuditEntry{
+				ActorID: data.ItemID, ActorRole: model.ModeratorSystem,
+				Action: action, ObjectType: model.AuditObjectMessage, ObjectID: m.ID,
+			}
+		}
+		switch data.Kind {
+		case model.ModerationKindChatMessage:
+			if data.Approve {
+				if m.HoldReason != model.HoldCrisis {
+					ns, err := applyMessageStatus(ctx, tx, m, model.StatusVisible, system(model.AuditRestore), now)
+					if err != nil {
+						return err
+					}
+					notices = append(notices, ns...)
+				}
+			} else {
+				ns, err := applyMessageStatus(ctx, tx, m, model.StatusHidden, system(model.AuditHide), now)
+				if err != nil {
+					return err
+				}
+				notices = append(notices, ns...)
+			}
+		case model.ModerationKindReport:
+			if !data.Approve {
+				ns, err := applyMessageStatus(ctx, tx, m, model.StatusHidden, system(model.AuditHide), now)
+				if err != nil {
+					return err
+				}
+				notices = append(notices, ns...)
+			}
+			if err := closeReportsInTx(ctx, tx, m.ID, system(model.AuditReportsClose), now); err != nil {
+				return err
+			}
+		}
+		if data.LegalHold {
+			if err := setLegalHoldInTx(ctx, tx, m.ID, true, system(model.AuditLegalHoldOn)); err != nil {
+				return err
+			}
+		}
+		if data.BlockAuthor {
+			// Call membership inside the chat transaction so a failure rolls
+			// back MarkProcessed and the event is redelivered.
+			if err := s.Suspenders.SuspendAuthor(ctx, m.AuthorID, data.Reason, data.ItemID); err != nil {
+				return fmt.Errorf("chat: suspend author: %w", err)
+			}
+		}
+		s.log().Info("chat moderation decided applied", "event", "ChatModerationDecidedApplied", "message_id", m.ID, "kind", data.Kind)
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+	for _, n := range notices {
+		s.notify(ctx, n)
+	}
+	return nil
+}
+
+// ModerationSummary returns the opened message text for the moderation
+// ContentSource (kinds report and chat_message). Purged or gone messages
+// yield model.ErrNotFound. Hidden messages still return text so staff can
+// review them. Never includes contacts or profile fields.
+func (s *Service) ModerationSummary(ctx context.Context, messageID uuid.UUID) (string, error) {
+	var m model.Message
+	if err := s.Store.InTx(ctx, func(tx port.Tx) error {
+		var err error
+		m, err = tx.GetMessage(ctx, messageID, false)
+		return err
+	}); err != nil {
+		return "", err
+	}
+	text, deleted, err := s.open(ctx, m)
+	if err != nil {
+		return "", err
+	}
+	if deleted || text == "" {
+		return "", model.ErrNotFound
+	}
+	return text, nil
+}
+
+// applyMessageStatus sets status when different, schedules push on held→visible,
+// records a changed notice, and always audits the action.
+func applyMessageStatus(ctx context.Context, tx port.Tx, m model.Message, status string, actor model.AuditEntry, now time.Time) ([]model.Notice, error) {
+	var notices []model.Notice
+	if m.Status != status {
+		updated, err := tx.SetMessageStatus(ctx, m.ID, status, now)
+		if err != nil {
+			return nil, err
+		}
+		if m.Status == model.StatusHeld && status == model.StatusVisible {
+			if _, err := tx.Schedule(ctx, model.TimerPush, m.ID, m.ID.String(), now); err != nil {
+				return nil, err
+			}
+		}
+		id := updated.ID
+		notices = append(notices, model.Notice{Kind: model.NoticeChanged, RoomID: m.RoomID, MessageID: &id, Seq: updated.Seq})
+	}
+	actor.ObjectType, actor.ObjectID = model.AuditObjectMessage, m.ID
+	if err := tx.Audit(ctx, actor); err != nil {
+		return nil, err
+	}
+	return notices, nil
+}
+
+func closeReportsInTx(ctx context.Context, tx port.Tx, messageID uuid.UUID, actor model.AuditEntry, now time.Time) error {
+	if _, err := tx.CloseReports(ctx, messageID, now); err != nil {
+		return err
+	}
+	actor.Action, actor.ObjectType, actor.ObjectID = model.AuditReportsClose, model.AuditObjectMessage, messageID
+	return tx.Audit(ctx, actor)
+}
+
+func setLegalHoldInTx(ctx context.Context, tx port.Tx, messageID uuid.UUID, on bool, actor model.AuditEntry) error {
+	if _, err := tx.SetLegalHold(ctx, messageID, on); err != nil {
+		return err
+	}
+	action := model.AuditLegalHoldOff
+	if on {
+		action = model.AuditLegalHoldOn
+	}
+	actor.Action, actor.ObjectType, actor.ObjectID = action, model.AuditObjectMessage, messageID
+	return tx.Audit(ctx, actor)
 }

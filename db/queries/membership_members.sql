@@ -1,11 +1,13 @@
 -- name: GetMemberByIdentity :one
-SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles
+SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles,
+       m.suspended_at, m.suspended_reason
 FROM membership.members m
 LEFT JOIN membership.districts d ON d.id = m.district_id
 WHERE m.identity_id = @identity_id;
 
 -- name: GetMemberByID :one
-SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles
+SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles,
+       m.suspended_at, m.suspended_reason
 FROM membership.members m
 LEFT JOIN membership.districts d ON d.id = m.district_id
 WHERE m.id = @id;
@@ -36,8 +38,16 @@ UPDATE membership.members
 SET verification = @verification, updated_at = @now
 WHERE id = @id;
 
+-- name: SetMemberSuspension :execrows
+UPDATE membership.members
+SET suspended_at = @suspended_at,
+    suspended_reason = @suspended_reason,
+    updated_at = @now
+WHERE id = @id;
+
+-- Verified and not suspended: a suspended member is hidden like a block (ADR-0019).
 -- name: ListVerifiedInDistrict :many
 SELECT id
 FROM membership.members
-WHERE district_id = @district_id AND verification = 'verified'
+WHERE district_id = @district_id AND verification = 'verified' AND suspended_at IS NULL
 ORDER BY id;

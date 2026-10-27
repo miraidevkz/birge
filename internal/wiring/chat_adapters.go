@@ -128,7 +128,7 @@ func (a *ChatAuthenticator) Authenticate(ctx context.Context, token string) (aut
 	}
 	m, err := a.Members.Me(auth.WithPrincipal(ctx, p))
 	if err != nil {
-		return auth.Principal{}, fmt.Errorf("wiring: resolve member for chat: %w", err)
+		return auth.Principal{}, err
 	}
 	p.MemberID = m.ID
 	return p, nil

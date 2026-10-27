@@ -313,6 +313,18 @@ type ServerInterface interface {
 
 	// (PUT /chat/rooms/{roomId}/mute)
 	SetRoomMute(w http.ResponseWriter, r *http.Request, roomId RoomId)
+	// DeleteMessageLegalHold Release a message from legal hold. Staff moderator or admin, MFA. Audited.
+	// (DELETE /staff/chat/messages/{messageId}/legal-hold)
+	DeleteMessageLegalHold(w http.ResponseWriter, r *http.Request, messageId openapi_types.UUID)
+	// PutMessageLegalHold Put a message under legal hold (ADR-0019). Staff moderator or admin, MFA. Audited.
+	// (PUT /staff/chat/messages/{messageId}/legal-hold)
+	PutMessageLegalHold(w http.ResponseWriter, r *http.Request, messageId openapi_types.UUID)
+	// RemoveRoomMentor Remove a mentor from a group room. Staff moderator or admin, MFA. Audited.
+	// (DELETE /staff/chat/rooms/{roomId}/mentors/{memberId})
+	RemoveRoomMentor(w http.ResponseWriter, r *http.Request, roomId RoomId, memberId openapi_types.UUID)
+	// AssignRoomMentor Assign a mentor to a group room. Staff moderator or admin, MFA. Audited.
+	// (PUT /staff/chat/rooms/{roomId}/mentors/{memberId})
+	AssignRoomMentor(w http.ResponseWriter, r *http.Request, roomId RoomId, memberId openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -594,6 +606,128 @@ func (siw *ServerInterfaceWrapper) SetRoomMute(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteMessageLegalHold operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMessageLegalHold(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "messageId" -------------
+	var messageId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "messageId", r.PathValue("messageId"), &messageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "messageId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMessageLegalHold(w, r, messageId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutMessageLegalHold operation middleware
+func (siw *ServerInterfaceWrapper) PutMessageLegalHold(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "messageId" -------------
+	var messageId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "messageId", r.PathValue("messageId"), &messageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "messageId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutMessageLegalHold(w, r, messageId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveRoomMentor operation middleware
+func (siw *ServerInterfaceWrapper) RemoveRoomMentor(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "roomId" -------------
+	var roomId RoomId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "roomId", r.PathValue("roomId"), &roomId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "roomId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "memberId" -------------
+	var memberId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "memberId", r.PathValue("memberId"), &memberId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "memberId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveRoomMentor(w, r, roomId, memberId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AssignRoomMentor operation middleware
+func (siw *ServerInterfaceWrapper) AssignRoomMentor(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "roomId" -------------
+	var roomId RoomId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "roomId", r.PathValue("roomId"), &roomId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "roomId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "memberId" -------------
+	var memberId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "memberId", r.PathValue("memberId"), &memberId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "memberId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AssignRoomMentor(w, r, roomId, memberId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -722,6 +856,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chat/rooms/{roomId}/messages", wrapper.SendMessage)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chat/messages/{messageId}/report", wrapper.ReportMessage)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chat/rooms/{roomId}/moderation", wrapper.ModerateRoom)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/staff/chat/rooms/{roomId}/mentors/{memberId}", wrapper.RemoveRoomMentor)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/staff/chat/rooms/{roomId}/mentors/{memberId}", wrapper.AssignRoomMentor)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/staff/chat/messages/{messageId}/legal-hold", wrapper.DeleteMessageLegalHold)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/staff/chat/messages/{messageId}/legal-hold", wrapper.PutMessageLegalHold)
 
 	return m
 }
@@ -1053,6 +1191,218 @@ func (response SetRoomMutedefaultApplicationProblemPlusJSONResponse) VisitSetRoo
 	return err
 }
 
+type DeleteMessageLegalHoldRequestObject struct {
+	MessageId openapi_types.UUID `json:"messageId"`
+}
+
+type DeleteMessageLegalHoldResponseObject interface {
+	VisitDeleteMessageLegalHoldResponse(w http.ResponseWriter) error
+}
+
+type DeleteMessageLegalHold204Response struct {
+}
+
+func (response DeleteMessageLegalHold204Response) VisitDeleteMessageLegalHoldResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMessageLegalHold403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteMessageLegalHold403ApplicationProblemPlusJSONResponse) VisitDeleteMessageLegalHoldResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteMessageLegalHolddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteMessageLegalHolddefaultApplicationProblemPlusJSONResponse) VisitDeleteMessageLegalHoldResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMessageLegalHoldRequestObject struct {
+	MessageId openapi_types.UUID `json:"messageId"`
+}
+
+type PutMessageLegalHoldResponseObject interface {
+	VisitPutMessageLegalHoldResponse(w http.ResponseWriter) error
+}
+
+type PutMessageLegalHold204Response struct {
+}
+
+func (response PutMessageLegalHold204Response) VisitPutMessageLegalHoldResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type PutMessageLegalHold403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response PutMessageLegalHold403ApplicationProblemPlusJSONResponse) VisitPutMessageLegalHoldResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutMessageLegalHolddefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response PutMessageLegalHolddefaultApplicationProblemPlusJSONResponse) VisitPutMessageLegalHoldResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveRoomMentorRequestObject struct {
+	RoomId   RoomId             `json:"roomId"`
+	MemberId openapi_types.UUID `json:"memberId"`
+}
+
+type RemoveRoomMentorResponseObject interface {
+	VisitRemoveRoomMentorResponse(w http.ResponseWriter) error
+}
+
+type RemoveRoomMentor204Response struct {
+}
+
+func (response RemoveRoomMentor204Response) VisitRemoveRoomMentorResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveRoomMentor403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveRoomMentor403ApplicationProblemPlusJSONResponse) VisitRemoveRoomMentorResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveRoomMentordefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RemoveRoomMentordefaultApplicationProblemPlusJSONResponse) VisitRemoveRoomMentorResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AssignRoomMentorRequestObject struct {
+	RoomId   RoomId             `json:"roomId"`
+	MemberId openapi_types.UUID `json:"memberId"`
+}
+
+type AssignRoomMentorResponseObject interface {
+	VisitAssignRoomMentorResponse(w http.ResponseWriter) error
+}
+
+type AssignRoomMentor204Response struct {
+}
+
+func (response AssignRoomMentor204Response) VisitAssignRoomMentorResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type AssignRoomMentor403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response AssignRoomMentor403ApplicationProblemPlusJSONResponse) VisitAssignRoomMentorResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AssignRoomMentor409ApplicationProblemPlusJSONResponse Problem
+
+func (response AssignRoomMentor409ApplicationProblemPlusJSONResponse) VisitAssignRoomMentorResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AssignRoomMentordefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response AssignRoomMentordefaultApplicationProblemPlusJSONResponse) VisitAssignRoomMentorResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
@@ -1079,6 +1429,18 @@ type StrictServerInterface interface {
 
 	// (PUT /chat/rooms/{roomId}/mute)
 	SetRoomMute(ctx context.Context, request SetRoomMuteRequestObject) (SetRoomMuteResponseObject, error)
+	// DeleteMessageLegalHold Release a message from legal hold. Staff moderator or admin, MFA. Audited.
+	// (DELETE /staff/chat/messages/{messageId}/legal-hold)
+	DeleteMessageLegalHold(ctx context.Context, request DeleteMessageLegalHoldRequestObject) (DeleteMessageLegalHoldResponseObject, error)
+	// PutMessageLegalHold Put a message under legal hold (ADR-0019). Staff moderator or admin, MFA. Audited.
+	// (PUT /staff/chat/messages/{messageId}/legal-hold)
+	PutMessageLegalHold(ctx context.Context, request PutMessageLegalHoldRequestObject) (PutMessageLegalHoldResponseObject, error)
+	// RemoveRoomMentor Remove a mentor from a group room. Staff moderator or admin, MFA. Audited.
+	// (DELETE /staff/chat/rooms/{roomId}/mentors/{memberId})
+	RemoveRoomMentor(ctx context.Context, request RemoveRoomMentorRequestObject) (RemoveRoomMentorResponseObject, error)
+	// AssignRoomMentor Assign a mentor to a group room. Staff moderator or admin, MFA. Audited.
+	// (PUT /staff/chat/rooms/{roomId}/mentors/{memberId})
+	AssignRoomMentor(ctx context.Context, request AssignRoomMentorRequestObject) (AssignRoomMentorResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -1350,6 +1712,112 @@ func (sh *strictHandler) SetRoomMute(w http.ResponseWriter, r *http.Request, roo
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SetRoomMuteResponseObject); ok {
 		if err := validResponse.VisitSetRoomMuteResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMessageLegalHold operation middleware
+func (sh *strictHandler) DeleteMessageLegalHold(w http.ResponseWriter, r *http.Request, messageId openapi_types.UUID) {
+	var request DeleteMessageLegalHoldRequestObject
+
+	request.MessageId = messageId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMessageLegalHold(ctx, request.(DeleteMessageLegalHoldRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMessageLegalHold")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMessageLegalHoldResponseObject); ok {
+		if err := validResponse.VisitDeleteMessageLegalHoldResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutMessageLegalHold operation middleware
+func (sh *strictHandler) PutMessageLegalHold(w http.ResponseWriter, r *http.Request, messageId openapi_types.UUID) {
+	var request PutMessageLegalHoldRequestObject
+
+	request.MessageId = messageId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutMessageLegalHold(ctx, request.(PutMessageLegalHoldRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutMessageLegalHold")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutMessageLegalHoldResponseObject); ok {
+		if err := validResponse.VisitPutMessageLegalHoldResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveRoomMentor operation middleware
+func (sh *strictHandler) RemoveRoomMentor(w http.ResponseWriter, r *http.Request, roomId RoomId, memberId openapi_types.UUID) {
+	var request RemoveRoomMentorRequestObject
+
+	request.RoomId = roomId
+	request.MemberId = memberId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveRoomMentor(ctx, request.(RemoveRoomMentorRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveRoomMentor")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveRoomMentorResponseObject); ok {
+		if err := validResponse.VisitRemoveRoomMentorResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AssignRoomMentor operation middleware
+func (sh *strictHandler) AssignRoomMentor(w http.ResponseWriter, r *http.Request, roomId RoomId, memberId openapi_types.UUID) {
+	var request AssignRoomMentorRequestObject
+
+	request.RoomId = roomId
+	request.MemberId = memberId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AssignRoomMentor(ctx, request.(AssignRoomMentorRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AssignRoomMentor")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AssignRoomMentorResponseObject); ok {
+		if err := validResponse.VisitAssignRoomMentorResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

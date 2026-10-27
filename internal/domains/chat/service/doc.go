@@ -13,7 +13,11 @@
 //     each event handled once (platform.processed_events);
 //   - HandleCrisisEscalation, HandlePush, HandleRetention, EnsureRetentionTimer:
 //     the timer handlers (adapter.TimerHandlers) and the first retention run;
-//   - CloseReports / SetLegalHold: for the moderation context's decisions.
+//   - ApplyModerationDecided: applies moderation.Decided for chat_message
+//     and report (consumer chat.moderation.Decided);
+//   - ModerationSummary: opened message text for the moderation ContentSource;
+//   - CloseReports / SetLegalHold / AssignMentor: staff-principal helpers
+//     (also exposed over staff HTTP).
 //
 // # Sequence numbers
 //

@@ -33,6 +33,8 @@ import (
 	membershipadapter "birge/internal/domains/membership/adapter"
 	membershipmodel "birge/internal/domains/membership/model"
 	membershipservice "birge/internal/domains/membership/service"
+	moderationadapter "birge/internal/domains/moderation/adapter"
+	moderationservice "birge/internal/domains/moderation/service"
 	notifyadapter "birge/internal/domains/notify/adapter"
 	notifyservice "birge/internal/domains/notify/service"
 	"birge/internal/domains/notify/sms/guard"
@@ -365,15 +367,16 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		return err
 	}
 	chat := &chatservice.Service{
-		Store:   &chatadapter.PostgresStore{Pool: pool},
-		Sealer:  env,
-		Members: &ChatMembers{Members: members},
-		Blocks:  &EmergencyBlocks{Members: members},
-		Mentors: &ChatMentors{Members: members},
-		Crisis:  &ChatCrisis{Safety: safety},
-		Fanout:  &chatadapter.NATSFanout{Conn: nc, Logger: logger},
-		Clock:   clk,
-		Logger:  logger,
+		Store:      &chatadapter.PostgresStore{Pool: pool},
+		Sealer:     env,
+		Members:    &ChatMembers{Members: members},
+		Blocks:     &EmergencyBlocks{Members: members},
+		Mentors:    &ChatMentors{Members: members},
+		Crisis:     &ChatCrisis{Safety: safety},
+		Fanout:     &chatadapter.NATSFanout{Conn: nc, Logger: logger},
+		Suspenders: &ChatAuthorSuspender{Members: members},
+		Clock:      clk,
+		Logger:     logger,
 	}
 	if err := chat.EnsureRetentionTimer(ctx); err != nil {
 		return fmt.Errorf("worker: chat retention: %w", err)
@@ -390,6 +393,12 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	directory := &directoryservice.Service{
 		Store:   &directoryadapter.PostgresStore{Pool: pool},
 		Members: &DirectoryMembers{Members: members},
+		Clock:   clk,
+		Logger:  logger,
+	}
+	moderation := &moderationservice.Service{
+		Store:   &moderationadapter.PostgresStore{Pool: pool},
+		Sources: moderationSources(chat, sharing, directory, members),
 		Clock:   clk,
 		Logger:  logger,
 	}
@@ -420,6 +429,9 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	roomOpener := &chatadapter.RoomOpenerConsumer{JS: js, Stream: StreamName, Service: chat, Logger: logger}
 	sharingMod := &sharingadapter.ModerationConsumer{JS: js, Service: sharing, Logger: logger}
 	directoryMod := &directoryadapter.ModerationConsumer{JS: js, Service: directory, Logger: logger}
+	chatMod := &chatadapter.ModerationConsumer{JS: js, Service: chat, Logger: logger}
+	membershipMod := &membershipadapter.ModerationConsumer{JS: js, Service: members, Logger: logger}
+	moderationQueue := &moderationadapter.QueueConsumer{JS: js, Stream: StreamName, Service: moderation, Logger: logger}
 	timerWorker := &timers.Worker{Pool: pool, Clock: clk, Logger: logger, Handlers: handlers, Interval: timersInterval}
 
 	health := http.NewServeMux()
@@ -427,14 +439,17 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	health.Handle("GET /readyz", readiness(logger, poolCheck(pool), natsCheck(nc)))
 
 	loops := map[string]func(context.Context) error{
-		"outbox relay":         relay.Run,
-		"notify consumer":      consumer.Run,
-		"sos shared":           sosShared.Run,
-		"chat room opener":     roomOpener.Run,
-		"sharing moderation":   sharingMod.Run,
-		"directory moderation": directoryMod.Run,
-		"timers":               timerWorker.Run,
-		"health endpoints":     func(ctx context.Context) error { return serve(ctx, logger, cfg.HTTPAddr, health) },
+		"outbox relay":          relay.Run,
+		"notify consumer":       consumer.Run,
+		"sos shared":            sosShared.Run,
+		"chat room opener":      roomOpener.Run,
+		"moderation queue":      moderationQueue.Run,
+		"sharing moderation":    sharingMod.Run,
+		"directory moderation":  directoryMod.Run,
+		"chat moderation":       chatMod.Run,
+		"membership moderation": membershipMod.Run,
+		"timers":                timerWorker.Run,
+		"health endpoints":      func(ctx context.Context) error { return serve(ctx, logger, cfg.HTTPAddr, health) },
 	}
 	if !cfg.RetrievalEnabled {
 		logger.Warn("retrieval disabled: TEI or Qdrant not configured", "event", "RetrievalDisabled")

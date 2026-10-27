@@ -13,21 +13,24 @@ import (
 )
 
 const getMemberByID = `-- name: GetMemberByID :one
-SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles
+SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles,
+       m.suspended_at, m.suspended_reason
 FROM membership.members m
 LEFT JOIN membership.districts d ON d.id = m.district_id
 WHERE m.id = $1
 `
 
 type GetMemberByIDRow struct {
-	ID           uuid.UUID
-	IdentityID   uuid.UUID
-	DisplayName  []byte
-	Lang         string
-	DistrictID   *uuid.UUID
-	CityID       *uuid.UUID
-	Verification string
-	Roles        []string
+	ID              uuid.UUID
+	IdentityID      uuid.UUID
+	DisplayName     []byte
+	Lang            string
+	DistrictID      *uuid.UUID
+	CityID          *uuid.UUID
+	Verification    string
+	Roles           []string
+	SuspendedAt     *time.Time
+	SuspendedReason *string
 }
 
 func (q *Queries) GetMemberByID(ctx context.Context, id uuid.UUID) (GetMemberByIDRow, error) {
@@ -42,26 +45,31 @@ func (q *Queries) GetMemberByID(ctx context.Context, id uuid.UUID) (GetMemberByI
 		&i.CityID,
 		&i.Verification,
 		&i.Roles,
+		&i.SuspendedAt,
+		&i.SuspendedReason,
 	)
 	return i, err
 }
 
 const getMemberByIdentity = `-- name: GetMemberByIdentity :one
-SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles
+SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles,
+       m.suspended_at, m.suspended_reason
 FROM membership.members m
 LEFT JOIN membership.districts d ON d.id = m.district_id
 WHERE m.identity_id = $1
 `
 
 type GetMemberByIdentityRow struct {
-	ID           uuid.UUID
-	IdentityID   uuid.UUID
-	DisplayName  []byte
-	Lang         string
-	DistrictID   *uuid.UUID
-	CityID       *uuid.UUID
-	Verification string
-	Roles        []string
+	ID              uuid.UUID
+	IdentityID      uuid.UUID
+	DisplayName     []byte
+	Lang            string
+	DistrictID      *uuid.UUID
+	CityID          *uuid.UUID
+	Verification    string
+	Roles           []string
+	SuspendedAt     *time.Time
+	SuspendedReason *string
 }
 
 func (q *Queries) GetMemberByIdentity(ctx context.Context, identityID uuid.UUID) (GetMemberByIdentityRow, error) {
@@ -76,6 +84,8 @@ func (q *Queries) GetMemberByIdentity(ctx context.Context, identityID uuid.UUID)
 		&i.CityID,
 		&i.Verification,
 		&i.Roles,
+		&i.SuspendedAt,
+		&i.SuspendedReason,
 	)
 	return i, err
 }
@@ -104,10 +114,11 @@ func (q *Queries) InsertMember(ctx context.Context, arg InsertMemberParams) (uui
 const listVerifiedInDistrict = `-- name: ListVerifiedInDistrict :many
 SELECT id
 FROM membership.members
-WHERE district_id = $1 AND verification = 'verified'
+WHERE district_id = $1 AND verification = 'verified' AND suspended_at IS NULL
 ORDER BY id
 `
 
+// Verified and not suspended: a suspended member is hidden like a block (ADR-0019).
 func (q *Queries) ListVerifiedInDistrict(ctx context.Context, districtID *uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listVerifiedInDistrict, districtID)
 	if err != nil {
@@ -139,6 +150,34 @@ func (q *Queries) LockMember(ctx context.Context, id uuid.UUID) (uuid.UUID, erro
 	var id_2 uuid.UUID
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const setMemberSuspension = `-- name: SetMemberSuspension :execrows
+UPDATE membership.members
+SET suspended_at = $1,
+    suspended_reason = $2,
+    updated_at = $3
+WHERE id = $4
+`
+
+type SetMemberSuspensionParams struct {
+	SuspendedAt     *time.Time
+	SuspendedReason *string
+	Now             time.Time
+	ID              uuid.UUID
+}
+
+func (q *Queries) SetMemberSuspension(ctx context.Context, arg SetMemberSuspensionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMemberSuspension,
+		arg.SuspendedAt,
+		arg.SuspendedReason,
+		arg.Now,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setMemberVerification = `-- name: SetMemberVerification :execrows
