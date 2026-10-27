@@ -1,0 +1,293 @@
+package wiring
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver for goose
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
+
+	birgedb "birge/db"
+	membershipadapter "birge/internal/domains/membership/adapter"
+	membershipservice "birge/internal/domains/membership/service"
+	notifyadapter "birge/internal/domains/notify/adapter"
+	notifyservice "birge/internal/domains/notify/service"
+	"birge/internal/domains/notify/sms/guard"
+	privacyadapter "birge/internal/domains/privacy/adapter"
+	privacyservice "birge/internal/domains/privacy/service"
+	"birge/internal/platform/clock"
+	"birge/internal/platform/crypto"
+	platformdb "birge/internal/platform/db"
+	"birge/internal/platform/outbox"
+	"birge/internal/platform/timers"
+)
+
+// JetStream stream of all domain events (ADR-0007). The notify consumer and
+// the outbox subjects (outbox.Subject) depend on these names.
+const (
+	StreamName     = "EVENTS"
+	StreamSubjects = "birge.events.>"
+	// StreamDuplicates is the Nats-Msg-Id deduplication window. The relay
+	// republishes an event only when marking it published failed, which it
+	// retries within seconds; two minutes covers that with a margin.
+	StreamDuplicates = 2 * time.Minute
+)
+
+// Worker loop settings.
+const (
+	relayBatchSize = 100
+	relayInterval  = time.Second
+	timersInterval = time.Second
+)
+
+// rolesHeader bounds how long the grants may wait for and hold locks (ADR-0006).
+const rolesHeader = "SET lock_timeout = '5s';\nSET statement_timeout = '60s';\n"
+
+// Migrate applies the embedded migrations with goose and then, when
+// applyRoles is set, db/roles.sql. Both steps are idempotent: goose records
+// applied versions, and grants repeat without effect. A PostgreSQL session
+// lock serializes concurrent runs (several migration jobs starting at once).
+func Migrate(ctx context.Context, logger *slog.Logger, databaseURL string, applyRoles bool) error {
+	sqlDB, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		return fmt.Errorf("migrate: open database: %w", err)
+	}
+	defer func() { _ = sqlDB.Close() }()
+	locker, err := lock.NewPostgresSessionLocker()
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	p, err := goose.NewProvider(goose.DialectPostgres, sqlDB, birgedb.Migrations(), goose.WithSessionLocker(locker))
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	results, err := p.Up(ctx)
+	if err != nil {
+		return fmt.Errorf("migrate: apply: %w", err)
+	}
+	for _, r := range results {
+		logger.Info("migration applied", "version", r.Source.Version, "duration_ms", r.Duration.Milliseconds())
+	}
+	version, err := p.GetDBVersion(ctx)
+	if err != nil {
+		return fmt.Errorf("migrate: read version: %w", err)
+	}
+	logger.Info("database migrated", "version", version, "applied", len(results))
+	if !applyRoles {
+		return nil
+	}
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("migrate: roles: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	// One simple-protocol call: PostgreSQL runs the statements as one implicit transaction.
+	if _, err := conn.ExecContext(ctx, rolesHeader+birgedb.Roles); err != nil {
+		return fmt.Errorf("migrate: apply db/roles.sql: %w", err)
+	}
+	logger.Info("roles applied")
+	return nil
+}
+
+// NewEnvelope builds the platform envelope for the configured KEK.
+func NewEnvelope(pool *pgxpool.Pool, cfg Config, clk clock.Clock) (*crypto.Envelope, error) {
+	if cfg.KEK == nil {
+		return nil, errors.New("wiring: no KEK configured")
+	}
+	ring, err := crypto.NewKeyring(cfg.KEK)
+	if err != nil {
+		return nil, fmt.Errorf("wiring: %w", err)
+	}
+	env, err := crypto.NewEnvelope(pool, ring, crypto.Options{Clock: clk})
+	if err != nil {
+		return nil, fmt.Errorf("wiring: %w", err)
+	}
+	return env, nil
+}
+
+// RunAPI serves the API until ctx is cancelled.
+func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
+	pool, err := platformdb.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("api: %w", err)
+	}
+	defer pool.Close()
+	clk := clock.System{}
+	env, err := NewEnvelope(pool, cfg, clk)
+	if err != nil {
+		return err
+	}
+	h, err := NewAPIHandler(APIDeps{Config: cfg, Pool: pool, Envelope: env, Clock: clk, Logger: logger})
+	if err != nil {
+		return err
+	}
+	return serve(ctx, logger, cfg.HTTPAddr, h)
+}
+
+// RunWorker runs the background loops until ctx is cancelled: the outbox
+// relay to JetStream, the notify DeliveryRequested consumer and the timers
+// worker with the notify and privacy handlers, plus /healthz and /readyz
+// (database and NATS) on the HTTP address. When one loop fails, the others
+// are stopped and the error is returned, so the orchestrator restarts the
+// process instead of running it half-working.
+func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
+	if cfg.DeliveryMode != DeliveryModeDev {
+		// Load refuses this already; checked again because silently
+		// dropping notifications is the failure this guards against.
+		return errors.New("worker: no push or SMS provider configured")
+	}
+	pool, err := platformdb.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("worker: %w", err)
+	}
+	defer pool.Close()
+	clk := clock.System{}
+	env, err := NewEnvelope(pool, cfg, clk)
+	if err != nil {
+		return err
+	}
+	nc, err := nats.Connect(cfg.NATSURL, nats.Name("birge-worker"), nats.MaxReconnects(-1))
+	if err != nil {
+		return fmt.Errorf("worker: nats connect: %w", err)
+	}
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	if err != nil {
+		return fmt.Errorf("worker: jetstream: %w", err)
+	}
+	if err := EnsureStream(ctx, js); err != nil {
+		return err
+	}
+
+	identities, err := NewKratosIdentities(cfg.KratosAdminURL, "phone", nil)
+	if err != nil {
+		return err
+	}
+	members := membershipservice.New(&membershipadapter.Postgres{Pool: pool}, DisplayNameEncryptor{Sealer: env}, clk)
+	if len(cfg.SMSTexts) == 0 {
+		logger.Warn("BIRGE_SMS_TEXTS is empty: every SMS will be skipped (no text)")
+	}
+	logger.Warn("log-only delivery: push and SMS are logged, not sent", "mode", cfg.DeliveryMode)
+	notify := &notifyservice.Service{
+		Store:      &notifyadapter.PostgresStore{Pool: pool},
+		Recipients: &Recipients{Members: members, Phones: identities},
+		Push:       LogPushSender{Logger: logger},
+		SMS:        LogSMSSender{Logger: logger},
+		Guard:      guard.New(cfg.SMSGuard),
+		Clock:      clk,
+		Logger:     logger,
+		Config:     notifyservice.Config{CriticalSMSAfter: cfg.CriticalSMSAfter, SMSTexts: cfg.SMSTexts},
+	}
+	privacy := &privacyservice.Service{
+		Store:    &privacyadapter.PostgresStore{Pool: pool},
+		Shredder: env,
+		Clock:    clk,
+		Logger:   logger,
+		Settings: privacyservice.Settings{CurrentVersions: cfg.ConsentVersions, DeletionDueAfter: cfg.DeletionDelay},
+	}
+	handlers, err := mergeHandlers(
+		(&notifyadapter.TimerHandlers{Service: notify}).Handlers(),
+		(&privacyadapter.TimerHandlers{Service: privacy}).Handlers(),
+	)
+	if err != nil {
+		return err
+	}
+
+	relay := &outbox.Relay{
+		Pool: pool, Publisher: outbox.JetStreamPublisher{JS: js}, Clock: clk, Logger: logger,
+		BatchSize: relayBatchSize, Interval: relayInterval,
+	}
+	consumer := &notifyadapter.DeliveryConsumer{JS: js, Service: notify, Logger: logger}
+	timerWorker := &timers.Worker{Pool: pool, Clock: clk, Logger: logger, Handlers: handlers, Interval: timersInterval}
+
+	health := http.NewServeMux()
+	health.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	health.Handle("GET /readyz", readiness(logger, poolCheck(pool), natsCheck(nc)))
+
+	return runAll(ctx, logger, map[string]func(context.Context) error{
+		"outbox relay":     relay.Run,
+		"notify consumer":  consumer.Run,
+		"timers":           timerWorker.Run,
+		"health endpoints": func(ctx context.Context) error { return serve(ctx, logger, cfg.HTTPAddr, health) },
+	})
+}
+
+// EnsureStream creates or updates the events stream: file storage and the
+// deduplication window the outbox relies on. It is safe on every start.
+func EnsureStream(ctx context.Context, js jetstream.JetStream) error {
+	_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:       StreamName,
+		Subjects:   []string{StreamSubjects},
+		Storage:    jetstream.FileStorage,
+		Duplicates: StreamDuplicates,
+	})
+	if err != nil {
+		return fmt.Errorf("worker: ensure stream %s: %w", StreamName, err)
+	}
+	return nil
+}
+
+func natsCheck(nc *nats.Conn) check {
+	return check{name: "nats", fn: func(context.Context) error {
+		if !nc.IsConnected() {
+			return errors.New("not connected")
+		}
+		return nil
+	}}
+}
+
+// mergeHandlers joins the timer handlers of several contexts; a timer kind
+// claimed twice is a wiring bug.
+func mergeHandlers(sets ...map[string]timers.Handler) (map[string]timers.Handler, error) {
+	out := map[string]timers.Handler{}
+	for _, set := range sets {
+		for kind, h := range set {
+			if _, dup := out[kind]; dup {
+				return nil, fmt.Errorf("wiring: timer kind %q has two handlers", kind)
+			}
+			out[kind] = h
+		}
+	}
+	return out, nil
+}
+
+// runAll runs every loop until ctx is cancelled or one of them fails (or
+// returns early), then cancels the rest and waits for all of them.
+func runAll(ctx context.Context, logger *slog.Logger, loops map[string]func(context.Context) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		errs []error
+	)
+	for name, run := range loops {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer cancel()
+			err := run(ctx)
+			if err == nil && ctx.Err() == nil {
+				err = errors.New("stopped unexpectedly")
+			}
+			if err != nil {
+				logger.Error("worker loop stopped", "loop", name, "error", err)
+				mu.Lock()
+				errs = append(errs, fmt.Errorf("%s: %w", name, err))
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	return errors.Join(errs...)
+}
