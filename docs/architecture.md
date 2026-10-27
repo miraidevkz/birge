@@ -25,8 +25,8 @@ clients (React Native)            backend (Go, one binary)                  infr
 └──────────────┘                 └──────────────────────────────┘──▶ OpenBao (keys)
 ┌──────────────┐  VPN only                    │                 ──▶ Ory Kratos / Hydra
 │ staff admin  │──────────────────────────────┘                 ──▶ SMS / push providers (plugins)
-│ (web)        │                                                ──▶ LLM provider (anonymized text only)
-└──────────────┘
+│ (web)        │                                                ──▶ S3-compatible storage (Garage)
+└──────────────┘                                                ──▶ LLM provider (anonymized text only)
 ```
 
 ### Bounded contexts
@@ -101,6 +101,8 @@ docs/                 # architecture, ADRs, requirements, threat model
 | Retrieval | TEI embeddings + Qdrant, versioned by `model_id` | [0010](adr/0010-retrieval.md) |
 | Deployment | Kubernetes first (k3s for small installs), Compose as alternative | [0011](adr/0011-kubernetes-first.md) |
 | Data residency | personal data in-jurisdiction; LLM gets anonymized text only | [0013](adr/0013-data-residency.md) |
+| UI | RN Reusables + NativeWind, Reanimated, Expo Router; accessibility first | [0014](adr/0014-ui-stack.md) |
+| Object storage | S3 API only; Garage for dev/MVP, local S3-compatible provider in production | [0015](adr/0015-object-storage.md) |
 
 ## Replication to other countries
 

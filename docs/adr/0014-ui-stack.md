@@ -1,0 +1,21 @@
+# ADR-0014: UI stack, motion and typography
+
+Status: Accepted · Date: 2026-10-27
+
+## Context
+Users are tired, stressed parents, often on low-end Android phones and slow networks. The app must look trustworthy and native on both platforms, follow the OS look (including iOS Liquid Glass) and be accessible.
+
+## Decision
+- Components: React Native Reusables (shadcn-style, copied into `packages/ui`, built on `@rn-primitives`) styled with NativeWind v4.
+- Motion: Reanimated and Gesture Handler (UI thread); Lottie for illustrations. 150–250 ms, no spring/bounce. Motion is off when the OS "reduce motion" setting is on. Crisis and SOS screens have no animation.
+- Navigation: Expo Router with native stack transitions. Native platform materials where available (iOS Liquid Glass via Expo's glass/native-tab components), with a plain fallback on older iOS and on Android.
+- Typography: a font family with full Kazakh Cyrillic coverage (PT Sans or Noto Sans, OFL); locales planned as `kk-Cyrl` and `kk-Latn`.
+- Accessibility: WCAG 2.2 AA contrast, system font scaling, VoiceOver/TalkBack labels, one primary action per screen, SOS reachable from every screen.
+- Design source: Penpot.
+
+## Alternatives
+- Tamagui: faster runtime styling, harder to configure, more errors in agent-written code.
+- Flutter: rejected; non-native look erodes trust.
+
+## Consequences
+The design must not depend on glass effects: they exist only on recent iOS.
