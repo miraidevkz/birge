@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:chat.MessageHeld.v1",
+  "title": "chat.MessageHeld",
+  "description": "A chat message is held for moderation (newcomer, link or phone, filter).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "message_id",
+    "room_id"
+  ],
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "room_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "newcomer",
+        "link",
+        "phone",
+        "filter"
+      ]
+    }
+  }
+}

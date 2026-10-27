@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:chat.MessageReported.v1",
+  "title": "chat.MessageReported",
+  "description": "A member reported a chat message.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "message_id",
+    "room_id"
+  ],
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "room_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 40
+    }
+  }
+}

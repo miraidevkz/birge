@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:circle.MatchAccepted.v1",
+  "title": "circle.MatchAccepted",
+  "description": "Both members said \"Let's\"; chat opens a private room for them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "match_id",
+    "member_a",
+    "member_b"
+  ],
+  "properties": {
+    "match_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "member_a": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "member_b": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

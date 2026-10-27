@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:circle.AcquaintanceEstablished.v1",
+  "title": "circle.AcquaintanceEstablished",
+  "description": "Both members confirmed they met; they are now met in person for each other (trusted contacts, childcare rules).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "member_a",
+    "member_b"
+  ],
+  "properties": {
+    "member_a": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "member_b": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

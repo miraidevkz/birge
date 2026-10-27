@@ -29,6 +29,16 @@ tags:
     description: The AI assistant ("Talk") and "ask in my own words" for rights questions.
   - name: knowledge
     description: Reviewed knowledge base (rights and self-help) for members, and the review workflow for staff.
+  - name: circle
+    description: "\"Tea with someone who understands\": requests, matches and met-in-person status."
+  - name: chat
+    description: Rooms, messages and room moderation. Real-time delivery is the WebSocket described in contracts/realtime/.
+  - name: sharing
+    description: Listings (give away, exchange, looking for) with item photos, and contacting the author.
+  - name: directory
+    description: Specialists and reviews.
+  - name: moderation
+    description: Staff queue for listings, specialists, reviews, reports, held chat messages and verification requests.
 security:
   - memberSession: []
 paths:
@@ -1115,6 +1125,428 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/StaffArticle'}
         default: {$ref: '#/components/responses/Problem'}
+
+  /me/tea-requests:
+    get:
+      operationId: listMyTeaRequests
+      tags: [circle]
+      responses:
+        '200':
+          description: My open and recent requests.
+          content:
+            application/json:
+              schema: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/TeaRequest'}}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: createTeaRequest
+      tags: [circle]
+      summary: Verified members only; one open request at a time.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TeaRequestInput'}
+      responses:
+        '201':
+          description: Created; matching runs hourly.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TeaRequest'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/tea-requests/{requestId}/cancel:
+    parameters:
+      - {name: requestId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: cancelTeaRequest
+      tags: [circle]
+      responses:
+        '204': {description: Cancelled (idempotent).}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/matches:
+    get:
+      operationId: listMyMatches
+      tags: [circle]
+      responses:
+        '200':
+          description: Pair cards; no contacts.
+          content:
+            application/json:
+              schema: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/Match'}}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/matches/{matchId}/answer:
+    parameters:
+      - $ref: '#/components/parameters/MatchId'
+    post:
+      operationId: answerMatch
+      tags: [circle]
+      summary: "\"Let's\" or \"Not now\". After two \"Let's\" a private chat room opens."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [accept]
+              properties:
+                accept: {type: boolean}
+      responses:
+        '200':
+          description: Updated match.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Match'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/matches/{matchId}/met:
+    parameters:
+      - $ref: '#/components/parameters/MatchId'
+    post:
+      operationId: confirmMet
+      tags: [circle]
+      summary: "\"Did you meet?\" Two yes answers make the pair met in person."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [met]
+              properties:
+                met: {type: boolean}
+      responses:
+        '200':
+          description: Updated match.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Match'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/acquaintances:
+    get:
+      operationId: listAcquaintances
+      tags: [circle]
+      summary: Members I met in person (both confirmed).
+      responses:
+        '200':
+          description: Acquaintances.
+          content:
+            application/json:
+              schema: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/Acquaintance'}}
+        default: {$ref: '#/components/responses/Problem'}
+  /chat/rooms:
+    get:
+      operationId: listRooms
+      tags: [chat]
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema: {type: string, enum: [district, topic, direct]}
+        - name: joined
+          in: query
+          required: false
+          schema: {type: boolean, description: "true: my rooms; false: group rooms I may join."}
+      responses:
+        '200':
+          description: Rooms.
+          content:
+            application/json:
+              schema: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/Room'}}
+        default: {$ref: '#/components/responses/Problem'}
+  /chat/rooms/{roomId}/join:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      operationId: joinRoom
+      tags: [chat]
+      summary: Verified members join group rooms themselves; never automatic.
+      responses:
+        '200':
+          description: Joined.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Room'}
+        default: {$ref: '#/components/responses/Problem'}
+  /chat/rooms/{roomId}/leave:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      operationId: leaveRoom
+      tags: [chat]
+      responses:
+        '204': {description: Left (idempotent).}
+        default: {$ref: '#/components/responses/Problem'}
+  /chat/rooms/{roomId}/mute:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    put:
+      operationId: setRoomMute
+      tags: [chat]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [muted]
+              properties:
+                muted: {type: boolean}
+      responses:
+        '204': {description: Saved.}
+        default: {$ref: '#/components/responses/Problem'}
+  /chat/rooms/{roomId}/messages:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    get:
+      operationId: listMessages
+      tags: [chat]
+      summary: History after a sequence number (resume) or before it (scroll back).
+      parameters:
+        - {name: after, in: query, required: false, schema: {type: integer, minimum: 0}}
+        - {name: before, in: query, required: false, schema: {type: integer, minimum: 1}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        '200':
+          description: Messages ordered by sequence; blocked members' messages are omitted.
+          content:
+            application/json:
+              schema: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/ChatMessage'}}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: sendMessage
+      tags: [chat]
+      summary: Send a text message (also possible over the WebSocket). The client message ID makes it idempotent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChatMessageInput'}
+      responses:
+        '201':
+          description: Stored; status visible or held for moderation.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChatMessage'}
+        '429': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /chat/messages/{messageId}/report:
+    parameters:
+      - {name: messageId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: reportMessage
+      tags: [chat]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReportInput'}
+      responses:
+        '204': {description: Reported.}
+        default: {$ref: '#/components/responses/Problem'}
+  /chat/rooms/{roomId}/moderation:
+    parameters:
+      - $ref: '#/components/parameters/RoomId'
+    post:
+      operationId: moderateRoom
+      tags: [chat]
+      summary: Room moderation by staff, or by the room's mentor with limited actions (hide, mute_1h). Audited.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RoomModerationInput'}
+      responses:
+        '204': {description: Applied.}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /listings:
+    get:
+      operationId: listListings
+      tags: [sharing]
+      parameters:
+        - {name: type, in: query, required: false, schema: {$ref: '#/components/schemas/ListingType'}}
+        - {name: category, in: query, required: false, schema: {type: string, pattern: '^[a-z_]{2,40}$'}}
+        - {name: districtId, in: query, required: false, schema: {type: string, format: uuid}}
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 128}}
+      responses:
+        '200':
+          description: Active listings, newest first, 5 per page; blocked members excluded both ways.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ListingPage'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: createListing
+      tags: [sharing]
+      summary: Verified members; goes to moderation (pending).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ListingInput'}
+      responses:
+        '201':
+          description: Pending.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Listing'}
+        default: {$ref: '#/components/responses/Problem'}
+  /listings/photo-uploads:
+    post:
+      operationId: createPhotoUpload
+      tags: [sharing]
+      summary: Get a presigned upload URL for one item photo (JPEG or PNG, up to 5 MB). The server re-encodes it and strips metadata.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [contentType, sizeBytes]
+              properties:
+                contentType: {type: string, enum: [image/jpeg, image/png]}
+                sizeBytes: {type: integer, minimum: 1, maximum: 5242880}
+      responses:
+        '201':
+          description: Upload slot.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PhotoUpload'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/listings:
+    get:
+      operationId: listMyListings
+      tags: [sharing]
+      responses:
+        '200':
+          description: My listings in every status.
+          content:
+            application/json:
+              schema: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Listing'}}
+        default: {$ref: '#/components/responses/Problem'}
+  /listings/{listingId}/close:
+    parameters:
+      - $ref: '#/components/parameters/ListingId'
+    post:
+      operationId: closeListing
+      tags: [sharing]
+      responses:
+        '204': {description: "Closed (author only, idempotent)."}
+        default: {$ref: '#/components/responses/Problem'}
+  /listings/{listingId}/contact-requests:
+    parameters:
+      - $ref: '#/components/parameters/ListingId'
+    post:
+      operationId: requestListingContact
+      tags: [sharing]
+      summary: Ask the author to talk; she accepts or ignores. Accepting opens a private chat room; contacts are never shown.
+      responses:
+        '202': {description: Sent to the author (idempotent per listing and member).}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/listing-contact-requests/{contactRequestId}/accept:
+    parameters:
+      - {name: contactRequestId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: acceptListingContact
+      tags: [sharing]
+      responses:
+        '202': {description: Accepted; the chat room appears in the chat list.}
+        default: {$ref: '#/components/responses/Problem'}
+  /specialists:
+    get:
+      operationId: searchSpecialists
+      tags: [directory]
+      parameters:
+        - {name: profession, in: query, required: false, schema: {type: string, pattern: '^[a-z_]{2,40}$'}}
+        - {name: districtId, in: query, required: false, schema: {type: string, format: uuid}}
+        - {name: need, in: query, required: false, schema: {type: string, pattern: '^[a-z_]{2,40}$'}}
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 128}}
+      responses:
+        '200':
+          description: Active specialists with rating and the 3 latest reviews.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SpecialistPage'}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: suggestSpecialist
+      tags: [directory]
+      summary: Verified members suggest a specialist; goes to moderation.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SpecialistInput'}
+      responses:
+        '201':
+          description: Pending.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Specialist'}
+        default: {$ref: '#/components/responses/Problem'}
+  /specialists/{specialistId}/reviews:
+    parameters:
+      - {name: specialistId, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: putReview
+      tags: [directory]
+      summary: One review per member per specialist (replaces mine); goes to moderation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviewInput'}
+      responses:
+        '200':
+          description: Pending review.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Review'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/moderation/queue:
+    get:
+      operationId: getModerationQueue
+      tags: [moderation]
+      security:
+        - staffOidc: []
+      parameters:
+        - {name: kind, in: query, required: false, schema: {$ref: '#/components/schemas/ModerationKind'}}
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 128}}
+      responses:
+        '200':
+          description: Oldest first.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ModerationPage'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/moderation/items/{itemId}/decision:
+    parameters:
+      - {name: itemId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: decideModerationItem
+      tags: [moderation]
+      summary: Approve or reject (reason code goes to the author). Audited.
+      security:
+        - staffOidc: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ModerationDecision'}
+      responses:
+        '204': {description: Decided.}
+        '409': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     memberSession:
@@ -1126,6 +1558,9 @@ components:
       openIdConnectUrl: /.well-known/openid-configuration
       description: Staff sign-in through any OIDC provider (ADR-0008).
   parameters:
+    MatchId: {name: matchId, in: path, required: true, schema: {type: string, format: uuid}}
+    RoomId: {name: roomId, in: path, required: true, schema: {type: string, format: uuid}}
+    ListingId: {name: listingId, in: path, required: true, schema: {type: string, format: uuid}}
     LangQuery:
       name: lang
       in: query
@@ -1823,3 +2258,223 @@ components:
           maxItems: 100
           items: {$ref: '#/components/schemas/StaffArticle'}
         nextCursor: {type: string, maxLength: 128}
+
+    TeaRequestInput:
+      type: object
+      additionalProperties: false
+      required: [format, sameDistrict, similarAge, sharedNeeds]
+      properties:
+        format: {type: string, enum: [meeting, call]}
+        sameDistrict: {type: boolean}
+        similarAge: {type: boolean}
+        sharedNeeds: {type: boolean}
+    TeaRequest:
+      type: object
+      additionalProperties: false
+      required: [id, format, status, createdAt, expiresAt]
+      properties:
+        id: {type: string, format: uuid}
+        format: {type: string, enum: [meeting, call]}
+        status: {type: string, enum: [open, matched, cancelled, expired]}
+        createdAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+    Match:
+      type: object
+      additionalProperties: false
+      required: [id, otherDisplayName, sharedNeeds, format, status, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        otherDisplayName: {type: string, maxLength: 40, description: First name only.}
+        otherDistrictId: {type: string, format: uuid}
+        otherChildAges: {type: array, maxItems: 10, items: {type: integer, minimum: 0, maximum: 30}}
+        sharedNeeds: {type: array, maxItems: 10, items: {type: string, pattern: '^[a-z_]{2,40}$'}}
+        format: {type: string, enum: [meeting, call]}
+        status: {type: string, enum: [proposed, accepted, declined, met, not_met, expired]}
+        myAnswer: {type: boolean}
+        roomId: {type: string, format: uuid, description: Present once both accepted.}
+        askMetAt: {type: string, format: date-time}
+        createdAt: {type: string, format: date-time}
+    Acquaintance:
+      type: object
+      additionalProperties: false
+      required: [memberId, displayName, since]
+      properties:
+        memberId: {type: string, format: uuid}
+        displayName: {type: string, maxLength: 40}
+        since: {type: string, format: date-time}
+    Room:
+      type: object
+      additionalProperties: false
+      required: [id, kind, title, joined, muted]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [district, topic, direct]}
+        title: {type: string, maxLength: 80, description: Locale key for group rooms; the other member's first name for direct rooms.}
+        joined: {type: boolean}
+        muted: {type: boolean}
+        lastSeq: {type: integer, minimum: 0}
+        slowModeSeconds: {type: integer, minimum: 0, maximum: 3600}
+    ChatMessageInput:
+      type: object
+      additionalProperties: false
+      required: [clientId, text]
+      properties:
+        clientId: {type: string, format: uuid, description: Client-generated UUIDv7; repeats are ignored.}
+        text: {type: string, minLength: 1, maxLength: 2000}
+    ChatMessage:
+      type: object
+      additionalProperties: false
+      required: [id, roomId, seq, authorId, authorName, status, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        roomId: {type: string, format: uuid}
+        seq: {type: integer, minimum: 1}
+        authorId: {type: string, format: uuid}
+        authorName: {type: string, maxLength: 40}
+        text: {type: string, maxLength: 2000, description: Absent when deleted or hidden.}
+        status: {type: string, enum: [visible, held, hidden, deleted]}
+        mine: {type: boolean}
+        createdAt: {type: string, format: date-time}
+    ReportInput:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: {type: string, enum: [harassment, scam_or_fundraising, miracle_cure, unsafe_content, child_safety, spam, other]}
+    RoomModerationInput:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: {type: string, enum: [hide_message, restore_message, mute_1h, ban, unban, set_slow_mode]}
+        messageId: {type: string, format: uuid}
+        memberId: {type: string, format: uuid}
+        slowModeSeconds: {type: integer, minimum: 0, maximum: 3600}
+    ListingType:
+      type: string
+      enum: [give, swap, need]
+    ListingInput:
+      type: object
+      additionalProperties: false
+      required: [type, category, title, description, districtId, acceptRules]
+      properties:
+        type: {$ref: '#/components/schemas/ListingType'}
+        category: {type: string, pattern: '^[a-z_]{2,40}$'}
+        title: {type: string, minLength: 3, maxLength: 80}
+        description: {type: string, minLength: 1, maxLength: 1000}
+        districtId: {type: string, format: uuid}
+        photoUploadId: {type: string, format: uuid}
+        acceptRules: {type: boolean, enum: [true], description: "The member saw the rules (no medicines, no money collection, item photos only)."}
+    Listing:
+      type: object
+      additionalProperties: false
+      required: [id, type, category, title, description, districtId, status, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        type: {$ref: '#/components/schemas/ListingType'}
+        category: {type: string, maxLength: 40}
+        title: {type: string, maxLength: 80}
+        description: {type: string, maxLength: 1000}
+        districtId: {type: string, format: uuid}
+        photoUrl: {type: string, format: uri, maxLength: 2048}
+        status: {type: string, enum: [pending, active, rejected, closed]}
+        rejectReason: {type: string, maxLength: 40}
+        mine: {type: boolean}
+        createdAt: {type: string, format: date-time}
+        closesAt: {type: string, format: date-time}
+    ListingPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/Listing'}}
+        nextCursor: {type: string, maxLength: 128}
+    PhotoUpload:
+      type: object
+      additionalProperties: false
+      required: [uploadId, url, expiresAt]
+      properties:
+        uploadId: {type: string, format: uuid}
+        url: {type: string, format: uri, maxLength: 4096, description: Presigned PUT URL of in-jurisdiction storage.}
+        expiresAt: {type: string, format: date-time}
+    SpecialistInput:
+      type: object
+      additionalProperties: false
+      required: [name, profession, districtId, needs]
+      properties:
+        name: {type: string, minLength: 2, maxLength: 120}
+        profession: {type: string, pattern: '^[a-z_]{2,40}$'}
+        districtId: {type: string, format: uuid}
+        needs: {type: array, maxItems: 10, items: {type: string, pattern: '^[a-z_]{2,40}$'}}
+        contacts: {type: string, maxLength: 300, description: Public work contacts of the specialist or organisation.}
+    Specialist:
+      type: object
+      additionalProperties: false
+      required: [id, name, profession, districtId, needs, status, reviewCount, latestReviews]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, maxLength: 120}
+        profession: {type: string, maxLength: 40}
+        districtId: {type: string, format: uuid}
+        needs: {type: array, maxItems: 10, items: {type: string, maxLength: 40}}
+        contacts: {type: string, maxLength: 300}
+        status: {type: string, enum: [pending, active, rejected]}
+        averageRating: {type: number, minimum: 1, maximum: 5}
+        reviewCount: {type: integer, minimum: 0}
+        latestReviews: {type: array, maxItems: 3, items: {$ref: '#/components/schemas/Review'}}
+    SpecialistPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/Specialist'}}
+        nextCursor: {type: string, maxLength: 128}
+    ReviewInput:
+      type: object
+      additionalProperties: false
+      required: [rating, text]
+      properties:
+        rating: {type: integer, minimum: 1, maximum: 5}
+        text: {type: string, minLength: 1, maxLength: 1000}
+    Review:
+      type: object
+      additionalProperties: false
+      required: [id, rating, text, authorName, status, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        rating: {type: integer, minimum: 1, maximum: 5}
+        text: {type: string, maxLength: 1000}
+        authorName: {type: string, maxLength: 40, description: First name only.}
+        status: {type: string, enum: [pending, active, rejected]}
+        createdAt: {type: string, format: date-time}
+    ModerationKind:
+      type: string
+      enum: [listing, specialist, review, report, chat_message, verification]
+    ModerationItem:
+      type: object
+      additionalProperties: false
+      required: [id, kind, objectId, createdAt, summary]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/ModerationKind'}
+        objectId: {type: string, format: uuid}
+        createdAt: {type: string, format: date-time}
+        summary: {type: string, maxLength: 2000, description: "The content under review (listing text, review text, held message); no contact data."}
+        photoUrl: {type: string, format: uri, maxLength: 2048}
+        reportReason: {type: string, maxLength: 40}
+    ModerationPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/ModerationItem'}}
+        nextCursor: {type: string, maxLength: 128}
+    ModerationDecision:
+      type: object
+      additionalProperties: false
+      required: [approve]
+      properties:
+        approve: {type: boolean}
+        reason: {type: string, enum: [rules_medicine, rules_money, person_in_photo, unsafe, spam, inaccurate, duplicate, other]}
+        blockAuthor: {type: boolean, description: "Also block the author (reports, illegal content); audited."}
+        legalHold: {type: boolean, description: Preserve the content for the lawyer (ADR-0019).}

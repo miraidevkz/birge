@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:directory.ItemSubmitted.v1",
+  "title": "directory.ItemSubmitted",
+  "description": "A specialist or review waits for moderation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_type",
+    "object_id"
+  ],
+  "properties": {
+    "object_type": {
+      "type": "string",
+      "enum": [
+        "specialist",
+        "review"
+      ]
+    },
+    "object_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

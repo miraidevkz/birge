@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:moderation.Decided.v1",
+  "title": "moderation.Decided",
+  "description": "A moderator decided an item; the owning context applies it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "item_id",
+    "kind",
+    "object_id",
+    "approve",
+    "block_author",
+    "legal_hold"
+  ],
+  "properties": {
+    "item_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "listing",
+        "specialist",
+        "review",
+        "report",
+        "chat_message",
+        "verification"
+      ]
+    },
+    "object_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "approve": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 40
+    },
+    "block_author": {
+      "type": "boolean"
+    },
+    "legal_hold": {
+      "type": "boolean"
+    }
+  }
+}

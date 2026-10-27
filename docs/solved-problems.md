@@ -23,7 +23,7 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 
 ## Contracts and code generation
 
-- **Quote YAML strings that contain punctuation in flow style.** A comma inside `{description: ...}` split it into an extra field and invalidated the whole OpenAPI document; the generator accepted it, the validator did not. The validator's tests load the real contract. (68739b9)
+- **Quote YAML strings that contain punctuation in flow style.** A comma inside `{description: ...}` split it into an extra field and invalidated the whole OpenAPI document; the generator accepted it, the validator did not. The validator's tests load the real contract. (68739b9) A bulk fix must touch only `description` keys that describe a schema, not properties named `description`. (The validator caught a second case before commit.)
 - **Scope each sqlc block to its own schema file.** A block reading the whole `db/schema` directory copies other contexts' models into its package. (190cb6e)
 - **A middleware that reads the body must hand it on; test that the handler receives it unchanged.** (9796572)
 

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:sharing.ListingSubmitted.v1",
+  "title": "sharing.ListingSubmitted",
+  "description": "A listing waits for moderation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "listing_id"
+  ],
+  "properties": {
+    "listing_id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

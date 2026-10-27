@@ -293,6 +293,15 @@ type IdempotencyKey = openapi_types.UUID
 // LangQuery Interface languages at launch. New languages are added by configuration and locale files (ADR-0014).
 type LangQuery = Lang
 
+// ListingId defines model for ListingId.
+type ListingId = openapi_types.UUID
+
+// MatchId defines model for MatchId.
+type MatchId = openapi_types.UUID
+
+// RoomId defines model for RoomId.
+type RoomId = openapi_types.UUID
+
 // SosId defines model for SosId.
 type SosId = openapi_types.UUID
 
