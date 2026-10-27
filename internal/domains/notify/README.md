@@ -41,7 +41,7 @@ Delivery is not HTTP: JetStream consumer `notify.DeliveryRequested` → `service
 
 none (other contexts publish `notify.DeliveryRequested`; they do not call this service directly).
 
-Ports used by this context (wired later): `Recipients`, `PushSender`, `SMSSender`.
+Ports used by this context (wired in `internal/wiring`): `Recipients` (`Resolve` for kind/ref/language only; `PhoneFor` at SMS send time), `PushSender`, `SMSSender`.
 
 ## Configuration
 
@@ -58,7 +58,8 @@ Ports used by this context (wired later): `Recipients`, `PushSender`, `SMSSender
 ## Invariants
 
 - Consumers idempotent via `processed_events`; unique `(request_id, recipient_kind, recipient_ref)` (database + service).
-- `recipient_kind=member`: inbox + push; critical SMS only after acknowledgement timeout. `external`: SMS only, no inbox/push; phone re-resolved at send time, never stored (service + schema).
+- `recipient_kind=member`: inbox + push; critical SMS only after acknowledgement timeout. `external`: SMS only, no inbox/push; phone looked up via `PhoneFor` at send time outside any DB transaction, never stored (service + schema).
+- `Resolve` returns kind, ref and language only — no identity-provider I/O — so a Kratos outage cannot lose `DeliveryRequested`.
 - Push and SMS carry no message content (ADR-0013); SMS bodies from config only.
 - `sms/guard` before every SMS; critical uses `AllowCritical` (no daily budget). Guard rejects for critical → `CriticalSMSBlocked` + delivery `failed` (not `skipped`).
 - Logs and events: IDs and event names only — never text, phones or push tokens (service + ports).
@@ -68,8 +69,9 @@ Ports used by this context (wired later): `Recipients`, `PushSender`, `SMSSender
 
 - Database down: inbox/device HTTP and timer handlers fail; JetStream messages are nacked/retried by the consumer.
 - Recipients unresolved: `HandleDeliveryRequested` returns `ErrRecipientUnresolved` (message retried); no partial notification for that event until resolve succeeds after `MarkProcessed` — resolve runs before the transaction.
+- `PhoneFor` failure (identity provider down): SMS timer handler returns an error; delivery stays pending and retries with backoff — never dropped silently. Empty phone → delivery `skipped`.
 - Push/SMS provider down: delivery marked `failed`; timer retry may contact the provider again (at-least-once).
-- Guard / missing SMS text: non-critical → `skipped`; critical guard → `failed` + log; missing text fails the send path.
+- Guard / missing SMS text: non-critical → `skipped`; critical guard → `failed` + `CriticalSMSBlocked` log; missing text → `skipped`.
 - Broker down: outbox from producers lags; this context's consumer stops receiving until JetStream recovers.
 
 ## Tests

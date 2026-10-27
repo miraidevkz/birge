@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -36,12 +37,12 @@ func newLadderService(t *testing.T, clk *fixedClock) (*service.Service, *notifyt
 		Recipients: &notifytest.FakeRecipients{
 			ByMember: map[uuid.UUID]model.ResolvedRecipient{
 				member: {
-					Kind:      model.RecipientKindMember,
-					Ref:       member,
-					PhoneE164: "+77001112233",
-					Language:  "ru",
+					Kind:     model.RecipientKindMember,
+					Ref:      member,
+					Language: "ru",
 				},
 			},
+			PhoneByMember: map[uuid.UUID]string{member: "+77001112233"},
 		},
 		Push:   push,
 		SMS:    sms,
@@ -190,12 +191,12 @@ func TestExternalRecipientSendsSMSImmediatelyNoInbox(t *testing.T) {
 		Recipients: &notifytest.FakeRecipients{
 			ByTrustedContact: map[uuid.UUID]model.ResolvedRecipient{
 				contactID: {
-					Kind:      model.RecipientKindExternal,
-					Ref:       contactID,
-					PhoneE164: "+77005556677",
-					Language:  "ru",
+					Kind:     model.RecipientKindExternal,
+					Ref:      contactID,
+					Language: "ru",
 				},
 			},
+			PhoneByExternal: map[uuid.UUID]string{contactID: "+77005556677"},
 		},
 		Push:   push,
 		SMS:    sms,
@@ -254,8 +255,9 @@ func TestCriticalSMSGuardRejectionMarksFailed(t *testing.T) {
 		Store: store,
 		Recipients: &notifytest.FakeRecipients{
 			ByMember: map[uuid.UUID]model.ResolvedRecipient{
-				member: {Kind: model.RecipientKindMember, Ref: member, PhoneE164: "+77001112233", Language: "ru"},
+				member: {Kind: model.RecipientKindMember, Ref: member, Language: "ru"},
 			},
+			PhoneByMember: map[uuid.UUID]string{member: "+77001112233"},
 		},
 		Push: &notifytest.FakePush{},
 		SMS:  sms,
@@ -313,8 +315,9 @@ func TestCriticalSMSIgnoresDailyBudget(t *testing.T) {
 		Store: store,
 		Recipients: &notifytest.FakeRecipients{
 			ByMember: map[uuid.UUID]model.ResolvedRecipient{
-				member: {Kind: model.RecipientKindMember, Ref: member, PhoneE164: "+77001112233", Language: "ru"},
+				member: {Kind: model.RecipientKindMember, Ref: member, Language: "ru"},
 			},
+			PhoneByMember: map[uuid.UUID]string{member: "+77001112233"},
 		},
 		Push:   &notifytest.FakePush{},
 		SMS:    sms,
@@ -339,5 +342,72 @@ func TestCriticalSMSIgnoresDailyBudget(t *testing.T) {
 	fireDue(t, svc, store, model.TimerCriticalSMS, clk.t)
 	if sms.Len() != 1 {
 		t.Fatalf("sms sends = %d, want 1 despite exhausted daily budget", sms.Len())
+	}
+}
+
+// DeliveryRequested must be consumed and stored even when PhoneFor is down;
+// the SMS timer then retries and sends once the identity provider recovers.
+func TestDeliveryRequestedSurvivesPhoneForOutage(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	clk := &fixedClock{t: start}
+	member := uuid.Must(uuid.NewV7())
+	store := notifytest.NewMemoryStore()
+	sms := &notifytest.FakeSMS{}
+	recipients := &notifytest.FakeRecipients{
+		ByMember: map[uuid.UUID]model.ResolvedRecipient{
+			member: {Kind: model.RecipientKindMember, Ref: member, Language: "ru"},
+		},
+		PhoneByMember: map[uuid.UUID]string{member: "+77001112233"},
+		PhoneErr:      errors.New("kratos admin unavailable"),
+	}
+	svc := &service.Service{
+		Store:      store,
+		Recipients: recipients,
+		Push:       &notifytest.FakePush{},
+		SMS:        sms,
+		Guard:      guard.New(guard.Config{AllowedPrefixes: []string{"+7"}, PerNumberLimit: 10, GlobalLimit: 100, DailyBudget: 100}),
+		Clock:      clk,
+		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Config: service.Config{
+			CriticalSMSAfter: time.Second,
+			SMSTexts:         map[string]map[string]string{"emergency.sos": {"ru": "Birge: otkroite prilozhenie"}},
+		},
+	}
+
+	reqID := uuid.Must(uuid.NewV7())
+	if err := svc.HandleDeliveryRequested(context.Background(), uuid.Must(uuid.NewV7()), model.DeliveryRequest{
+		RequestID: reqID,
+		Recipient: model.Recipient{MemberID: &member},
+		Class:     model.ClassCritical,
+		Template:  "emergency.sos",
+	}); err != nil {
+		t.Fatalf("DeliveryRequested must succeed without PhoneFor: %v", err)
+	}
+	n, ok := store.NotificationByRequest(reqID, model.RecipientKindMember, member)
+	if !ok {
+		t.Fatal("notification missing after DeliveryRequested")
+	}
+
+	clk.t = start.Add(2 * time.Second)
+	if err := svc.HandleCriticalSMS(context.Background(), n.ID); err == nil {
+		t.Fatal("HandleCriticalSMS succeeded while PhoneFor was down")
+	}
+	if sms.Len() != 0 {
+		t.Fatalf("sms sends while PhoneFor down = %d, want 0", sms.Len())
+	}
+	if status, ok := store.DeliveryStatus(n.ID, model.ChannelSMS); ok && (status == model.StatusSent || status == model.StatusSkipped) {
+		t.Fatalf("delivery status = %q while PhoneFor down; want pending/failed for retry", status)
+	}
+
+	recipients.SetPhoneErr(nil)
+	if err := svc.HandleCriticalSMS(context.Background(), n.ID); err != nil {
+		t.Fatal(err)
+	}
+	if sms.Len() != 1 {
+		t.Fatalf("sms sends after PhoneFor recovery = %d, want 1", sms.Len())
+	}
+	if status, ok := store.DeliveryStatus(n.ID, model.ChannelSMS); !ok || status != model.StatusSent {
+		t.Fatalf("sms status = %q ok=%v, want sent", status, ok)
 	}
 }

@@ -69,15 +69,23 @@ func (f *FakeSMS) Len() int {
 	return len(f.Calls)
 }
 
-// FakeRecipients resolves from an in-memory map.
+// FakeRecipients resolves from in-memory maps. Phones live in PhoneByMember /
+// PhoneByExternal so Resolve never returns a phone; set PhoneErr to simulate
+// a transient identity-provider failure on PhoneFor.
 type FakeRecipients struct {
+	mu               sync.Mutex
 	ByMember         map[uuid.UUID]model.ResolvedRecipient
 	ByTrustedContact map[uuid.UUID]model.ResolvedRecipient
 	ByStaffRole      map[string][]model.ResolvedRecipient
+	PhoneByMember    map[uuid.UUID]string
+	PhoneByExternal  map[uuid.UUID]string
+	PhoneErr         error
 }
 
-// Resolve implements port.Recipients.
+// Resolve implements port.Recipients: kind, ref and language only.
 func (f *FakeRecipients) Resolve(_ context.Context, r model.Recipient) ([]model.ResolvedRecipient, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if r.MemberID != nil {
 		if f.ByMember != nil {
 			if got, ok := f.ByMember[*r.MemberID]; ok {
@@ -120,6 +128,34 @@ func (f *FakeRecipients) Resolve(_ context.Context, r model.Recipient) ([]model.
 		return out, nil
 	}
 	return nil, model.ErrRecipientUnresolved
+}
+
+// PhoneFor implements port.Recipients.
+func (f *FakeRecipients) PhoneFor(_ context.Context, kind string, ref uuid.UUID) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.PhoneErr != nil {
+		return "", f.PhoneErr
+	}
+	switch kind {
+	case model.RecipientKindMember:
+		if f.PhoneByMember != nil {
+			return f.PhoneByMember[ref], nil
+		}
+	case model.RecipientKindExternal:
+		if f.PhoneByExternal != nil {
+			return f.PhoneByExternal[ref], nil
+		}
+	}
+	return "", nil
+}
+
+// SetPhoneErr sets the error PhoneFor returns (nil clears it). Safe for tests
+// that flip the identity provider between down and up.
+func (f *FakeRecipients) SetPhoneErr(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.PhoneErr = err
 }
 
 func withDefaults(r model.ResolvedRecipient, kind string, ref uuid.UUID) model.ResolvedRecipient {

@@ -106,14 +106,22 @@ func TestRecipients(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := notifymodel.ResolvedRecipient{Kind: notifymodel.RecipientKindMember, Ref: memberID, PhoneE164: testPhone, Language: "ru"}
+	want := notifymodel.ResolvedRecipient{Kind: notifymodel.RecipientKindMember, Ref: memberID, Language: "ru"}
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("Resolve = %+v, want %+v", got, want)
 	}
+	phone, err := rc.PhoneFor(ctx, notifymodel.RecipientKindMember, memberID)
+	if err != nil || phone != testPhone {
+		t.Fatalf("PhoneFor = %q, %v; want %q", phone, err, testPhone)
+	}
 	for name, id := range map[string]uuid.UUID{"no phone trait": noPhoneMember, "identity gone": goneMember} {
 		got, err := rc.Resolve(ctx, notifymodel.Recipient{MemberID: &id})
-		if err != nil || len(got) != 1 || got[0].PhoneE164 != "" || got[0].Ref != id {
-			t.Errorf("%s: Resolve = %+v, %v; want the member without a phone", name, got, err)
+		if err != nil || len(got) != 1 || got[0].Ref != id {
+			t.Errorf("%s: Resolve = %+v, %v; want the member", name, got, err)
+		}
+		phone, err := rc.PhoneFor(ctx, notifymodel.RecipientKindMember, id)
+		if err != nil || phone != "" {
+			t.Errorf("%s: PhoneFor = %q, %v; want empty phone", name, phone, err)
 		}
 	}
 
@@ -126,6 +134,9 @@ func TestRecipients(t *testing.T) {
 		if _, err := rc.Resolve(ctx, r); !errors.Is(err, notifymodel.ErrRecipientUnresolved) {
 			t.Errorf("%s: err = %v, want ErrRecipientUnresolved", name, err)
 		}
+	}
+	if _, err := rc.PhoneFor(ctx, notifymodel.RecipientKindMember, unknown); !errors.Is(err, notifymodel.ErrRecipientUnresolved) {
+		t.Errorf("PhoneFor unknown member: err = %v, want ErrRecipientUnresolved", err)
 	}
 }
 
@@ -144,6 +155,17 @@ func TestKratosIdentitiesFailure(t *testing.T) {
 	}
 	if _, err := NewKratosIdentities("kratos-admin", "", nil); err == nil {
 		t.Fatal("relative admin URL accepted")
+	}
+	memberID, identity := uuid.New(), uuid.New()
+	rc := &Recipients{
+		Members: fakeMembers{memberID: {ID: memberID, IdentityID: identity, Lang: membershipmodel.LangRU}},
+		Phones:  k,
+	}
+	if _, err := rc.Resolve(context.Background(), notifymodel.Recipient{MemberID: &memberID}); err != nil {
+		t.Fatalf("Resolve must not call Kratos: %v", err)
+	}
+	if _, err := rc.PhoneFor(context.Background(), notifymodel.RecipientKindMember, memberID); err == nil {
+		t.Fatal("PhoneFor succeeded while Kratos returned 500")
 	}
 }
 

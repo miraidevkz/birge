@@ -30,9 +30,11 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [x] `notify` core (inbox, devices, durable push/SMS delivery, critical SMS fallback, SMS guard)
 - [x] Request validation against the OpenAPI schema
 - [x] Wiring: `birge api|worker|migrate` from configuration, embedded migrations, end-to-end tests
-- [ ] notify: resolve the phone at send time, not at DeliveryRequested time (a Kratos outage must not lose events)
-- [ ] EVENTS stream retention (MaxAge/MaxBytes); previous KEKs in configuration for rotation; `birge keygen` for local keys
-- [ ] Require SMS texts outside dev mode; merge the wiring HTTP server back into platform/httpserver
+- [x] notify: resolve the phone at send time, not at DeliveryRequested time (a Kratos outage must not lose events)
+- [x] EVENTS stream retention (MaxAge/MaxBytes); `birge keygen` for local keys
+- [ ] previous KEKs in configuration for rotation
+- [x] Require SMS texts outside dev mode
+- [ ] merge the wiring HTTP server back into platform/httpserver
 - [ ] Seed reference data (cities, districts, needs) per country; moderator side of verification
 - [ ] Kratos deployment and identity schema
 - [ ] `apps/mobile` and `apps/admin` skeletons (Expo, Expo Router, NativeWind, RN Reusables, i18n kk/ru); low-end Android performance budget measured

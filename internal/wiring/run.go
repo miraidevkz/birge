@@ -165,7 +165,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("worker: jetstream: %w", err)
 	}
-	if err := EnsureStream(ctx, js); err != nil {
+	if err := EnsureStream(ctx, js, cfg.EventsMaxAge, cfg.EventsMaxBytes); err != nil {
 		return err
 	}
 
@@ -174,7 +174,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		return err
 	}
 	members := membershipservice.New(&membershipadapter.Postgres{Pool: pool}, DisplayNameEncryptor{Sealer: env}, clk)
-	if len(cfg.SMSTexts) == 0 {
+	if cfg.DeliveryMode == DeliveryModeDev && len(cfg.SMSTexts) == 0 {
 		logger.Warn("BIRGE_SMS_TEXTS is empty: every SMS will be skipped (no text)")
 	}
 	logger.Warn("log-only delivery: push and SMS are logged, not sent", "mode", cfg.DeliveryMode)
@@ -222,14 +222,17 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	})
 }
 
-// EnsureStream creates or updates the events stream: file storage and the
-// deduplication window the outbox relies on. It is safe on every start.
-func EnsureStream(ctx context.Context, js jetstream.JetStream) error {
+// EnsureStream creates or updates the events stream: file storage, the
+// deduplication window the outbox relies on, and retention (MaxAge/MaxBytes).
+// It is safe on every start.
+func EnsureStream(ctx context.Context, js jetstream.JetStream, maxAge time.Duration, maxBytes int64) error {
 	_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:       StreamName,
 		Subjects:   []string{StreamSubjects},
 		Storage:    jetstream.FileStorage,
 		Duplicates: StreamDuplicates,
+		MaxAge:     maxAge,
+		MaxBytes:   maxBytes,
 	})
 	if err != nil {
 		return fmt.Errorf("worker: ensure stream %s: %w", StreamName, err)

@@ -65,9 +65,11 @@ type PhoneLookup interface {
 // contacts (emergency) and staff roles (safety) are not wired yet and are
 // reported as model.ErrRecipientUnresolved.
 //
-// The phone number is looked up on every call and never stored or logged.
-// A failing identity provider is an error, so the caller retries; an
-// identity without a phone resolves with an empty phone (SMS is skipped).
+// Resolve uses membership only (kind, ref, language) so a Kratos outage
+// cannot block consuming DeliveryRequested. PhoneFor calls the identity
+// provider at SMS send time, outside any database transaction; a failure
+// is an error so the timer retries. An identity without a phone returns
+// "" (SMS is skipped). Phones are never stored or logged.
 type Recipients struct {
 	Members MemberLookup
 	Phones  PhoneLookup
@@ -75,7 +77,8 @@ type Recipients struct {
 
 var _ notifyport.Recipients = (*Recipients)(nil)
 
-// Resolve resolves a recipient form to its delivery target.
+// Resolve resolves a recipient form to kind, ref and language. It does not
+// look up phones.
 func (rc *Recipients) Resolve(ctx context.Context, r notifymodel.Recipient) ([]notifymodel.ResolvedRecipient, error) {
 	if r.MemberID == nil {
 		return nil, notifymodel.ErrRecipientUnresolved
@@ -87,13 +90,30 @@ func (rc *Recipients) Resolve(ctx context.Context, r notifymodel.Recipient) ([]n
 	if err != nil {
 		return nil, fmt.Errorf("recipients: member %s: %w", *r.MemberID, err)
 	}
+	return []notifymodel.ResolvedRecipient{{
+		Kind: notifymodel.RecipientKindMember, Ref: m.ID, Language: string(m.Lang),
+	}}, nil
+}
+
+// PhoneFor returns the member's phone from the identity provider, or "" when
+// the identity has none. kind/ref other than member are unresolved until
+// emergency/safety are wired.
+func (rc *Recipients) PhoneFor(ctx context.Context, kind string, ref uuid.UUID) (string, error) {
+	if kind != notifymodel.RecipientKindMember || ref == uuid.Nil {
+		return "", notifymodel.ErrRecipientUnresolved
+	}
+	m, err := rc.Members.Member(ctx, ref)
+	if errors.Is(err, membershipmodel.ErrMemberNotFound) {
+		return "", notifymodel.ErrRecipientUnresolved
+	}
+	if err != nil {
+		return "", fmt.Errorf("recipients: member %s: %w", ref, err)
+	}
 	phone, err := rc.Phones.Phone(ctx, m.IdentityID)
 	if err != nil {
-		return nil, fmt.Errorf("recipients: member %s: %w", m.ID, err)
+		return "", fmt.Errorf("recipients: member %s: %w", m.ID, err)
 	}
-	return []notifymodel.ResolvedRecipient{{
-		Kind: notifymodel.RecipientKindMember, Ref: m.ID, PhoneE164: phone, Language: string(m.Lang),
-	}}, nil
+	return phone, nil
 }
 
 const (

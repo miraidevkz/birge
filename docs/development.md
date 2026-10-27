@@ -62,23 +62,24 @@ See [architecture § Repository layout](architecture.md#repository-layout-monore
 | `BIRGE_SMS_PER_NUMBER_LIMIT`, `BIRGE_SMS_PER_NUMBER_WINDOW` | worker | `5`, `1h` | notify SMS guard: sends per number per window |
 | `BIRGE_SMS_GLOBAL_LIMIT`, `BIRGE_SMS_GLOBAL_WINDOW` | worker | `60`, `1m` | notify SMS guard: sends per process per window |
 | `BIRGE_SMS_DAILY_BUDGET` | worker | `1000` | notify SMS guard: sends per UTC day (does not block critical SMS) |
-| `BIRGE_SMS_TEXTS` | worker | empty | neutral fixed SMS bodies, JSON `{"<template>": {"kk": "...", "ru": "..."}}`; an SMS for a template without a text is skipped (and logged) |
+| `BIRGE_SMS_TEXTS` | worker | empty in `dev` | neutral fixed SMS bodies, JSON `{"<template>": {"kk": "...", "ru": "..."}}`; required when `BIRGE_DELIVERY_MODE` is not `dev`; an SMS for a template without a text is skipped (and logged) |
 | `BIRGE_DELIVERY_MODE` | worker | required | `dev` only: push and SMS are logged (notification ID and channel), not sent. There are no real providers yet, so any other value refuses to start rather than drop notifications |
+| `BIRGE_EVENTS_MAX_AGE` | worker | `720h` | JetStream EVENTS stream MaxAge (how long events are retained) |
+| `BIRGE_EVENTS_MAX_BYTES` | worker | `1073741824` (1 GiB) | JetStream EVENTS stream MaxBytes (size cap; oldest messages discarded first) |
 
 Health: `GET /healthz` answers 204 while the process runs; `GET /readyz` answers 204 when the database (and, for the worker, NATS) is reachable and 503 otherwise.
 
 ## Running locally
 
-Start PostgreSQL, NATS with JetStream and Kratos however you like (Compose files will come with `deploy/compose`). Create the keys under `secrets/`, which git ignores; never commit keys:
+Start PostgreSQL, NATS with JetStream and Kratos however you like (Compose files will come with `deploy/compose`). Create local development keys under `secrets/` (git-ignored; never commit keys). Production keys come from the secret store, not from `keygen`:
 
 ```sh
-mkdir -m 700 -p secrets
-openssl rand -base64 48 > secrets/pow.key
-openssl rand -base64 48 > secrets/hash.key
-tinkey create-keyset --key-template AES256_GCM --out-format json --out secrets/kek.json  # Tink's CLI
+go run ./cmd/birge keygen -dir secrets
+# writes kek.json, pow.key, hash.key, blind-index.key (mode 0600) and prints BIRGE_KEK_ID=local-1
+# refuses to overwrite an existing file
 ```
 
-Then, with the variables above exported:
+Then, with the variables above exported (point `BIRGE_*_KEY_FILE` / `BIRGE_KEK_KEYSET_FILE` at those paths and set `BIRGE_KEK_ID` to the printed id):
 
 ```sh
 go run ./cmd/birge migrate                       # idempotent; BIRGE_APPLY_ROLES=1 also applies db/roles.sql

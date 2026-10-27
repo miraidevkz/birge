@@ -117,8 +117,13 @@ func TestLoadValid(t *testing.T) {
 					t.Error("API settings not loaded")
 				}
 			}
-			if cmd == CommandWorker && (cfg.NATSURL == "" || cfg.SMSGuard.DailyBudget != 1000) {
-				t.Error("worker settings not loaded")
+			if cmd == CommandWorker {
+				if cfg.NATSURL == "" || cfg.SMSGuard.DailyBudget != 1000 {
+					t.Error("worker settings not loaded")
+				}
+				if cfg.EventsMaxAge != defaultEventsMaxAge || cfg.EventsMaxBytes != defaultEventsMaxBytes {
+					t.Errorf("events retention: age %s, bytes %d", cfg.EventsMaxAge, cfg.EventsMaxBytes)
+				}
 			}
 		})
 	}
@@ -154,7 +159,9 @@ func TestLoadRejects(t *testing.T) {
 		{"bad nats", CommandWorker, map[string]string{"NATS_URL": "http://nats.example.invalid"}, nil, "NATS_URL"},
 		{"no delivery mode", CommandWorker, map[string]string{"BIRGE_DELIVERY_MODE": ""}, nil, "no push or SMS provider is configured"},
 		{"unknown delivery mode", CommandWorker, map[string]string{"BIRGE_DELIVERY_MODE": "production"}, nil, "only \"dev\" is supported"},
+		{"sms texts required outside dev", CommandWorker, map[string]string{"BIRGE_DELIVERY_MODE": "production", "BIRGE_SMS_TEXTS": ""}, nil, "BIRGE_SMS_TEXTS is required"},
 		{"bad sms texts", CommandWorker, map[string]string{"BIRGE_SMS_TEXTS": "[1]"}, nil, "BIRGE_SMS_TEXTS"},
+		{"bad events max bytes", CommandWorker, map[string]string{"BIRGE_EVENTS_MAX_BYTES": "0"}, nil, "BIRGE_EVENTS_MAX_BYTES"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

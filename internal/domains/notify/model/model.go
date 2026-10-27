@@ -170,13 +170,13 @@ func (r DeliveryRequest) Validate() error {
 }
 
 // ResolvedRecipient is one delivery target after resolving a Recipient form.
-// Kind/Ref identify the target; PhoneE164 and Language are used only when
-// sending SMS and are never logged or stored.
+// Kind/Ref identify the target; Language selects the SMS text. Phones are
+// looked up separately via Recipients.PhoneFor at send time and are never
+// stored on this type or in the database.
 type ResolvedRecipient struct {
-	Kind      string // member | external
-	Ref       uuid.UUID
-	PhoneE164 string
-	Language  string // "kk" or "ru"
+	Kind     string // member | external
+	Ref      uuid.UUID
+	Language string // "kk" or "ru"
 }
 
 // Validate checks Kind and Ref.
@@ -190,14 +190,9 @@ func (r ResolvedRecipient) Validate() error {
 	return nil
 }
 
-// AsRecipient rebuilds the form needed to re-resolve phone/language at send time.
-// Never stores or returns the phone number.
+// AsRecipient rebuilds the form needed to re-resolve language at send time.
 func (r ResolvedRecipient) AsRecipient() Recipient {
-	ref := r.Ref
-	if r.Kind == RecipientKindExternal {
-		return Recipient{TrustedContactID: &ref}
-	}
-	return Recipient{MemberID: &ref}
+	return RecipientForm(r.Kind, r.Ref)
 }
 
 // RecipientForm rebuilds the resolve form from a stored notification row.

@@ -10,11 +10,21 @@ import (
 	"birge/internal/domains/notify/model"
 )
 
-// Recipients resolves DeliveryRequested recipient forms to delivery targets.
-// Implemented later by emergency/safety; return model.ErrRecipientUnresolved when unknown.
-// External trusted contacts (phone only) come back as Kind=external with Ref=trusted_contact_id.
+// Recipients resolves DeliveryRequested recipient forms to delivery targets
+// and looks up phones at SMS send time. Implemented by wiring (membership +
+// Kratos admin); emergency/safety forms return model.ErrRecipientUnresolved
+// until those contexts are wired. External trusted contacts come back as
+// Kind=external with Ref=trusted_contact_id.
 type Recipients interface {
+	// Resolve returns kind, ref and language only. It must not look up phones
+	// or call the identity provider: a temporary identity outage must not
+	// block consuming DeliveryRequested.
 	Resolve(ctx context.Context, r model.Recipient) ([]model.ResolvedRecipient, error)
+	// PhoneFor returns the E.164 phone for a stored recipient, or "" when the
+	// identity has none. Callers invoke it outside any database transaction,
+	// right before sending SMS. A transient failure must be returned as an
+	// error so the timer retries; never treat it as "no phone".
+	PhoneFor(ctx context.Context, kind string, ref uuid.UUID) (string, error)
 }
 
 // PushMessage is a content-free push: the client renders Template with Params.

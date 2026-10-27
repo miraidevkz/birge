@@ -112,7 +112,7 @@ func TestWorkerDeliversCriticalNotification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := EnsureStream(ctx, js); err != nil {
+	if err := EnsureStream(ctx, js, defaultEventsMaxAge, defaultEventsMaxBytes); err != nil {
 		t.Fatal(err)
 	}
 	stream, err := js.Stream(ctx, StreamName)
@@ -122,6 +122,9 @@ func TestWorkerDeliversCriticalNotification(t *testing.T) {
 	info := stream.CachedInfo()
 	if info.Config.Duplicates != StreamDuplicates || info.Config.Storage != jetstream.FileStorage {
 		t.Errorf("stream config: duplicates %s, storage %v", info.Config.Duplicates, info.Config.Storage)
+	}
+	if info.Config.MaxAge != defaultEventsMaxAge || info.Config.MaxBytes != defaultEventsMaxBytes {
+		t.Errorf("stream retention: MaxAge %s, MaxBytes %d", info.Config.MaxAge, info.Config.MaxBytes)
 	}
 }
 

@@ -1,7 +1,8 @@
 // Package wiring assembles the Birge backend from environment configuration:
 // it is what cmd/birge runs for `birge api`, `birge worker` and
-// `birge migrate`. It owns no data and no business rules; it chooses the
-// adapters behind every port and the order of the HTTP middleware.
+// `birge migrate` (keygen lives in cmd/birge and needs no wiring). It owns
+// no data and no business rules; it chooses the adapters behind every port
+// and the order of the HTTP middleware.
 //
 // What it owns:
 //
@@ -19,8 +20,11 @@
 //     applied with goose under a PostgreSQL session lock, then db/roles.sql
 //     when asked (ADR-0006).
 //   - Adapters between contexts and platform: the membership Encryptor on the
-//     platform envelope, the notify Recipients on the membership service and
-//     the Kratos admin API, and the log-only push and SMS senders.
+//     platform envelope, the notify Recipients (membership for Resolve;
+//     Kratos admin only in PhoneFor at SMS send time), and the log-only
+//     push and SMS senders.
+//   - EVENTS stream retention (BIRGE_EVENTS_MAX_AGE / BIRGE_EVENTS_MAX_BYTES)
+//     applied in EnsureStream on worker start.
 //
 // Invariants:
 //

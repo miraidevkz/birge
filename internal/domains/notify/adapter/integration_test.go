@@ -99,12 +99,12 @@ func TestCriticalLadderWithPostgresTimer(t *testing.T) {
 		Recipients: &notifytest.FakeRecipients{
 			ByMember: map[uuid.UUID]model.ResolvedRecipient{
 				member: {
-					Kind:      model.RecipientKindMember,
-					Ref:       member,
-					PhoneE164: "+77001112233",
-					Language:  "ru",
+					Kind:     model.RecipientKindMember,
+					Ref:      member,
+					Language: "ru",
 				},
 			},
+			PhoneByMember: map[uuid.UUID]string{member: "+77001112233"},
 		},
 		Push:   &notifytest.FakePush{},
 		SMS:    sms,
@@ -215,12 +215,12 @@ func TestExternalSMSViaTimer(t *testing.T) {
 		Recipients: &notifytest.FakeRecipients{
 			ByTrustedContact: map[uuid.UUID]model.ResolvedRecipient{
 				contactID: {
-					Kind:      model.RecipientKindExternal,
-					Ref:       contactID,
-					PhoneE164: "+77005556677",
-					Language:  "ru",
+					Kind:     model.RecipientKindExternal,
+					Ref:      contactID,
+					Language: "ru",
 				},
 			},
+			PhoneByExternal: map[uuid.UUID]string{contactID: "+77005556677"},
 		},
 		Push:   &notifytest.FakePush{},
 		SMS:    sms,

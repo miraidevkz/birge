@@ -41,6 +41,10 @@ const (
 	// the 15-minute escalation backup.
 	maxCriticalSMSAfter = 15 * time.Minute
 	minKeyBytes         = 32
+	// Default JetStream EVENTS retention: 30 days / 1 GiB.
+	defaultEventsMaxAge   = 720 * time.Hour
+	defaultEventsMaxBytes = int64(1 << 30)
+	maxEventsMaxAge       = 8760 * time.Hour // 1 year
 )
 
 // Config is everything a subcommand needs, read from the environment by Load.
@@ -83,6 +87,11 @@ type Config struct {
 	CriticalSMSAfter time.Duration
 	DeliveryMode     string
 	ApplyRoles       bool
+
+	// EventsMaxAge / EventsMaxBytes bound JetStream EVENTS stream retention
+	// (CreateOrUpdateStream on worker start).
+	EventsMaxAge   time.Duration
+	EventsMaxBytes int64
 }
 
 // String redacts the configuration so that an accidental %v cannot print secrets.
@@ -145,6 +154,8 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 			DailyBudget:     l.positiveInt("BIRGE_SMS_DAILY_BUDGET", 1000),
 		}
 		cfg.SMSTexts = l.smsTexts("BIRGE_SMS_TEXTS")
+		cfg.EventsMaxAge = l.duration("BIRGE_EVENTS_MAX_AGE", defaultEventsMaxAge, maxEventsMaxAge)
+		cfg.EventsMaxBytes = l.positiveInt64("BIRGE_EVENTS_MAX_BYTES", defaultEventsMaxBytes)
 		// No real push or SMS provider exists yet. Dropping notifications
 		// silently is worse than not starting, so only the explicit
 		// development mode may run with the log-only senders.
@@ -154,6 +165,11 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 			l.fail("BIRGE_DELIVERY_MODE: no push or SMS provider is configured; set BIRGE_DELIVERY_MODE=dev to use the log-only senders in development")
 		default:
 			l.fail("BIRGE_DELIVERY_MODE: only \"dev\" is supported until real push and SMS providers exist")
+		}
+		// Outside development, SMS bodies must be configured: an empty map
+		// would skip every SMS, including critical ones.
+		if cfg.DeliveryMode != DeliveryModeDev && len(cfg.SMSTexts) == 0 {
+			l.fail("BIRGE_SMS_TEXTS is required when BIRGE_DELIVERY_MODE is not dev")
 		}
 	}
 	if err := l.result(); err != nil {
@@ -333,6 +349,19 @@ func (l *loader) positiveInt(name string, def int) int {
 	n, err := strconv.Atoi(v)
 	if err != nil || n <= 0 {
 		l.fail(name + ": must be a positive integer")
+		return def
+	}
+	return n
+}
+
+func (l *loader) positiveInt64(name string, def int64) int64 {
+	v := strings.TrimSpace(l.getenv(name))
+	if v == "" {
+		return def
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n <= 0 {
+		l.fail(name + ": must be a positive integer (bytes)")
 		return def
 	}
 	return n

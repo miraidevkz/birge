@@ -64,9 +64,10 @@ func (s *Service) log() *slog.Logger {
 // HandleDeliveryRequested processes one notify.DeliveryRequested event.
 // eventID is the envelope id used for processed_events deduplication.
 // Resolve runs before MarkProcessed so a temporary Recipients failure can
-// retry without burning the dedup slot. Push and immediate external SMS are
-// scheduled as platform timers in the same transaction; providers are
-// contacted by the timer handlers after commit (never inside the consumer txn).
+// retry without burning the dedup slot. Resolve must not look up phones: a
+// Kratos outage must not lose the event. Push and immediate external SMS are
+// scheduled as platform timers in the same transaction; providers and
+// PhoneFor run in the timer handlers after commit (never inside the consumer txn).
 func (s *Service) HandleDeliveryRequested(ctx context.Context, eventID uuid.UUID, req model.DeliveryRequest) error {
 	if eventID == uuid.Nil {
 		return fmt.Errorf("%w: event id", model.ErrInvalidInput)
@@ -267,9 +268,10 @@ func (s *Service) finishPush(ctx context.Context, n model.Notification, devices 
 }
 
 // HandleExternalSMS sends SMS immediately for an external recipient (any class).
-// Phone is re-resolved at send time from recipient_kind/ref; never stored.
-// Idempotent on delivery status. At-least-once edge: provider accept + failed
-// status update may cause a duplicate send on timer retry.
+// Phone is looked up via PhoneFor at send time, outside any database
+// transaction, and never stored. Idempotent on delivery status. At-least-once
+// edge: provider accept + failed status update may cause a duplicate send on
+// timer retry.
 func (s *Service) HandleExternalSMS(ctx context.Context, notificationID uuid.UUID) error {
 	return s.sendSMS(ctx, notificationID, smsModeExternal)
 }
@@ -277,7 +279,8 @@ func (s *Service) HandleExternalSMS(ctx context.Context, notificationID uuid.UUI
 // HandleCriticalSMS is the timer handler for model.TimerCriticalSMS (member
 // recipients only). It sends at most one SMS when still unacknowledged.
 // Critical SMS uses the guard without the daily budget breaker; other guard
-// rejections are logged as CriticalSMSBlocked and marked failed.
+// rejections are logged as CriticalSMSBlocked and marked failed. A PhoneFor
+// failure fails the timer run so it retries; it never drops the SMS silently.
 func (s *Service) HandleCriticalSMS(ctx context.Context, notificationID uuid.UUID) error {
 	return s.sendSMS(ctx, notificationID, smsModeCritical)
 }
@@ -296,15 +299,16 @@ func (s *Service) sendSMS(ctx context.Context, notificationID uuid.UUID, mode sm
 
 	var (
 		n          model.Notification
-		phone      string
-		lang       string
 		skipReason string
 		deliveryID uuid.UUID
 		attempts   int32
-		send       bool
+		ready      bool
 		failGuard  bool
 	)
 
+	// Load and claim the delivery inside a short transaction. Phone lookup and
+	// the provider call stay outside so a Kratos outage does not hold a pool
+	// connection and can retry without losing the notification.
 	err := s.Store.InTx(ctx, func(tx port.Tx) error {
 		var err error
 		n, err = tx.GetNotification(ctx, notificationID)
@@ -356,29 +360,44 @@ func (s *Service) sendSMS(ctx context.Context, notificationID uuid.UUID, mode sm
 		} else {
 			deliveryID = id
 		}
-
-		resolved, err := s.Recipients.Resolve(ctx, model.RecipientForm(n.RecipientKind, n.RecipientRef))
-		if err != nil {
-			return err
-		}
-		if len(resolved) == 0 || resolved[0].PhoneE164 == "" {
-			skipReason = "no_phone"
-			return tx.UpdateDelivery(ctx, deliveryID, model.StatusSkipped, attempts, nil, now)
-		}
-		phone = resolved[0].PhoneE164
-		lang = resolved[0].Language
-		send = true
+		ready = true
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	if !send {
+	if !ready {
 		event := "CriticalSMSSkipped"
 		if mode == smsModeExternal {
 			event = "ExternalSMSSkipped"
 		}
 		s.log().Info("sms skipped", "event", event, "notification_id", notificationID, "reason", skipReason)
+		return nil
+	}
+
+	resolved, err := s.Recipients.Resolve(ctx, model.RecipientForm(n.RecipientKind, n.RecipientRef))
+	if err != nil {
+		return fmt.Errorf("resolve recipient for sms: %w", err)
+	}
+	lang := "ru"
+	if len(resolved) > 0 && resolved[0].Language != "" {
+		lang = resolved[0].Language
+	}
+
+	phone, err := s.Recipients.PhoneFor(ctx, n.RecipientKind, n.RecipientRef)
+	if err != nil {
+		// Leave delivery pending so the timer retries with backoff.
+		return fmt.Errorf("phone for sms: %w", err)
+	}
+	if phone == "" {
+		_ = s.Store.InTx(ctx, func(tx port.Tx) error {
+			return tx.UpdateDelivery(ctx, deliveryID, model.StatusSkipped, attempts, nil, s.Clock.Now().UTC())
+		})
+		event := "CriticalSMSSkipped"
+		if mode == smsModeExternal {
+			event = "ExternalSMSSkipped"
+		}
+		s.log().Info("sms skipped", "event", event, "notification_id", notificationID, "reason", "no_phone")
 		return nil
 	}
 
