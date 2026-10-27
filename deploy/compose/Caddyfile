@@ -1,0 +1,16 @@
+# Development web client on one origin with the API, so the browser needs no
+# CORS: /v1 and /auth go to the birge api, everything else is the exported
+# Expo web app (apps/mobile/dist, a single-page app).
+:8081 {
+	handle /v1/* {
+		reverse_proxy api:8080
+	}
+	handle /auth/* {
+		reverse_proxy api:8080
+	}
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

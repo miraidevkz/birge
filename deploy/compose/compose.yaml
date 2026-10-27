@@ -1,7 +1,7 @@
 # Development stack: PostgreSQL, NATS JetStream, Kratos and the birge api and
 # worker. Development only: trust authentication, generated keys, push and SMS
 # logged instead of sent. Only the API is published, on 127.0.0.1:8080.
-# Start with ./up.sh (it creates the git-ignored .env with the Kratos secret).
+# Start with ./up.sh.
 name: birge-dev
 
 x-birge-env: &birge-env
@@ -17,6 +17,8 @@ x-birge-env: &birge-env
   BIRGE_SMS_ALLOWED_PREFIXES: ${BIRGE_SMS_ALLOWED_PREFIXES:-+77}
   BIRGE_PRACTICES_BASE_URL: https://objects.example.invalid
   BIRGE_DELIVERY_MODE: dev
+  # The web client below; native clients send no Origin and stay allowed.
+  BIRGE_CHAT_WS_ORIGINS: localhost:8081
 
 services:
   postgres:
@@ -47,25 +49,37 @@ services:
 
   kratos:
     image: oryd/kratos:v1.3.1
-    command: ["serve", "-c", "/etc/config/kratos/kratos.yml", "--dev", "--watch-courier"]
+    # Secrets come from the volume keygen fills, never from the tree.
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        export SECRETS_DEFAULT=$$(cat /secrets/kratos-secret) SECRETS_COOKIE=$$(cat /secrets/kratos-secret)
+        SECRETS_CIPHER=$$(cat /secrets/kratos-cipher) &&
+        exec kratos serve -c /etc/config/kratos/kratos.yml --dev --watch-courier
     environment:
       DSN: postgres://kratos@postgres:5432/kratos?sslmode=disable
-      SECRETS_DEFAULT: ${KRATOS_SECRET:?run ./up.sh}
-      SECRETS_COOKIE: ${KRATOS_SECRET:?run ./up.sh}
-      SECRETS_CIPHER: ${KRATOS_CIPHER:?run ./up.sh}
     volumes:
       - ./kratos:/etc/config/kratos:ro
+      - secrets:/secrets:ro
     depends_on:
       kratos-migrate: { condition: service_completed_successfully }
+      keygen: { condition: service_completed_successfully }
 
-  # Writes the development keys once into the secrets volume; keygen refuses
-  # to overwrite, so later starts keep the same keys (and readable data).
-  # Runs as root only to hand the new volume to the image's birge user.
+  # Writes the development keys and the Kratos secrets once into the secrets
+  # volume; later starts keep them (and the data stays readable). Runs as
+  # root only to hand the new volume to the image's birge user.
   keygen:
     build: { context: ../.., dockerfile: deploy/compose/Dockerfile }
     image: birge-dev:local
     user: "0:0"
-    entrypoint: ["sh", "-c", "test -f /secrets/kek.json || { birge keygen -dir /secrets && chown -R birge /secrets; }"]
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        umask 077 &&
+        { test -f /secrets/kek.json || birge keygen -dir /secrets; } &&
+        { test -f /secrets/kratos-secret || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >/secrets/kratos-secret; } &&
+        { test -f /secrets/kratos-cipher || od -An -tx1 -N16 /dev/urandom | tr -d ' \n' >/secrets/kratos-cipher; } &&
+        chown -R birge /secrets && chmod 0644 /secrets/kratos-secret /secrets/kratos-cipher
     volumes:
       - secrets:/secrets
 
@@ -101,6 +115,21 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
       nats: { condition: service_started }
+
+  # The exported web app (./up.sh web builds it) on 127.0.0.1:8081. Browsers
+  # need a secure context for the sign-in proof-of-work (WebCrypto), and
+  # localhost is one: from another machine use `ssh -L 8081:localhost:8081`.
+  # Recreated after every export: the export replaces the dist directory.
+  web:
+    image: caddy:2.10.2-alpine
+    profiles: [web]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../../apps/mobile/dist:/srv:ro
+    ports:
+      - "127.0.0.1:8081:8081"
+    depends_on:
+      api: { condition: service_started }
 
 volumes:
   pgdata:

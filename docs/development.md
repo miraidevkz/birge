@@ -132,11 +132,12 @@ The quickest way is the development stack in `deploy/compose` (Docker or Colima 
 
 ```sh
 deploy/compose/up.sh          # PostgreSQL, NATS, Kratos (phone + SMS code), birge migrate, api, worker
+deploy/compose/up.sh web      # web client on http://localhost:8081 (needs Node and npm ci)
 deploy/compose/up.sh codes    # latest SMS texts Kratos queued: there is no SMS provider in development
 deploy/compose/up.sh down     # stop; data volumes stay
 ```
 
-It publishes only the API on `127.0.0.1:8080` (the auth gateway at `/auth/`). Keys are generated once into a volume, the Kratos secrets into the git-ignored `deploy/compose/.env`; push and SMS are logged, not sent. A phone on USB reaches it with `adb reverse tcp:8080 tcp:8080`, which matches the app's default URLs. Allowed sign-in prefixes default to `+77`; override with `BIRGE_SMS_ALLOWED_PREFIXES`.
+It publishes only the API on `127.0.0.1:8080` (the auth gateway at `/auth/`). Keys and the Kratos secrets are generated once into a volume; push and SMS are logged, not sent. A phone on USB reaches it with `adb reverse tcp:8080 tcp:8080`, which matches the app's default URLs. Android release builds refuse plain HTTP: build the APK with `BIRGE_DEV_CLEARTEXT=1` to allow it (development only). `deploy/compose/up.sh web` exports the web client against the stack and serves it with the API on `http://localhost:8081`; the sign-in proof-of-work needs WebCrypto, which browsers allow only in a secure context, so from another machine open it through `ssh -L 8081:localhost:8081 <host>`. Allowed sign-in prefixes default to `+77`; override with `BIRGE_SMS_ALLOWED_PREFIXES`.
 
 To run the binaries yourself instead, start PostgreSQL, NATS with JetStream and Kratos however you like. Create local development keys under `secrets/` (git-ignored; never commit keys). Production keys come from the secret store, not from `keygen`:
 

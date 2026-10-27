@@ -3,10 +3,21 @@
 // serves every country deployment. Only public values belong here: the whole
 // `extra` object is embedded in the bundle and readable by anyone.
 import type { ConfigContext, ExpoConfig } from 'expo/config';
+import { type ConfigPlugin, withAndroidManifest } from 'expo/config-plugins';
 
 const env = process.env;
 
-export default ({ config }: ConfigContext): ExpoConfig => ({
+// Android release builds refuse plain HTTP. A development build that talks to
+// the local stack (deploy/compose, http://localhost:8080 over adb reverse)
+// opts in with BIRGE_DEV_CLEARTEXT=1; every other build keeps HTTPS only.
+const withDevCleartext: ConfigPlugin = (cfg) =>
+  withAndroidManifest(cfg, (mod) => {
+    const app = mod.modResults.manifest.application?.[0];
+    if (app) app.$['android:usesCleartextTraffic'] = 'true';
+    return mod;
+  });
+
+const appConfig = (config: ConfigContext['config']): ExpoConfig => ({
   ...config,
   name: 'Birge',
   slug: 'birge',
@@ -41,3 +52,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     crisisPhones: env.EXPO_PUBLIC_CRISIS_PHONES ?? '[]',
   },
 });
+
+export default ({ config }: ConfigContext): ExpoConfig =>
+  env.BIRGE_DEV_CLEARTEXT === '1' ? withDevCleartext(appConfig(config)) : appConfig(config);
