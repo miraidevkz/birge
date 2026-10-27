@@ -16,7 +16,6 @@ package session
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,12 +23,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"birge/internal/platform/auth"
+	"birge/internal/platform/bearer"
 	"birge/internal/platform/clock"
 	"birge/internal/platform/httpapi"
 )
@@ -66,7 +65,7 @@ type Middleware struct {
 	whoami *url.URL
 	client *http.Client
 	ttl    time.Duration
-	cache  *lru
+	cache  *bearer.Cache[auth.Principal]
 	anon   *http.ServeMux
 	clock  clock.Clock
 	logger *slog.Logger
@@ -98,7 +97,7 @@ func New(cfg Config) (*Middleware, error) {
 	if size <= 0 {
 		size = defaultCacheSize
 	}
-	m.cache = newLRU(size)
+	m.cache = bearer.NewCache[auth.Principal](size)
 	if m.clock == nil {
 		m.clock = clock.System{}
 	}
@@ -137,7 +136,7 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		token, ok := bearerToken(r)
+		token, ok := bearer.Token(r, maxTokenLen)
 		if !ok {
 			unauthorized(w)
 			return
@@ -167,24 +166,6 @@ func unauthorized(w http.ResponseWriter) {
 	httpapi.WriteProblem(w, http.StatusUnauthorized, "unauthenticated", "Sign in again.")
 }
 
-// bearerToken extracts a syntactically plausible token from the Authorization header.
-func bearerToken(r *http.Request) (string, bool) {
-	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
-	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return "", false
-	}
-	token = strings.TrimSpace(token)
-	if token == "" || len(token) > maxTokenLen {
-		return "", false
-	}
-	for i := 0; i < len(token); i++ {
-		if c := token[i]; c <= ' ' || c >= 0x7f {
-			return "", false
-		}
-	}
-	return token, true
-}
-
 var errInvalidSession = errors.New("invalid session")
 
 // whoamiResponse is the subset of the Kratos session we use.
@@ -198,9 +179,8 @@ type whoamiResponse struct {
 }
 
 func (m *Middleware) authenticate(ctx context.Context, token string) (auth.Principal, error) {
-	key := tokenKey(sha256.Sum256([]byte(token)))
 	now := m.clock.Now()
-	if p, ok := m.cache.get(key, now); ok {
+	if p, ok := m.cache.Get(token, now); ok {
 		return p, nil
 	}
 	s, err := m.callWhoami(ctx, token)
@@ -219,7 +199,7 @@ func (m *Middleware) authenticate(ctx context.Context, token string) (auth.Princ
 	if s.ExpiresAt.Before(expires) {
 		expires = s.ExpiresAt
 	}
-	m.cache.put(key, p, expires)
+	m.cache.Put(token, p, expires)
 	return p, nil
 }
 

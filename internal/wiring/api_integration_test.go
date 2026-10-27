@@ -26,6 +26,14 @@ import (
 const (
 	e2eToken       = "tok-e2e-valid-00000000"
 	e2eDisplayName = "Example Name"
+
+	// Staff access tokens known to the fake OIDC provider (fakeStaffIdP).
+	e2ePsychologistToken = "tok-e2e-staff-psychologist"
+	e2eModeratorToken    = "tok-e2e-staff-moderator"
+	e2eAdminToken        = "tok-e2e-staff-admin"
+	e2eStaffIssuer       = "https://idp.example.invalid/"
+	e2eStaffClientID     = "birge-api"
+	e2eStaffSecret       = "e2e-introspection-secret-not-real"
 )
 
 // syncBuffer is a log sink safe for the concurrent writes of an HTTP stack.
@@ -69,6 +77,37 @@ func fakeKratos(t *testing.T, identity uuid.UUID) *httptest.Server {
 		_, _ = fmt.Fprintf(w, `{"id":%q,"traits":{"phone":%q}}`, identity, testPhone)
 	})
 	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// fakeStaffIdP is a Hydra-style RFC 7662 introspection endpoint: it knows
+// the three staff tokens (each with WebAuthn in amr and one role in
+// ext.roles) and answers {"active": false} for anything else, including the
+// member session token.
+func fakeStaffIdP(t *testing.T) *httptest.Server {
+	t.Helper()
+	roles := map[string]string{
+		e2ePsychologistToken: "psychologist",
+		e2eModeratorToken:    "moderator",
+		e2eAdminToken:        "admin",
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id, secret, ok := r.BasicAuth(); !ok || id != e2eStaffClientID || secret != e2eStaffSecret {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		token := r.PostFormValue("token")
+		role, ok := roles[token]
+		if !ok {
+			_, _ = w.Write([]byte(`{"active":false}`))
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"active":true,"sub":"staff-%s","iss":%q,"aud":[%q],"client_id":"birge-admin",`+
+			`"exp":%d,"token_use":"access_token","ext":{"roles":[%q],"amr":["pwd","webauthn"]}}`,
+			role, e2eStaffIssuer, e2eStaffClientID, time.Now().Add(time.Hour).Unix(), role)
+	}))
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -125,7 +164,16 @@ func newE2E(t *testing.T) *e2e {
 	env["KRATOS_PUBLIC_URL"] = kratos.URL
 	env["KRATOS_ADMIN_URL"] = kratos.URL
 	env["BIRGE_MIN_APP_VERSION"] = "1.0.0"
+	staffIdP := fakeStaffIdP(t)
+	env["BIRGE_STAFF_INTROSPECTION_URL"] = staffIdP.URL + "/admin/oauth2/introspect"
+	env["BIRGE_STAFF_CLIENT_ID"] = e2eStaffClientID
+	env["BIRGE_STAFF_CLIENT_SECRET_FILE"] = "/keys/staff-client-secret"
+	env["BIRGE_STAFF_ISSUER"] = e2eStaffIssuer
+	env["BIRGE_STAFF_AUDIENCE"] = e2eStaffClientID
+	env["BIRGE_STAFF_ROLES_CLAIM"] = "ext.roles"
+	env["BIRGE_STAFF_MFA_AMR"] = "webauthn,hwk"
 	files := validFiles(t)
+	files["/keys/staff-client-secret"] = []byte(e2eStaffSecret + "\n")
 	cfg, err := load(env, files, CommandAPI)
 	if err != nil {
 		t.Fatal(err)
@@ -250,10 +298,68 @@ func TestAPIEndToEnd(t *testing.T) {
 		t.Errorf("request log lacks the route pattern: %s", logs)
 	}
 
-	// Staff authentication is not built yet: a member session must not reach
-	// the escalation queue (session never sets Staff=true → 403).
-	if rec := do(t, h, http.MethodGet, "/v1/staff/escalations", e2eToken, ""); rec.Code != http.StatusForbidden {
-		t.Fatalf("GET /v1/staff/escalations with member token: %d %s, want 403", rec.Code, rec.Body)
+	// Staff routes authenticate against the OIDC provider, never Kratos: a
+	// member session token is unknown there (introspection inactive), so it
+	// is 401, not the 403 of a known caller without a staff role.
+	if rec := do(t, h, http.MethodGet, "/v1/staff/escalations", e2eToken, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /v1/staff/escalations with member token: %d %s, want 401", rec.Code, rec.Body)
+	}
+}
+
+func TestAPIStaffAuth(t *testing.T) {
+	e := newE2E(t)
+	h := e.handler(e.cfg)
+
+	rec := do(t, h, http.MethodGet, "/v1/staff/escalations", e2ePsychologistToken, "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("psychologist GET /v1/staff/escalations: %d %s", rec.Code, rec.Body)
+	}
+	// A staff token is unknown to Kratos: it does not open member routes.
+	if rec := do(t, h, http.MethodGet, "/v1/me", e2ePsychologistToken, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("GET /v1/me with staff token: %d, want 401", rec.Code)
+	}
+	if rec := do(t, h, http.MethodGet, "/v1/staff/escalations", e2eToken, ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("member token on staff route: %d, want 401", rec.Code)
+	}
+	if rec := do(t, h, http.MethodGet, "/v1/staff/escalations", "", ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("staff route without token: %d, want 401", rec.Code)
+	}
+
+	// Adding a duty shift is admin only (safety service authorization).
+	now := time.Now().UTC()
+	shift := fmt.Sprintf(`{"staffId":%q,"role":"psychologist","startsAt":%q,"endsAt":%q,"backup":false,"phone":"+77001234567"}`,
+		uuid.NewString(), now.Add(time.Hour).Format(time.RFC3339), now.Add(9*time.Hour).Format(time.RFC3339))
+	if rec := do(t, h, http.MethodPost, "/v1/staff/duty-roster", e2eModeratorToken, shift); rec.Code != http.StatusForbidden {
+		t.Fatalf("moderator POST /v1/staff/duty-roster: %d %s, want 403", rec.Code, rec.Body)
+	}
+	if rec := do(t, h, http.MethodPost, "/v1/staff/duty-roster", e2eAdminToken, shift); rec.Code != http.StatusCreated {
+		t.Fatalf("admin POST /v1/staff/duty-roster: %d %s, want 201", rec.Code, rec.Body)
+	}
+
+	logs := e.logs.String()
+	for _, secret := range []string{e2ePsychologistToken, e2eModeratorToken, e2eAdminToken, e2eStaffSecret, "+77001234567"} {
+		if strings.Contains(logs, secret) {
+			t.Errorf("logs contain %q", secret)
+		}
+	}
+}
+
+// Without a configured provider staff routes are closed with 503 and a
+// member session never stands in for staff authentication.
+func TestAPIStaffAuthNotConfigured(t *testing.T) {
+	e := newE2E(t)
+	cfg := e.cfg
+	cfg.StaffAuth = nil
+	h := e.handler(cfg)
+	for _, token := range []string{"", e2eToken, e2ePsychologistToken} {
+		rec := do(t, h, http.MethodGet, "/v1/staff/escalations", token, "")
+		if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "staff_auth_not_configured") {
+			t.Fatalf("token %q: %d %s, want 503 staff_auth_not_configured", token, rec.Code, rec.Body)
+		}
+	}
+	// Member routes are unaffected.
+	if rec := do(t, h, http.MethodGet, "/v1/me", e2eToken, ""); rec.Code != http.StatusOK {
+		t.Fatalf("GET /v1/me: %d %s", rec.Code, rec.Body)
 	}
 }
 

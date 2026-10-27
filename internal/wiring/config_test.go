@@ -373,3 +373,107 @@ func TestUnknownCommand(t *testing.T) {
 		t.Fatal("unknown command accepted")
 	}
 }
+
+// staffEnv adds a complete Keycloak-style staff provider configuration.
+func staffEnv(env map[string]string, files fakeFiles) {
+	env["BIRGE_STAFF_INTROSPECTION_URL"] = "https://keycloak.example.invalid/realms/birge/protocol/openid-connect/token/introspect"
+	env["BIRGE_STAFF_CLIENT_ID"] = "birge-api"
+	env["BIRGE_STAFF_CLIENT_SECRET_FILE"] = "/keys/staff-secret"
+	env["BIRGE_STAFF_ISSUER"] = "https://keycloak.example.invalid/realms/birge/"
+	env["BIRGE_STAFF_AUDIENCE"] = "birge-admin"
+	env["BIRGE_STAFF_ROLES_CLAIM"] = "realm_access.roles"
+	env["BIRGE_STAFF_ROLE_MAP"] = "birge-psy=psychologist, birge-mod=moderator,birge-legal=lawyer,birge-admin=admin"
+	env["BIRGE_STAFF_MFA_ACR"] = "2, 3"
+	files["/keys/staff-secret"] = []byte("staff-secret-not-real\n")
+}
+
+func TestLoadStaffAuth(t *testing.T) {
+	t.Run("unset", func(t *testing.T) {
+		cfg, err := load(validEnv(t), validFiles(t), CommandAPI)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.StaffAuth != nil {
+			t.Fatal("staff auth configured without BIRGE_STAFF_* variables")
+		}
+	})
+	t.Run("complete", func(t *testing.T) {
+		env, files := validEnv(t), validFiles(t)
+		staffEnv(env, files)
+		cfg, err := load(env, files, CommandAPI)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := cfg.StaffAuth
+		if s == nil {
+			t.Fatal("staff auth not loaded")
+		}
+		if s.ClientSecret != "staff-secret-not-real" {
+			t.Error("client secret not read from the file (or newline kept)")
+		}
+		if s.Issuer != "https://keycloak.example.invalid/realms/birge/" {
+			t.Errorf("issuer not kept verbatim: %q", s.Issuer)
+		}
+		if s.RoleMap["birge-psy"] != "psychologist" || s.RoleMap["birge-legal"] != "lawyer" || len(s.RoleMap) != 4 {
+			t.Errorf("role map = %v", s.RoleMap)
+		}
+		if strings.Join(s.MFAACR, ",") != "2,3" || len(s.MFAAMR) != 0 || s.RolesClaim != "realm_access.roles" {
+			t.Errorf("mfa / claim: acr %v amr %v claim %q", s.MFAACR, s.MFAAMR, s.RolesClaim)
+		}
+		for _, f := range []string{fmt.Sprintf("%v", cfg), fmt.Sprintf("%+v", cfg)} {
+			if strings.Contains(f, "staff-secret-not-real") {
+				t.Error("formatted config leaks the client secret")
+			}
+		}
+	})
+	t.Run("worker ignores it", func(t *testing.T) {
+		env, files := validEnv(t), validFiles(t)
+		staffEnv(env, files)
+		cfg, err := load(env, files, CommandWorker)
+		if err != nil || cfg.StaffAuth != nil {
+			t.Fatalf("worker: %v, staff auth %v", err, cfg.StaffAuth != nil)
+		}
+	})
+	rejects := []struct {
+		name    string
+		set     map[string]string
+		files   func(fakeFiles)
+		wantErr []string
+	}{
+		{"partial", map[string]string{"BIRGE_STAFF_INTROSPECTION_URL": "", "BIRGE_STAFF_ISSUER": "", "BIRGE_STAFF_CLIENT_SECRET_FILE": ""}, nil,
+			[]string{"BIRGE_STAFF_INTROSPECTION_URL is required", "BIRGE_STAFF_ISSUER is required", "BIRGE_STAFF_CLIENT_SECRET_FILE is required"}},
+		{"no mfa rule", map[string]string{"BIRGE_STAFF_MFA_ACR": " , "}, nil, []string{"BIRGE_STAFF_MFA_ACR or BIRGE_STAFF_MFA_AMR is required"}},
+		{"unknown role", map[string]string{"BIRGE_STAFF_ROLE_MAP": "x=root"}, nil, []string{"BIRGE_STAFF_ROLE_MAP"}},
+		{"role map syntax", map[string]string{"BIRGE_STAFF_ROLE_MAP": "admin"}, nil, []string{"BIRGE_STAFF_ROLE_MAP"}},
+		{"issuer not a url", map[string]string{"BIRGE_STAFF_ISSUER": "keycloak"}, nil, []string{"BIRGE_STAFF_ISSUER"}},
+		{"introspection credentials in url", map[string]string{"BIRGE_STAFF_INTROSPECTION_URL": "https://u:p@idp.example.invalid/introspect"}, nil, []string{"BIRGE_STAFF_INTROSPECTION_URL"}},
+		{"missing secret file", nil, func(f fakeFiles) { delete(f, "/keys/staff-secret") }, []string{"BIRGE_STAFF_CLIENT_SECRET_FILE: cannot read"}},
+		{"empty secret file", nil, func(f fakeFiles) { f["/keys/staff-secret"] = []byte(" \n") }, []string{"BIRGE_STAFF_CLIENT_SECRET_FILE: the secret file is empty"}},
+		{"bad claim path", map[string]string{"BIRGE_STAFF_ROLES_CLAIM": "a..b"}, nil, []string{"BIRGE_STAFF_*", "RolesClaim"}},
+		{"bad mfa value", map[string]string{"BIRGE_STAFF_MFA_AMR": `web"authn`}, nil, []string{"BIRGE_STAFF_*", "MFA values"}},
+	}
+	for _, tt := range rejects {
+		t.Run(tt.name, func(t *testing.T) {
+			env, files := validEnv(t), validFiles(t)
+			staffEnv(env, files)
+			for k, v := range tt.set {
+				env[k] = v
+			}
+			if tt.files != nil {
+				tt.files(files)
+			}
+			_, err := load(env, files, CommandAPI)
+			if err == nil {
+				t.Fatalf("accepted, want %v", tt.wantErr)
+			}
+			for _, want := range tt.wantErr {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %v, want it to contain %q", err, want)
+				}
+			}
+			if strings.Contains(err.Error(), "staff-secret-not-real") {
+				t.Error("error contains the client secret")
+			}
+		})
+	}
+}

@@ -68,7 +68,8 @@ Status: wave 0 baseline · Method: STRIDE per trust boundary and critical flow �
 
 | Threat | Mitigation | Ref |
 |---|---|---|
-| S: stolen staff credentials | VPN, OIDC with WebAuthn, MFA verified via `acr`/`amr`, short sessions, back-channel logout | ADR-0008 |
+| S: stolen staff credentials | VPN, OIDC with WebAuthn, MFA verified via `acr`/`amr` on every request, tokens checked by introspection (issuer, audience, expiry), revocation effective within the 60 s cache; back-channel logout planned | ADR-0008 |
+| S: member session or foreign token used on staff routes | staff routes authenticate only against the staff IdP (separate middleware, no fallback to member sessions; 503 when unconfigured); refresh/ID tokens and other audiences refused | ADR-0008 |
 | I: snooping by staff | sensitive fields hidden by default; reveal = audit entry; psychologists see AI chats only for their taken escalation | requirements § 6 |
 | R: staff denies an action | append-only audit log | ADR-0006 |
 | E: mentor exceeding rights | room-scoped, limited moderation rights, no personal data | ADR-0016 |

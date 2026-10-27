@@ -12,7 +12,8 @@
 //     never from the environment itself. docs/development.md § Configuration
 //     lists the variables.
 //   - The API stack (NewAPIHandler): request log → /auth/ gateway → /v1 rate
-//     limit → session → request validation → generated handlers (meta,
+//     limit → authentication (staffauth for /v1/staff/, the member session
+//     everywhere else) → request validation → generated handlers (meta,
 //     membership, privacy, notify, safety, wellbeing).
 //   - The worker (RunWorker): outbox relay to JetStream, the notify
 //     DeliveryRequested consumer and the timers worker with notify, privacy,

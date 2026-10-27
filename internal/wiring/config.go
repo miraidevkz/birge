@@ -23,6 +23,7 @@ import (
 	"birge/internal/platform/config"
 	"birge/internal/platform/crypto"
 	"birge/internal/platform/ratelimit"
+	"birge/internal/platform/staffauth"
 	"birge/presets"
 )
 
@@ -119,6 +120,11 @@ type Config struct {
 
 	// DemoPresets lists embedded presets in use (logged once at Warn on start).
 	DemoPresets []string
+	// StaffAuth configures staff token introspection (ADR-0008); it holds
+	// the client secret. Nil when no BIRGE_STAFF_* provider variable is set:
+	// staff routes then answer 503 and never fall back to member sessions.
+	// Clock, Logger and Client are filled in by NewAPIHandler.
+	StaffAuth *staffauth.Config
 }
 
 // String redacts the configuration so that an accidental %v cannot print secrets.
@@ -183,6 +189,7 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		cfg.Wellbeing.PracticesBaseURL = cfg.PracticesBaseURL
 		cfg.Wellbeing.TimeZone = cfg.TimeZone
 		cfg.Wellbeing.CrisisPhones = wellbeingCrisisPhones(cfg.CrisisPhones)
+		cfg.StaffAuth = l.staffAuth()
 	}
 	if worker {
 		cfg.NATSURL = l.natsURL("NATS_URL")
@@ -622,6 +629,121 @@ func (l *loader) timeZone(name, def string) string {
 		return def
 	}
 	return v
+}
+
+// staffAuthVars are the variables of the staff identity provider. Setting
+// any of them turns staff authentication on and makes the required ones
+// mandatory, so a half-configured provider refuses to start instead of
+// silently leaving staff routes closed. (BIRGE_STAFF_SMS_LANG is unrelated.)
+var staffAuthVars = []string{
+	"BIRGE_STAFF_INTROSPECTION_URL", "BIRGE_STAFF_CLIENT_ID", "BIRGE_STAFF_CLIENT_SECRET_FILE",
+	"BIRGE_STAFF_ISSUER", "BIRGE_STAFF_AUDIENCE", "BIRGE_STAFF_ROLES_CLAIM", "BIRGE_STAFF_ROLE_MAP",
+	"BIRGE_STAFF_MFA_ACR", "BIRGE_STAFF_MFA_AMR",
+}
+
+// staffAuth reads the staff OIDC provider settings; nil when none is set.
+func (l *loader) staffAuth() *staffauth.Config {
+	set := false
+	for _, name := range staffAuthVars {
+		if strings.TrimSpace(l.getenv(name)) != "" {
+			set = true
+		}
+	}
+	if !set {
+		return nil
+	}
+	errsBefore := len(l.errs)
+	c := &staffauth.Config{
+		IntrospectionURL: l.httpURL("BIRGE_STAFF_INTROSPECTION_URL", true),
+		ClientID:         l.required("BIRGE_STAFF_CLIENT_ID"),
+		ClientSecret:     l.secretFile("BIRGE_STAFF_CLIENT_SECRET_FILE"),
+		Issuer:           l.issuer("BIRGE_STAFF_ISSUER"),
+		Audience:         l.required("BIRGE_STAFF_AUDIENCE"),
+		RolesClaim:       strings.TrimSpace(l.getenv("BIRGE_STAFF_ROLES_CLAIM")),
+		RoleMap:          l.roleMap("BIRGE_STAFF_ROLE_MAP"),
+		MFAACR:           l.list("BIRGE_STAFF_MFA_ACR"),
+		MFAAMR:           l.list("BIRGE_STAFF_MFA_AMR"),
+	}
+	if len(c.MFAACR) == 0 && len(c.MFAAMR) == 0 {
+		l.fail("BIRGE_STAFF_MFA_ACR or BIRGE_STAFF_MFA_AMR is required: MFA is mandatory for staff")
+	}
+	if len(l.errs) > errsBefore {
+		return nil
+	}
+	// The middleware's own checks (claim path, MFA value syntax) run once
+	// here so a bad value fails at startup. Its errors carry no values.
+	if _, err := staffauth.New(*c); err != nil {
+		l.fail("BIRGE_STAFF_*: " + err.Error())
+		return nil
+	}
+	return c
+}
+
+// secretFile reads a secret issued by someone else (an IdP client secret)
+// from the file named by name. Unlike keyFile there is no minimum length:
+// the provider decides its format. Trailing whitespace is removed.
+func (l *loader) secretFile(name string) string {
+	path := strings.TrimSpace(l.getenv(name))
+	if path == "" {
+		l.fail(name + " is required (path to a file holding the secret)")
+		return ""
+	}
+	b, err := l.readFile(path)
+	if err != nil {
+		l.fail(name + ": cannot read the secret file")
+		return ""
+	}
+	defer clear(b)
+	s := string(bytes.TrimRight(b, " \t\r\n"))
+	if s == "" {
+		l.fail(name + ": the secret file is empty")
+	}
+	return s
+}
+
+// issuer reads an OIDC issuer: an absolute http(s) URL kept verbatim,
+// because tokens are compared with it exactly (a trailing slash matters).
+func (l *loader) issuer(name string) string {
+	v := l.required(name)
+	if v == "" {
+		return ""
+	}
+	u, err := url.Parse(v)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
+		l.fail(name + ": must be the provider's issuer, an absolute http(s) URL exactly as in its tokens")
+		return ""
+	}
+	return v
+}
+
+// roleMap parses "<idp value>=<role>,..."; nil when unset (identity mapping).
+func (l *loader) roleMap(name string) map[string]string {
+	v := strings.TrimSpace(l.getenv(name))
+	if v == "" {
+		return nil
+	}
+	out := map[string]string{}
+	for _, pair := range strings.Split(v, ",") {
+		k, role, ok := strings.Cut(strings.TrimSpace(pair), "=")
+		k, role = strings.TrimSpace(k), strings.TrimSpace(role)
+		if !ok || k == "" || !staffauth.RoleIsValid(role) {
+			l.fail(name + ": must be <idp value>=<role>, comma-separated, with roles " + strings.Join(staffauth.Roles, ", "))
+			return nil
+		}
+		out[k] = role
+	}
+	return out
+}
+
+// list parses a comma-separated list, dropping empty items.
+func (l *loader) list(name string) []string {
+	var out []string
+	for _, s := range strings.Split(l.getenv(name), ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // questionnaireFile is the on-disk shape of BIRGE_QUESTIONNAIRE_FILE.

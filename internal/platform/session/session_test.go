@@ -208,18 +208,6 @@ func TestCacheHit(t *testing.T) {
 	}
 }
 
-func TestCacheKeyedByHash(t *testing.T) {
-	h := newHarness(t)
-	h.do(t, "GET", "/v1/members/me", "Bearer "+validToken)
-	h.mw.cache.mu.Lock()
-	defer h.mw.cache.mu.Unlock()
-	for k := range h.mw.cache.items {
-		if bytes.Contains(k[:], []byte(validToken[:8])) {
-			t.Fatal("cache key contains the raw token")
-		}
-	}
-}
-
 func TestKratosDown(t *testing.T) {
 	h := newHarness(t)
 	// Warm the cache, then take Kratos down.
@@ -282,28 +270,6 @@ func TestNoRedirectFollow(t *testing.T) {
 	}
 	if leaked.Load() {
 		t.Fatal("token forwarded on redirect")
-	}
-}
-
-func TestLRUBounded(t *testing.T) {
-	c := newLRU(2)
-	now := time.Now()
-	k := func(b byte) tokenKey { return tokenKey{b} }
-	c.put(k(1), auth.Principal{}, now.Add(time.Minute))
-	c.put(k(2), auth.Principal{}, now.Add(time.Minute))
-	c.get(k(1), now) // 1 is now most recent
-	c.put(k(3), auth.Principal{}, now.Add(time.Minute))
-	if c.len() != 2 {
-		t.Fatalf("len = %d, want 2", c.len())
-	}
-	if _, ok := c.get(k(2), now); ok {
-		t.Error("least recently used entry not evicted")
-	}
-	if _, ok := c.get(k(1), now); !ok {
-		t.Error("recent entry evicted")
-	}
-	if _, ok := c.get(k(3), now.Add(2*time.Minute)); ok {
-		t.Error("expired entry returned")
 	}
 }
 

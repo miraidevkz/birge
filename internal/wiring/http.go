@@ -35,6 +35,7 @@ import (
 	"birge/internal/platform/meta"
 	"birge/internal/platform/ratelimit"
 	"birge/internal/platform/session"
+	"birge/internal/platform/staffauth"
 )
 
 // AnonymousOperations are exactly the operations declared with "security: []"
@@ -62,13 +63,16 @@ type APIDeps struct {
 //     no query strings, no IPs, no headers);
 //  2. /auth/: the member sign-in gateway in front of Kratos (it has its own
 //     per-IP, per-number and global limits and the proof of work);
-//  3. /v1/: per-IP rate limit → session middleware (anonymous operations
-//     pass) → request validation → the generated handlers of meta,
-//     membership, privacy, notify, safety and wellbeing on one mux;
+//  3. /v1/: per-IP rate limit → authentication → request validation → the
+//     generated handlers of meta, membership, privacy, notify, safety and
+//     wellbeing on one mux. Authentication depends on the route:
+//     /v1/staff/ goes through staffauth (OIDC token introspection, MFA
+//     required; 503 when no provider is configured), everything else
+//     through the member session middleware (anonymous operations pass).
+//     The two never stand in for each other: a member session on a staff
+//     route is just an unknown token to the IdP (401), and a staff token on
+//     a member route is unknown to Kratos (401);
 //  4. /healthz (process alive) and /readyz (database reachable).
-//
-// Staff authentication is not built yet: the session middleware never sets
-// Staff=true, so staff endpoints stay unreachable (member sessions get 403).
 func NewAPIHandler(d APIDeps) (http.Handler, error) {
 	if d.Pool == nil || d.Envelope == nil || d.Logger == nil {
 		return nil, errors.New("wiring: API needs a pool, an envelope and a logger")
@@ -170,7 +174,24 @@ func NewAPIHandler(d APIDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("request validator: %w", err)
 	}
-	v1 := ratelimit.Middleware(limiter, clientIP)(sessions.Wrap(validator.Middleware(api)))
+	validated := validator.Middleware(api)
+	staff := staffauth.Unconfigured()
+	if cfg.StaffAuth != nil {
+		sc := *cfg.StaffAuth
+		sc.Clock, sc.Logger = d.Clock, d.Logger
+		mw, err := staffauth.New(sc)
+		if err != nil {
+			return nil, fmt.Errorf("wiring: %w", err)
+		}
+		staff = mw.Wrap(validated)
+	}
+	// The split uses a ServeMux like the API mux, so both read the path the
+	// same way (cleaning, escaped slashes): a request cannot be routed to a
+	// staff handler while being authenticated as a member route.
+	byAudience := http.NewServeMux()
+	byAudience.Handle("/v1/staff/", staff)
+	byAudience.Handle("/v1/", sessions.Wrap(validated))
+	v1 := ratelimit.Middleware(limiter, clientIP)(byAudience)
 
 	root := http.NewServeMux()
 	root.Handle("/auth/", gw)

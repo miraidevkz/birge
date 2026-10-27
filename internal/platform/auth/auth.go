@@ -1,5 +1,6 @@
 // Package auth carries the authenticated principal through the request context.
-// The session middleware (ADR-0008) sets it; services read it.
+// The session middleware (members) and the staffauth middleware (staff,
+// /v1/staff/*) set it (ADR-0008); services read it.
 package auth
 
 import (
@@ -13,8 +14,9 @@ type ctxKey struct{}
 // Principal is the authenticated caller.
 type Principal struct {
 	// IdentityID is the identity provider's ID (Kratos identity for members,
-	// OIDC subject mapped to a UUID for staff). Only membership uses it, to
-	// find or create the member.
+	// OIDC subject mapped to a UUID for staff, see staffauth.StaffID). For a
+	// member only membership uses it, to find or create the member; for staff
+	// it is the staff ID (audit actor, duty shifts).
 	IdentityID uuid.UUID
 	// MemberID is the membership member ID of a member session, set by the
 	// member-resolution middleware before any other context's handler runs.
