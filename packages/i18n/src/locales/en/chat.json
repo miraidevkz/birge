@@ -1,0 +1,37 @@
+{
+  "title": "Chats",
+  "rooms": {
+    "emptyTitle": "No chats yet",
+    "emptyDescription": "Join a district or topic chat, or accept a tea match to open a private chat.",
+    "kind": {
+      "district": "District",
+      "topic": "Topic",
+      "direct": "Private"
+    },
+    "join": "Join",
+    "leave": "Leave",
+    "muted": "Muted",
+    "discoverHeading": "Chats you can join"
+  },
+  "room": {
+    "emptyTitle": "No messages yet",
+    "emptyDescription": "Say hello. Be kind; reports go to moderation.",
+    "hidden": "Message unavailable",
+    "composer": "Message",
+    "send": "Send",
+    "held": "Your message is held for review. If you need help now, use Help or call a crisis number.",
+    "crisisAction": "Open Help",
+    "report": "Report",
+    "reportTitle": "Report message",
+    "reportDone": "Report sent.",
+    "reasons": {
+      "harassment": "Harassment",
+      "scam_or_fundraising": "Scam or fundraising",
+      "miracle_cure": "Miracle cure",
+      "unsafe_content": "Unsafe content",
+      "child_safety": "Child safety",
+      "spam": "Spam",
+      "other": "Other"
+    }
+  }
+}

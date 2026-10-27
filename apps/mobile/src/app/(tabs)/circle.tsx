@@ -1,5 +1,5 @@
-import { PlaceholderScreen } from '@/screens/placeholder';
+import { CircleScreen } from '@/screens/circle';
 
 export default function CircleRoute() {
-  return <PlaceholderScreen ns="circle" />;
+  return <CircleScreen />;
 }

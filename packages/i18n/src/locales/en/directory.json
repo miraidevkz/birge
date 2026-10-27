@@ -1,0 +1,7 @@
+{
+  "title": "Specialists",
+  "emptyTitle": "No specialists yet",
+  "emptyDescription": "Reviewed specialists will appear here.",
+  "rating": "{{rating}} · {{count}} reviews",
+  "noRating": "No reviews yet"
+}

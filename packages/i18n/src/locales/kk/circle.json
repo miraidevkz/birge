@@ -1,3 +1,63 @@
 {
-  "title": "Шеңбер"
+  "title": "Шеңбер",
+  "tea": {
+    "heading": "Түсінетін адаммен шай",
+    "description": "Ұқсас тәжірибесі бар ананы табамыз. Телефон нөмірлері жасырын қалады.",
+    "create": "Шайға шақыру",
+    "open": "Жұп ізделуде ({{format}})",
+    "status": {
+      "open": "Жұп ізделуде",
+      "matched": "Жұп табылды",
+      "cancelled": "Бас тартылды",
+      "expired": "Мерзімі өтті"
+    },
+    "format": {
+      "meeting": "Кездесу",
+      "call": "Қоңырау",
+      "label": "Қалай кездескіңіз келеді?"
+    },
+    "pref": {
+      "heading": "Қалаулар",
+      "sameDistrictOn": "Сол аудан: иә",
+      "sameDistrictOff": "Сол аудан: жоқ",
+      "similarAgeOn": "Бала жасы ұқсас: иә",
+      "similarAgeOff": "Бала жасы ұқсас: жоқ",
+      "sharedNeedsOn": "Ортақ қажеттіліктер: иә",
+      "sharedNeedsOff": "Ортақ қажеттіліктер: жоқ"
+    },
+    "submit": "Өтінім жіберу",
+    "cancel": "Өтінімді болдырмау",
+    "sheetTitle": "Шайға шақыру",
+    "errorConflict": "Сізде ашық өтінім бар.",
+    "errorForbidden": "Шайға шақыру үшін растау қажет.",
+    "errorGeneric": "Өтінім жіберілмеді. Қайта көріңіз."
+  },
+  "matches": {
+    "heading": "Жұптар",
+    "emptyTitle": "Әзірге жұп жоқ",
+    "emptyDescription": "Біреуді тапқанда, оның картасы осында пайда болады. Телефон нөмірлері жасырын қалады.",
+    "accept": "Келді",
+    "decline": "Қазір емес",
+    "openChat": "Чатты ашу",
+    "formatMeeting": "Кездесу",
+    "formatCall": "Қоңырау",
+    "status": {
+      "proposed": "Жаңа жұп",
+      "accepted": "Қабылданды",
+      "declined": "Бас тартылды",
+      "met": "Кездесті",
+      "not_met": "Кездеспеді",
+      "expired": "Мерзімі өтті"
+    },
+    "sharedNeeds": "Ортақ: {{needs}}",
+    "ages": "Балалар жасы {{ages}}"
+  },
+  "links": {
+    "chats": "Чаттар",
+    "chatsDescription": "Аудан, тақырып және жеке чаттар",
+    "listings": "Бөлісу",
+    "listingsDescription": "Беру, алмасу немесе іздеу",
+    "specialists": "Мамандар",
+    "specialistsDescription": "Маңайдағы тексерілген мамандар"
+  }
 }

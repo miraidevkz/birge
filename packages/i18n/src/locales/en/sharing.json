@@ -1,0 +1,10 @@
+{
+  "title": "Share",
+  "emptyTitle": "No listings yet",
+  "emptyDescription": "Listings from mothers nearby will appear here.",
+  "type": {
+    "give": "Give",
+    "swap": "Swap",
+    "need": "Need"
+  }
+}

@@ -1,3 +1,63 @@
 {
-  "title": "Circle"
+  "title": "Circle",
+  "tea": {
+    "heading": "Tea with someone who understands",
+    "description": "We find another mother with similar experience. Phone numbers stay private.",
+    "create": "Ask for tea",
+    "open": "Looking for a match ({{format}})",
+    "status": {
+      "open": "Looking for a match",
+      "matched": "Matched",
+      "cancelled": "Cancelled",
+      "expired": "Expired"
+    },
+    "format": {
+      "meeting": "Meet in person",
+      "call": "Talk by call",
+      "label": "How would you like to meet?"
+    },
+    "pref": {
+      "heading": "Preferences",
+      "sameDistrictOn": "Same district: yes",
+      "sameDistrictOff": "Same district: no",
+      "similarAgeOn": "Similar child age: yes",
+      "similarAgeOff": "Similar child age: no",
+      "sharedNeedsOn": "Shared needs: yes",
+      "sharedNeedsOff": "Shared needs: no"
+    },
+    "submit": "Send request",
+    "cancel": "Cancel request",
+    "sheetTitle": "Ask for tea",
+    "errorConflict": "You already have an open request.",
+    "errorForbidden": "Verification is required to ask for tea.",
+    "errorGeneric": "Could not send the request. Try again."
+  },
+  "matches": {
+    "heading": "Matches",
+    "emptyTitle": "No matches yet",
+    "emptyDescription": "When we find someone, their card appears here. Phone numbers stay private.",
+    "accept": "Let's",
+    "decline": "Not now",
+    "openChat": "Open chat",
+    "formatMeeting": "Meet in person",
+    "formatCall": "Talk by call",
+    "status": {
+      "proposed": "New match",
+      "accepted": "Accepted",
+      "declined": "Declined",
+      "met": "Met in person",
+      "not_met": "Did not meet",
+      "expired": "Expired"
+    },
+    "sharedNeeds": "Shared: {{needs}}",
+    "ages": "Children aged {{ages}}"
+  },
+  "links": {
+    "chats": "Chats",
+    "chatsDescription": "District, topic and private chats",
+    "listings": "Share",
+    "listingsDescription": "Things to give, swap or need",
+    "specialists": "Specialists",
+    "specialistsDescription": "Reviewed specialists nearby"
+  }
 }
