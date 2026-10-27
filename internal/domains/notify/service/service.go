@@ -121,7 +121,7 @@ func (s *Service) HandleDeliveryRequested(ctx context.Context, eventID uuid.UUID
 				}
 			}
 
-			if r.Kind == model.RecipientKindExternal {
+			if model.IsSMSOnly(r.Kind) {
 				if _, _, err := tx.InsertDelivery(ctx, created.ID, model.ChannelSMS, model.StatusPending, now); err != nil {
 					return err
 				}
@@ -335,7 +335,7 @@ func (s *Service) sendSMS(ctx context.Context, notificationID uuid.UUID, mode sm
 				return nil
 			}
 		case smsModeExternal:
-			if n.RecipientKind != model.RecipientKindExternal {
+			if !model.IsSMSOnly(n.RecipientKind) {
 				skipReason = "not_external"
 				return nil
 			}

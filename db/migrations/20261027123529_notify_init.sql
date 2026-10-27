@@ -6,7 +6,7 @@ CREATE TABLE notify.notifications (
     id               uuid        PRIMARY KEY DEFAULT uuidv7(),
     request_id       uuid        NOT NULL,
     recipient_kind   text        NOT NULL
-                                 CHECK (recipient_kind IN ('member', 'external')),
+                                 CHECK (recipient_kind IN ('member', 'external', 'staff')),
     recipient_ref    uuid        NOT NULL,
     template         text        NOT NULL
                                  CHECK (template ~ '^[a-z]+\.[a-z_]+$'),

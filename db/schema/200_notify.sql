@@ -5,11 +5,12 @@ CREATE SCHEMA IF NOT EXISTS notify;
 -- In-app inbox is the source of truth for notifications.
 -- recipient_kind=member: recipient_ref is the member id (inbox + push).
 -- recipient_kind=external: recipient_ref is the trusted_contact id (SMS only; no inbox).
+-- recipient_kind=staff: recipient_ref is a safety duty shift id (SMS only; no inbox).
 CREATE TABLE notify.notifications (
     id               uuid        PRIMARY KEY DEFAULT uuidv7(),
     request_id       uuid        NOT NULL,
     recipient_kind   text        NOT NULL
-                                 CHECK (recipient_kind IN ('member', 'external')),
+                                 CHECK (recipient_kind IN ('member', 'external', 'staff')),
     recipient_ref    uuid        NOT NULL,
     template         text        NOT NULL
                                  CHECK (template ~ '^[a-z]+\.[a-z_]+$'),

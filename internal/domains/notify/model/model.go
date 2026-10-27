@@ -33,9 +33,20 @@ const (
 
 // Recipient kinds stored on notifications.
 const (
-	RecipientKindMember   = "member"
+	// RecipientKindMember: ref is the member ID; inbox, push, critical SMS fallback.
+	RecipientKindMember = "member"
+	// RecipientKindExternal: ref is a trusted contact ID; SMS only, sent at once.
 	RecipientKindExternal = "external"
+	// RecipientKindStaff: ref is a duty shift ID (safety); SMS only, sent at once.
+	// Kept apart from external so the phone is looked up in the right context.
+	RecipientKindStaff = "staff"
 )
+
+// IsSMSOnly reports whether a recipient kind has no inbox and gets an
+// immediate SMS instead.
+func IsSMSOnly(kind string) bool {
+	return kind == RecipientKindExternal || kind == RecipientKindStaff
+}
 
 // Device platforms.
 const (
@@ -87,7 +98,7 @@ func ClassIsValid(c string) bool {
 
 // RecipientKindIsValid reports whether k is a stored recipient kind.
 func RecipientKindIsValid(k string) bool {
-	return k == RecipientKindMember || k == RecipientKindExternal
+	return k == RecipientKindMember || k == RecipientKindExternal || k == RecipientKindStaff
 }
 
 // PlatformIsValid reports whether p is a known device platform.
@@ -108,6 +119,9 @@ type Recipient struct {
 	MemberID         *uuid.UUID
 	TrustedContactID *uuid.UUID
 	StaffRole        string
+	// StaffShiftID re-resolves a stored staff recipient; never accepted
+	// from a DeliveryRequested event (which names a role, not a shift).
+	StaffShiftID *uuid.UUID
 }
 
 // Validate ensures exactly one recipient form is set.
@@ -120,6 +134,9 @@ func (r Recipient) Validate() error {
 		n++
 	}
 	if r.StaffRole != "" {
+		n++
+	}
+	if r.StaffShiftID != nil {
 		n++
 	}
 	if n != 1 {
@@ -174,7 +191,7 @@ func (r DeliveryRequest) Validate() error {
 // looked up separately via Recipients.PhoneFor at send time and are never
 // stored on this type or in the database.
 type ResolvedRecipient struct {
-	Kind     string // member | external
+	Kind     string // member | external | staff
 	Ref      uuid.UUID
 	Language string // "kk" or "ru"
 }
@@ -198,8 +215,11 @@ func (r ResolvedRecipient) AsRecipient() Recipient {
 // RecipientForm rebuilds the resolve form from a stored notification row.
 func RecipientForm(kind string, ref uuid.UUID) Recipient {
 	id := ref
-	if kind == RecipientKindExternal {
+	switch kind {
+	case RecipientKindExternal:
 		return Recipient{TrustedContactID: &id}
+	case RecipientKindStaff:
+		return Recipient{StaffShiftID: &id}
 	}
 	return Recipient{MemberID: &id}
 }
