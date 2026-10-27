@@ -33,5 +33,5 @@ internal/domains/<context>/
 ## Tests
 
 - `model` and `service`: unit tests with fake ports, table-driven, including failure paths.
-- `adapter`: integration tests against an ephemeral PostgreSQL and NATS.
+- `adapter`: integration tests with `internal/platform/testinfra`: `testinfra.Postgres(t)` (throwaway cluster, schema applied) and `testinfra.NATS(t)` (in-process JetStream). No containers.
 - Run `go test -race ./internal/domains/<context>/...` and `make check` before reporting.

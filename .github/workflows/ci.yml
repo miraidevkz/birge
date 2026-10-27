@@ -27,4 +27,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+      - name: Install PostgreSQL 18 binaries for integration tests
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y --no-install-recommends postgresql-18
+          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
       - run: make go-check
+        env:
+          BIRGE_REQUIRE_INTEGRATION: "1"
