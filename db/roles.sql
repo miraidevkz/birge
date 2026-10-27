@@ -10,3 +10,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON platform.outbox, platform.processed_even
 -- Append-only.
 GRANT SELECT, INSERT ON platform.audit_log TO birge_app;
 REVOKE UPDATE, DELETE, TRUNCATE ON platform.audit_log FROM birge_app;
+
+GRANT USAGE ON SCHEMA notify TO birge_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA notify TO birge_app;
