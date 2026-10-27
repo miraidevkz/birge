@@ -1,7 +1,7 @@
 # Development Kratos: phone + SMS code only (ADR-0008). Reached only through
 # the birge auth gateway at /auth/; the public and admin ports are not
 # published. SMS go to an unreachable sink: read codes with `up.sh codes`.
-version: v1.3.1
+version: v26.2.0
 serve:
   public:
     base_url: http://localhost:8080/auth/
@@ -30,6 +30,34 @@ selfservice:
           hooks:
             - hook: session
 courier:
+  # SMS texts are only the code: SMS carry no content (AGENTS.md). The
+  # schema requires an email template too; members have no email, so it is
+  # a placeholder that is never sent.
+  templates:
+    registration_code:
+      valid:
+        email:
+          body:
+            plaintext: base64://QmlyZ2U=  # "Birge"
+        sms:
+          body:
+            plaintext: base64://QmlyZ2U6IHt7IC5SZWdpc3RyYXRpb25Db2RlIH19  # "Birge: {{ .RegistrationCode }}"
+    login_code:
+      valid:
+        email:
+          body:
+            plaintext: base64://QmlyZ2U=  # "Birge"
+        sms:
+          body:
+            plaintext: base64://QmlyZ2U6IHt7IC5Mb2dpbkNvZGUgfX0=  # "Birge: {{ .LoginCode }}"
+    verification_code:
+      valid:
+        email:
+          body:
+            plaintext: base64://QmlyZ2U=  # "Birge"
+        sms:
+          body:
+            plaintext: base64://QmlyZ2U6IHt7IC5WZXJpZmljYXRpb25Db2RlIH19  # "Birge: {{ .VerificationCode }}"
   channels:
     - id: sms
       type: http

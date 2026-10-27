@@ -131,7 +131,7 @@ Health: `GET /healthz` answers 204 while the process runs; `GET /readyz` answers
 The quickest way is the development stack in `deploy/compose` (Docker or Colima with the Compose plugin):
 
 ```sh
-deploy/compose/up.sh          # PostgreSQL, NATS, Kratos (phone + SMS code), birge migrate, api, worker
+deploy/compose/up.sh          # PostgreSQL, NATS, Kratos v26 (phone + SMS code), birge migrate, api, worker
 deploy/compose/up.sh web      # web client on http://localhost:8081 (needs Node and npm ci)
 deploy/compose/up.sh codes    # latest SMS texts Kratos queued: there is no SMS provider in development
 deploy/compose/up.sh down     # stop; data volumes stay

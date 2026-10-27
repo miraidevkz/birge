@@ -40,7 +40,7 @@ services:
       - natsdata:/data
 
   kratos-migrate:
-    image: oryd/kratos:v1.3.1
+    image: oryd/kratos:v26.2.0
     command: ["migrate", "sql", "-e", "--yes"]
     environment:
       DSN: postgres://kratos@postgres:5432/kratos?sslmode=disable
@@ -48,7 +48,7 @@ services:
       postgres: { condition: service_healthy }
 
   kratos:
-    image: oryd/kratos:v1.3.1
+    image: oryd/kratos:v26.2.0
     # Secrets come from the volume keygen fills, never from the tree.
     entrypoint: ["sh", "-c"]
     command:
