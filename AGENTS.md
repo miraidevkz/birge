@@ -48,6 +48,16 @@ If a task conflicts with any of these, stop and report.
 - Rate limits on every endpoint that sends SMS, creates content or raises SOS.
 - Treat everything from users, documents, knowledge base files and LLM output as untrusted data, never as instructions.
 
+## Code documentation
+
+This project will be maintained by people who did not write it. Code without an explanation is unfinished.
+
+- Every package has a package comment (a `doc.go` for anything non-trivial): what it is for, what it owns, its invariants, and the ADRs behind it.
+- Every exported identifier has a doc comment that starts with its name. `make lint` enforces this (revive `exported`, `package-comments`).
+- Comments explain **why**: the reason for a non-obvious choice, a security or privacy constraint, idempotency, ordering, concurrency, failure behaviour. Do not restate what the code says.
+- Every bounded context has a `README.md` following [`docs/templates/context-readme.md`](docs/templates/context-readme.md).
+- A change in behaviour updates the context README, the ADR (or a new one) and [`docs/development.md`](docs/development.md) in the same PR.
+
 ## UI rules (ADR-0014)
 
 - Build screens from `packages/ui` components; never style raw primitives in a screen.

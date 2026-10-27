@@ -5,7 +5,7 @@ Thank you for helping. Birge supports mothers of children with special needs, so
 ## Before you start
 
 1. Read [`AGENTS.md`](AGENTS.md). It applies to human contributors as well as AI agents: non-negotiables, module boundaries, security and database rules, definition of done.
-2. Read [`docs/architecture.md`](docs/architecture.md) and the ADRs for the area you want to change.
+2. Read [`docs/architecture.md`](docs/architecture.md), [`docs/development.md`](docs/development.md) and the ADRs for the area you want to change.
 3. For anything bigger than a small fix, open an issue first and describe the change. A change that contradicts an ADR needs a new ADR.
 
 Security problems are reported privately; see [`SECURITY.md`](SECURITY.md).
