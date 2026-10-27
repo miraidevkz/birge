@@ -17,6 +17,8 @@ Birge («Бірге», "together") is an open-source platform of peer support an
 
 Do not read the whole repository. Use `rg` to find what you need.
 
+Task skills live in [`.claude/skills/`](.claude/skills/): `db-migration`, `api-contract`, `domain-module`, `crisis-path`. Load the one that matches your task.
+
 ## Non-negotiables
 
 1. **Crisis path always works.** Crisis detection (lexicon), the fixed crisis response and the escalation to a human never depend on the LLM, the network to it, or any optional service.
