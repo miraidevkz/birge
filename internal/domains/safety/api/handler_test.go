@@ -85,7 +85,7 @@ func TestEscalationFlowOverHTTP(t *testing.T) {
 	if help.EscalationId == uuid.Nil || len(help.CrisisPhones) != 1 || help.CrisisPhones[0].Number != "000" {
 		t.Fatalf("help body = %+v", help)
 	}
-	if rec := hs.do(t, m, http.MethodPost, "/me/help-requests", `{"source":"chat"}`, key, uuid.NewString()); rec.Code != http.StatusBadRequest {
+	if rec := hs.do(t, m, http.MethodPost, "/me/help-requests", `{"source":"letter"}`, key, uuid.NewString()); rec.Code != http.StatusBadRequest {
 		t.Fatalf("bad source = %d", rec.Code)
 	}
 	if rec := hs.do(t, staff(model.RolePsychologist), http.MethodPost, "/me/help-requests", `{"source":"menu"}`, key, uuid.NewString()); rec.Code != http.StatusUnauthorized {

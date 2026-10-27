@@ -25,7 +25,8 @@
         "assistant",
         "checkin",
         "sos",
-        "menu"
+        "menu",
+        "chat"
       ]
     }
   }

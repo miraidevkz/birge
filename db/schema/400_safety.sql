@@ -9,7 +9,7 @@ CREATE TABLE safety.escalations (
     id          uuid        PRIMARY KEY DEFAULT uuidv7(),
     member_id   uuid        NOT NULL,
     source      text        NOT NULL
-                            CHECK (source IN ('assistant', 'checkin', 'sos', 'menu')),
+                            CHECK (source IN ('assistant', 'checkin', 'sos', 'menu', 'chat')),
     status      text        NOT NULL DEFAULT 'open'
                             CHECK (status IN ('open', 'taken', 'closed')),
     district_id uuid,

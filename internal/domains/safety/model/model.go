@@ -23,6 +23,7 @@ const (
 	SourceCheckin   = "checkin"
 	SourceSOS       = "sos"
 	SourceMenu      = "menu"
+	SourceChat      = "chat"
 )
 
 // Escalation outcomes recorded on close.
@@ -111,7 +112,7 @@ var e164Re = regexp.MustCompile(`^\+[1-9][0-9]{7,14}$`)
 // SourceIsValid reports whether s is a known escalation source.
 func SourceIsValid(s string) bool {
 	switch s {
-	case SourceAssistant, SourceCheckin, SourceSOS, SourceMenu:
+	case SourceAssistant, SourceCheckin, SourceSOS, SourceMenu, SourceChat:
 		return true
 	}
 	return false

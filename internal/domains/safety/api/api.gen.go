@@ -105,6 +105,7 @@ func (e EscalationStatus) Valid() bool {
 // Defines values for EscalationSource.
 const (
 	EscalationSourceAssistant EscalationSource = "assistant"
+	EscalationSourceChat      EscalationSource = "chat"
 	EscalationSourceCheckin   EscalationSource = "checkin"
 	EscalationSourceMenu      EscalationSource = "menu"
 	EscalationSourceSos       EscalationSource = "sos"
@@ -114,6 +115,8 @@ const (
 func (e EscalationSource) Valid() bool {
 	switch e {
 	case EscalationSourceAssistant:
+		return true
+	case EscalationSourceChat:
 		return true
 	case EscalationSourceCheckin:
 		return true
@@ -150,6 +153,7 @@ func (e Lang) Valid() bool {
 // Defines values for RequestHumanHelpJSONBodySource.
 const (
 	RequestHumanHelpJSONBodySourceAssistant RequestHumanHelpJSONBodySource = "assistant"
+	RequestHumanHelpJSONBodySourceChat      RequestHumanHelpJSONBodySource = "chat"
 	RequestHumanHelpJSONBodySourceCheckin   RequestHumanHelpJSONBodySource = "checkin"
 	RequestHumanHelpJSONBodySourceMenu      RequestHumanHelpJSONBodySource = "menu"
 	RequestHumanHelpJSONBodySourceSos       RequestHumanHelpJSONBodySource = "sos"
@@ -159,6 +163,8 @@ const (
 func (e RequestHumanHelpJSONBodySource) Valid() bool {
 	switch e {
 	case RequestHumanHelpJSONBodySourceAssistant:
+		return true
+	case RequestHumanHelpJSONBodySourceChat:
 		return true
 	case RequestHumanHelpJSONBodySourceCheckin:
 		return true

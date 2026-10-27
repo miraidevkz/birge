@@ -356,7 +356,7 @@ paths:
               properties:
                 source:
                   type: string
-                  enum: [assistant, checkin, sos, menu]
+                  enum: [assistant, checkin, sos, menu, chat]
                   description: Where the member pressed the button.
       responses:
         '202':
@@ -1852,7 +1852,7 @@ components:
           items: {$ref: '#/components/schemas/CrisisPhone'}
     EscalationSource:
       type: string
-      enum: [assistant, checkin, sos, menu]
+      enum: [assistant, checkin, sos, menu, chat]
     Escalation:
       type: object
       additionalProperties: false

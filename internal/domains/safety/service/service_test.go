@@ -187,7 +187,7 @@ func TestOpenEscalationValidationAndDirectoryFailure(t *testing.T) {
 	if _, _, err := e.svc.OpenEscalation(ctx, uuid.Nil, model.SourceMenu); !errors.Is(err, model.ErrInvalidInput) {
 		t.Fatalf("nil member: %v", err)
 	}
-	if _, _, err := e.svc.OpenEscalation(ctx, uuid.New(), "chat"); !errors.Is(err, model.ErrInvalidInput) {
+	if _, _, err := e.svc.OpenEscalation(ctx, uuid.New(), "letter"); !errors.Is(err, model.ErrInvalidInput) {
 		t.Fatalf("bad source: %v", err)
 	}
 	// The directory is optional: an escalation opens without a district.
