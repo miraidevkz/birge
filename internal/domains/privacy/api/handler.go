@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"birge/internal/domains/privacy/model"
 	"birge/internal/domains/privacy/service"
 	"birge/internal/platform/auth"
@@ -19,10 +21,10 @@ type Server struct {
 // ListConsents returns the caller's current consent states.
 func (s *Server) ListConsents(ctx context.Context, _ ListConsentsRequestObject) (ListConsentsResponseObject, error) {
 	p, ok := auth.FromContext(ctx)
-	if !ok || p.Staff {
+	if !ok || p.Staff || p.MemberID == uuid.Nil {
 		return listConsentsProblem(http.StatusUnauthorized, "unauthorized", "Sign in required."), nil
 	}
-	states, err := s.Service.ListConsents(ctx, p.IdentityID)
+	states, err := s.Service.ListConsents(ctx, p.MemberID)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +38,7 @@ func (s *Server) ListConsents(ctx context.Context, _ ListConsentsRequestObject) 
 // SetConsent grants or revokes a consent for the current text version.
 func (s *Server) SetConsent(ctx context.Context, request SetConsentRequestObject) (SetConsentResponseObject, error) {
 	p, ok := auth.FromContext(ctx)
-	if !ok || p.Staff {
+	if !ok || p.Staff || p.MemberID == uuid.Nil {
 		return setConsentProblem(http.StatusUnauthorized, "unauthorized", "Sign in required."), nil
 	}
 	if request.Body == nil {
@@ -46,7 +48,7 @@ func (s *Server) SetConsent(ctx context.Context, request SetConsentRequestObject
 	if !body.Type.Valid() {
 		return setConsentProblem(http.StatusBadRequest, "invalid_request", "Unknown consent type."), nil
 	}
-	state, err := s.Service.SetConsent(ctx, p.IdentityID, string(body.Type), body.Version, body.Granted)
+	state, err := s.Service.SetConsent(ctx, p.MemberID, string(body.Type), body.Version, body.Granted)
 	if err != nil {
 		if errors.Is(err, model.ErrInvalidInput) {
 			return setConsentProblem(http.StatusBadRequest, "invalid_request", "The request is invalid."), nil
@@ -59,13 +61,13 @@ func (s *Server) SetConsent(ctx context.Context, request SetConsentRequestObject
 // RequestDeletion schedules deletion of all the member's data within 24 hours.
 func (s *Server) RequestDeletion(ctx context.Context, request RequestDeletionRequestObject) (RequestDeletionResponseObject, error) {
 	p, ok := auth.FromContext(ctx)
-	if !ok || p.Staff {
+	if !ok || p.Staff || p.MemberID == uuid.Nil {
 		return requestDeletionProblem(http.StatusUnauthorized, "unauthorized", "Sign in required."), nil
 	}
 	if request.Body == nil || request.Body.Confirm != DELETE {
 		return requestDeletionProblem(http.StatusBadRequest, "invalid_request", "Confirmation required."), nil
 	}
-	req, err := s.Service.RequestDeletion(ctx, p.IdentityID)
+	req, err := s.Service.RequestDeletion(ctx, p.MemberID)
 	if err != nil {
 		if errors.Is(err, model.ErrInvalidInput) {
 			return requestDeletionProblem(http.StatusBadRequest, "invalid_request", "The request is invalid."), nil

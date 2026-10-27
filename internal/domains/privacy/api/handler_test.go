@@ -84,7 +84,7 @@ func TestSetConsentAndRequestDeletionHappyPath(t *testing.T) {
 	}
 	server := &api.Server{Service: svc}
 	member := uuid.Must(uuid.NewV7())
-	ctx := auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: member})
+	ctx := auth.WithPrincipal(context.Background(), auth.Principal{MemberID: member})
 
 	setResp, err := server.SetConsent(ctx, api.SetConsentRequestObject{
 		Body: &api.ConsentChange{Type: api.DataProcessing, Version: "v1", Granted: true},

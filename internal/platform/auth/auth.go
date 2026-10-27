@@ -13,8 +13,14 @@ type ctxKey struct{}
 // Principal is the authenticated caller.
 type Principal struct {
 	// IdentityID is the identity provider's ID (Kratos identity for members,
-	// OIDC subject mapped to a UUID for staff).
+	// OIDC subject mapped to a UUID for staff). Only membership uses it, to
+	// find or create the member.
 	IdentityID uuid.UUID
+	// MemberID is the membership member ID of a member session, set by the
+	// member-resolution middleware before any other context's handler runs.
+	// uuid.Nil for staff and anonymous requests. Contexts other than
+	// membership key their data by MemberID, never by IdentityID.
+	MemberID uuid.UUID
 	// Staff is true for staff sessions from the admin.
 	Staff bool
 	// Roles are staff roles from the claim mapping; empty for members.

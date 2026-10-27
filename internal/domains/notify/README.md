@@ -53,7 +53,7 @@ Ports used by this context (wired later): `Recipients`, `PushSender`, `SMSSender
 | `guard.Config.PerNumberLimit` / `PerNumberWindow` | 0 disabled / 1h | Per-number rate limit |
 | `guard.Config.GlobalLimit` / `GlobalWindow` | 0 disabled / 1m | Process-wide rate limit |
 | `guard.Config.DailyBudget` | 0 unlimited | UTC-day send budget (bypassed for critical) |
-| TODO(verify): env names for wiring | | `cmd/birge` does not load these yet |
+| see `docs/development.md` § Configuration | | all variables, defaults and which subcommand reads them |
 
 ## Invariants
 

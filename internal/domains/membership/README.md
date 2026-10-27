@@ -61,7 +61,7 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 | `authgw.Config.AllowedPrefixes` | required | Allowed E.164 mobile prefixes |
 | `authgw.Config.PerIP` / `PerNumber` / `Global` | required | Token-bucket rates |
 | `authgw.Config.PhoneTrait` | `phone` | Registration trait holding the phone |
-| TODO(verify): env names for wiring | | `cmd/birge` wiring of authgw and Encryptor is not in this tree yet |
+| see `docs/development.md` § Configuration | | all variables, defaults and which subcommand reads them |
 
 ## Invariants
 

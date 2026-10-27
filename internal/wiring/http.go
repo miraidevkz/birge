@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"birge/contracts/openapi"
 	membershipadapter "birge/internal/domains/membership/adapter"
 	membershipapi "birge/internal/domains/membership/api"
 	"birge/internal/domains/membership/authgw"
@@ -20,6 +21,7 @@ import (
 	privacyadapter "birge/internal/domains/privacy/adapter"
 	privacyapi "birge/internal/domains/privacy/api"
 	privacyservice "birge/internal/domains/privacy/service"
+	"birge/internal/platform/apivalidate"
 	"birge/internal/platform/auth"
 	"birge/internal/platform/clock"
 	"birge/internal/platform/crypto"
@@ -124,7 +126,14 @@ func NewAPIHandler(d APIDeps) (http.Handler, error) {
 	api := http.NewServeMux()
 	mountAPI(api, cfg, members, privacy, notify, d.Logger)
 
-	v1 := ratelimit.Middleware(limiter, clientIP)(sessions.Wrap(validateRequests(api)))
+	// Validation runs after the session (anonymous callers cannot probe the
+	// validator) and before the generated handlers, which do not enforce the
+	// contract themselves.
+	validator, err := apivalidate.New(openapi.Spec, apivalidate.Options{Logger: d.Logger})
+	if err != nil {
+		return nil, fmt.Errorf("request validator: %w", err)
+	}
+	v1 := ratelimit.Middleware(limiter, clientIP)(sessions.Wrap(validator.Middleware(api)))
 
 	root := http.NewServeMux()
 	root.Handle("/auth/", gw)
@@ -132,14 +141,6 @@ func NewAPIHandler(d APIDeps) (http.Handler, error) {
 	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	root.Handle("GET /readyz", readiness(d.Logger, poolCheck(d.Pool)))
 	return logRequests(d.Logger, root, api), nil
-}
-
-// validateRequests is where OpenAPI request validation goes, after the
-// session (so anonymous callers cannot probe the validator) and before the
-// generated handlers.
-func validateRequests(next http.Handler) http.Handler {
-	// TODO(wiring): OpenAPI request validation middleware (internal/platform/apivalidate) goes here
-	return next
 }
 
 // mountAPI registers the generated /v1 handlers of every API area on mux,
@@ -189,18 +190,11 @@ func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service
 	)
 }
 
-// memberPrincipal is a stopgap for the privacy and notify handlers, which
-// pass auth.Principal.IdentityID (the Kratos identity) to services that key
-// everything by the membership member ID: consents, deletion requests, the
-// crypto-shredding of the member key, the inbox and devices. Without this,
-// account deletion would shred a key that does not exist and the inbox would
-// never show notifications addressed to the member.
-//
-// It resolves (and on first use creates, ADR-0008 addendum) the signed-in
-// member and hands those handlers a principal whose IdentityID is the member
-// ID. Remove it as soon as the handlers resolve the member themselves through
-// the membership service; keeping both would treat a member ID as an identity.
-// Anonymous and staff requests pass unchanged; the handlers refuse them.
+// memberPrincipal resolves the signed-in member (creating it on first use,
+// ADR-0008 addendum) and sets auth.Principal.MemberID for the handlers of
+// contexts that key their data by member ID (privacy, notify). The identity
+// ID stays untouched. Anonymous and staff requests pass unchanged; the
+// handlers refuse a principal without a MemberID.
 func memberPrincipal(members *membershipservice.Service, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -215,7 +209,7 @@ func memberPrincipal(members *membershipservice.Service, logger *slog.Logger) fu
 				httpapi.WriteProblem(w, http.StatusInternalServerError, "internal", "Something went wrong.")
 				return
 			}
-			p.IdentityID = m.ID
+			p.MemberID = m.ID
 			next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), p)))
 		})
 	}
@@ -228,6 +222,7 @@ type statusRecorder struct {
 	bytes  int
 }
 
+// WriteHeader records the first status code before passing it on.
 func (s *statusRecorder) WriteHeader(code int) {
 	if s.status == 0 {
 		s.status = code

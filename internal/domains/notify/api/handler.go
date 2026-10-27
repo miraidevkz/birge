@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"birge/internal/domains/notify/model"
 	"birge/internal/domains/notify/service"
 	"birge/internal/platform/auth"
@@ -19,7 +21,7 @@ type Server struct {
 // ListInbox returns the caller's inbox page.
 func (s *Server) ListInbox(ctx context.Context, request ListInboxRequestObject) (ListInboxResponseObject, error) {
 	memberID, ok := auth.FromContext(ctx)
-	if !ok || memberID.Staff {
+	if !ok || memberID.Staff || memberID.MemberID == uuid.Nil {
 		return listProblem(http.StatusUnauthorized, "unauthorized", "Sign in required."), nil
 	}
 	var cursor string
@@ -30,7 +32,7 @@ func (s *Server) ListInbox(ctx context.Context, request ListInboxRequestObject) 
 	if request.Params.Limit != nil {
 		limit = *request.Params.Limit
 	}
-	page, err := s.Service.ListInbox(ctx, memberID.IdentityID, cursor, limit)
+	page, err := s.Service.ListInbox(ctx, memberID.MemberID, cursor, limit)
 	if err != nil {
 		if errors.Is(err, model.ErrInvalidCursor) {
 			return listProblem(http.StatusBadRequest, "invalid_cursor", "The cursor is invalid."), nil
@@ -52,10 +54,10 @@ func (s *Server) ListInbox(ctx context.Context, request ListInboxRequestObject) 
 // MarkRead marks a notification as read (and acknowledges critical ones).
 func (s *Server) MarkRead(ctx context.Context, request MarkReadRequestObject) (MarkReadResponseObject, error) {
 	p, ok := auth.FromContext(ctx)
-	if !ok || p.Staff {
+	if !ok || p.Staff || p.MemberID == uuid.Nil {
 		return markReadProblem(http.StatusUnauthorized, "unauthorized", "Sign in required."), nil
 	}
-	err := s.Service.MarkRead(ctx, p.IdentityID, request.NotificationId)
+	err := s.Service.MarkRead(ctx, p.MemberID, request.NotificationId)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			return markReadProblem(http.StatusNotFound, "not_found", "Notification not found."), nil
@@ -68,13 +70,13 @@ func (s *Server) MarkRead(ctx context.Context, request MarkReadRequestObject) (M
 // RegisterDevice registers or updates a push device.
 func (s *Server) RegisterDevice(ctx context.Context, request RegisterDeviceRequestObject) (RegisterDeviceResponseObject, error) {
 	p, ok := auth.FromContext(ctx)
-	if !ok || p.Staff {
+	if !ok || p.Staff || p.MemberID == uuid.Nil {
 		return registerProblem(http.StatusUnauthorized, "unauthorized", "Sign in required."), nil
 	}
 	if request.Body == nil {
 		return registerProblem(http.StatusBadRequest, "invalid_request", "The request is invalid."), nil
 	}
-	err := s.Service.RegisterDevice(ctx, p.IdentityID, request.DeviceId, string(request.Body.Platform), request.Body.PushToken)
+	err := s.Service.RegisterDevice(ctx, p.MemberID, request.DeviceId, string(request.Body.Platform), request.Body.PushToken)
 	if err != nil {
 		if errors.Is(err, model.ErrInvalidInput) {
 			return registerProblem(http.StatusBadRequest, "invalid_request", "The request is invalid."), nil
@@ -87,10 +89,10 @@ func (s *Server) RegisterDevice(ctx context.Context, request RegisterDeviceReque
 // UnregisterDevice removes a push device.
 func (s *Server) UnregisterDevice(ctx context.Context, request UnregisterDeviceRequestObject) (UnregisterDeviceResponseObject, error) {
 	p, ok := auth.FromContext(ctx)
-	if !ok || p.Staff {
+	if !ok || p.Staff || p.MemberID == uuid.Nil {
 		return unregisterProblem(http.StatusUnauthorized, "unauthorized", "Sign in required."), nil
 	}
-	if err := s.Service.UnregisterDevice(ctx, p.IdentityID, request.DeviceId); err != nil {
+	if err := s.Service.UnregisterDevice(ctx, p.MemberID, request.DeviceId); err != nil {
 		return nil, err
 	}
 	return UnregisterDevice204Response{}, nil
