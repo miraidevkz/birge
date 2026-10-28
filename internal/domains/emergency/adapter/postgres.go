@@ -135,6 +135,7 @@ func (t *postgresTx) ListMySos(ctx context.Context, memberID uuid.UUID, limit in
 			ID: r.ID, MemberID: r.MemberID, IdempotencyKey: r.IdempotencyKey, Type: r.Type, Content: r.Content,
 			Status: r.Status, CreatedAt: r.CreatedAt, ClosesAt: r.ClosesAt, DistrictID: r.DistrictID,
 			SharedAt: r.SharedAt, ClosedAt: r.ClosedAt, CloseReason: r.CloseReason,
+			SeenAt: r.SeenAt, SeenBy: r.SeenBy, ClosedBy: r.ClosedBy,
 		})
 		s.ResponseCount = int(r.ResponseCount)
 		out = append(out, s)
@@ -155,8 +156,8 @@ func (t *postgresTx) ShareSos(ctx context.Context, id, districtID uuid.UUID, at 
 }
 
 // CloseSos closes an open SOS; updated is false when it was closed.
-func (t *postgresTx) CloseSos(ctx context.Context, id uuid.UUID, reason string, at time.Time) (model.Sos, bool, error) {
-	row, err := t.q.CloseSos(ctx, emergencystore.CloseSosParams{ClosedAt: &at, CloseReason: &reason, ID: id})
+func (t *postgresTx) CloseSos(ctx context.Context, id uuid.UUID, reason string, closedBy *uuid.UUID, at time.Time) (model.Sos, bool, error) {
+	row, err := t.q.CloseSos(ctx, emergencystore.CloseSosParams{ClosedAt: &at, CloseReason: &reason, ClosedBy: closedBy, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Sos{}, false, nil
 	}
@@ -164,6 +165,67 @@ func (t *postgresTx) CloseSos(ctx context.Context, id uuid.UUID, reason string, 
 		return model.Sos{}, false, fmt.Errorf("close sos: %w", err)
 	}
 	return mapSos(row), true, nil
+}
+
+// MarkSosSeen records the first "Seen"; updated is false when already seen.
+func (t *postgresTx) MarkSosSeen(ctx context.Context, id, staffID uuid.UUID, at time.Time) (model.Sos, bool, error) {
+	row, err := t.q.MarkSosSeen(ctx, emergencystore.MarkSosSeenParams{SeenAt: &at, SeenBy: &staffID, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.Sos{}, false, nil
+	}
+	if err != nil {
+		return model.Sos{}, false, fmt.Errorf("mark sos seen: %w", err)
+	}
+	return mapSos(row), true, nil
+}
+
+// ListStaffSos returns one page of the moderator queue with response counts.
+func (t *postgresTx) ListStaffSos(ctx context.Context, f model.StaffSosFilter) ([]model.Sos, error) {
+	var rows []emergencystore.ListStaffOpenSosRow
+	switch f.Status {
+	case model.SosOpen:
+		var err error
+		rows, err = t.q.ListStaffOpenSos(ctx, emergencystore.ListStaffOpenSosParams{
+			CursorCreatedAt: f.CursorCreatedAt, CursorID: f.CursorID, PageLimit: f.Limit,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list staff open sos: %w", err)
+		}
+	case model.SosClosed:
+		closed, err := t.q.ListStaffClosedSos(ctx, emergencystore.ListStaffClosedSosParams{
+			CursorCreatedAt: f.CursorCreatedAt, CursorID: f.CursorID, PageLimit: f.Limit,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list staff closed sos: %w", err)
+		}
+		rows = make([]emergencystore.ListStaffOpenSosRow, 0, len(closed))
+		for _, r := range closed {
+			rows = append(rows, emergencystore.ListStaffOpenSosRow(r))
+		}
+	default:
+		return nil, fmt.Errorf("list staff sos: unknown status %q", f.Status)
+	}
+	out := make([]model.Sos, 0, len(rows))
+	for _, r := range rows {
+		s := mapSos(emergencystore.EmergencySosRequest{
+			ID: r.ID, MemberID: r.MemberID, IdempotencyKey: r.IdempotencyKey, Type: r.Type, Content: r.Content,
+			Status: r.Status, CreatedAt: r.CreatedAt, ClosesAt: r.ClosesAt, DistrictID: r.DistrictID,
+			SharedAt: r.SharedAt, ClosedAt: r.ClosedAt, CloseReason: r.CloseReason,
+			SeenAt: r.SeenAt, SeenBy: r.SeenBy, ClosedBy: r.ClosedBy,
+		})
+		s.ResponseCount = int(r.ResponseCount)
+		out = append(out, s)
+	}
+	return out, nil
+}
+
+// SosRespondedBy reports whether responderID responded to the SOS.
+func (t *postgresTx) SosRespondedBy(ctx context.Context, sosID, responderID uuid.UUID) (bool, error) {
+	ok, err := t.q.SosRespondedBy(ctx, emergencystore.SosRespondedByParams{SosID: sosID, ResponderID: responderID})
+	if err != nil {
+		return false, fmt.Errorf("sos responded by: %w", err)
+	}
+	return ok, nil
 }
 
 // ListSosFeed returns one page of a district feed.
@@ -406,6 +468,7 @@ func mapSos(r emergencystore.EmergencySosRequest) model.Sos {
 		ID: r.ID, MemberID: r.MemberID, IdempotencyKey: r.IdempotencyKey, Type: r.Type, Text: r.Content,
 		Status: r.Status, CreatedAt: r.CreatedAt, ClosesAt: r.ClosesAt, DistrictID: r.DistrictID,
 		SharedAt: r.SharedAt, ClosedAt: r.ClosedAt, CloseReason: r.CloseReason,
+		SeenAt: r.SeenAt, SeenBy: r.SeenBy, ClosedBy: r.ClosedBy,
 	}
 }
 

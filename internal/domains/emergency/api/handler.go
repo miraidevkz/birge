@@ -1,5 +1,7 @@
 // Package api exposes the emergency HTTP handlers (OpenAPI tag emergency):
-// SOS, the district SOS feed and responses, and the emergency plan.
+// SOS, the district SOS feed and responses, the emergency plan, the trusted
+// contact's view of an SOS and her invitation, and the moderators' SOS
+// queue under /staff/sos (mounted behind staffauth by the wiring).
 // Authorization is enforced in the service; handlers validate the shape of
 // the input, map errors to problem responses and never echo texts, names or
 // phones into errors. External contacts' phones leave only masked.

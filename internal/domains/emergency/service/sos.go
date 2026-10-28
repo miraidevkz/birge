@@ -203,7 +203,7 @@ func (s *Service) CloseSos(ctx context.Context, p auth.Principal, id uuid.UUID) 
 		if sos.Status != model.SosOpen {
 			return nil
 		}
-		updated, ok, err := tx.CloseSos(ctx, id, model.CloseByAuthor, now)
+		updated, ok, err := tx.CloseSos(ctx, id, model.CloseByAuthor, nil, now)
 		if err != nil || !ok {
 			return err
 		}
@@ -242,7 +242,7 @@ func (s *Service) HandleAutoClose(ctx context.Context, tx port.Tx, sosID uuid.UU
 		return nil
 	}
 	now := s.now()
-	if _, ok, err := tx.CloseSos(ctx, sosID, model.CloseAuto, now); err != nil || !ok {
+	if _, ok, err := tx.CloseSos(ctx, sosID, model.CloseAuto, nil, now); err != nil || !ok {
 		return err
 	}
 	if err := tx.Publish(ctx, now, model.Event{

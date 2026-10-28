@@ -1,7 +1,11 @@
 // Package service implements the emergency use cases (docs/requirements/mvp.ru.md
 // § 4.6): raising, sharing and closing an SOS, the district SOS feed and its
 // "I can help" responses, and the emergency plan (child card and up to three
-// trusted contacts) with sending it to the confirmed contacts.
+// trusted contacts) with sending it to the confirmed contacts. A confirmed
+// member contact reads her owner's SOS and responds to it (GetTrustedSos,
+// RespondAsTrustedContact); an invited member reads or declines the
+// invitation; moderators and admins work the SOS queue (ListStaffSos,
+// MarkSosSeen, CloseSosAsStaff; requirements section 6).
 //
 // Other contexts import only this package. notify and wiring may rely on:
 //
@@ -38,7 +42,9 @@
 // The SOS text, the child card and external contacts' names and phones are
 // sealed with the owner's data key (ADR-0009) and opened only to show them:
 // to the author, to verified members of her district once she shares, and
-// to a confirmed trusted contact after she sent the plan (audited). Events
+// to a confirmed trusted contact after she sent the plan (audited), to a
+// confirmed member contact reading her SOS (audited), and to moderators and
+// admins with MFA in the SOS queue (every item audited). Events
 // and notifications carry template keys and IDs only. Logs carry IDs and
 // event names only: never texts, names, phones or member profiles.
 //
@@ -49,6 +55,9 @@
 //
 //   - a childcare SOS goes only to the moderators and to confirmed trusted
 //     contacts (RaiseSos);
+//   - her confirmed member contacts read it and press "I can help" through
+//     GetTrustedSos / RespondAsTrustedContact, which admit nobody else
+//     (invited, removed, external, blocked or other members get ErrForbidden);
 //   - it can never be shared (ShareSos returns ErrConflict; the store's
 //     update refuses it; the table check sos_requests_childcare_never_shared);
 //   - the feed query excludes it and Feed drops it again if one ever appears,
@@ -59,7 +68,7 @@
 //
 // # Blocks
 //
-// ADR-0019: the feed, responses and responding apply Blocks.IsBlocked both
+// ADR-0019: the feed, responses, responding and the trusted SOS apply Blocks.IsBlocked both
 // ways; a blocked member sees nothing and is not told. Block checks fail
 // closed: an error from membership is an error, never "not blocked".
 package service

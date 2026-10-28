@@ -31,7 +31,10 @@ const (
 	SosClosed = "closed"
 )
 
-// Close reasons recorded on a closed SOS.
+// Close reasons recorded on a closed SOS. A moderator's close is stored as
+// CloseByAuthor ("closed by a person") with Sos.ClosedBy set to her staff
+// ID: the table's reason check predates staff closing (see
+// db/schema/0600_emergency.sql).
 const (
 	CloseByAuthor = "author"
 	CloseAuto     = "auto"
@@ -68,6 +71,8 @@ const (
 	FeedPageLimit = 50
 	// ResponsesLimit is the most responses listed for one SOS (contract).
 	ResponsesLimit = 100
+	// StaffPageLimit is the moderator queue page size (contract maximum 50).
+	StaffPageLimit = 50
 )
 
 // Events published by emergency, and the notify event it asks for.
@@ -134,6 +139,19 @@ const (
 	// link: the actor id is the trusted contact id (she has no account).
 	AuditActorExternalContact = "external_contact"
 	AuditViewExternalPlan     = "emergency_plan.view_external"
+
+	// AuditObjectSos is the object type of SOS audit entries (object id = SOS id).
+	AuditObjectSos = "emergency.sos"
+	// AuditViewTrustedSos is a trusted contact reading an SOS (getTrustedSos).
+	AuditViewTrustedSos = "emergency_sos.view_trusted"
+	// AuditViewStaffSos is a staff member shown an SOS with its text: one
+	// entry per item of a listStaffSos page, and a repeated Seen or Close
+	// that changed nothing but returned the SOS.
+	AuditViewStaffSos = "emergency_sos.view_staff"
+	// AuditSosSeen is the first "Seen" on an SOS.
+	AuditSosSeen = "emergency_sos.seen"
+	// AuditSosCloseStaff is a moderator closing an open SOS.
+	AuditSosCloseStaff = "emergency_sos.close_staff"
 )
 
 // Associated-data field names for sealed columns (crypto.AssociatedData).
@@ -246,6 +264,11 @@ type Sos struct {
 	SharedAt       *time.Time
 	ClosedAt       *time.Time
 	CloseReason    *string
+	// SeenAt and SeenBy are the first moderator's "Seen" (staff ID).
+	SeenAt *time.Time
+	SeenBy *uuid.UUID
+	// ClosedBy is the staff ID when a moderator closed the SOS.
+	ClosedBy *uuid.UUID
 	// ResponseCount is filled by the queries that count responses.
 	ResponseCount int
 }
@@ -257,6 +280,49 @@ func (s Sos) Shared() bool { return s.SharedAt != nil }
 type SosView struct {
 	Sos
 	PlainText string
+}
+
+// TrustedSosView is an SOS as a confirmed trusted contact of its author
+// sees it (getTrustedSos): the text opened, the author's first name only.
+type TrustedSosView struct {
+	Sos
+	PlainText        string
+	OwnerDisplayName string
+	RespondedByMe    bool
+}
+
+// InvitationView is a trusted-contact invitation as the invited member sees it.
+type InvitationView struct {
+	ContactID        uuid.UUID
+	OwnerDisplayName string
+	Status           string
+	InvitedAt        time.Time
+}
+
+// StaffSosFilter selects one page of the moderator queue: open requests
+// oldest first, closed ones newest first, keyset by (created_at, id).
+type StaffSosFilter struct {
+	Status          string
+	CursorCreatedAt *time.Time
+	CursorID        *uuid.UUID
+	Limit           int32
+}
+
+// StaffSosView is an SOS in the moderator queue: the text opened, the
+// author's first name and her district from membership; never a phone.
+type StaffSosView struct {
+	Sos
+	PlainText   string
+	DisplayName string
+	// MemberDistrictID is the author's district from her profile (the
+	// moderator acts on it), not the district the SOS was shared to.
+	MemberDistrictID *uuid.UUID
+}
+
+// StaffSosPage is one page of the moderator queue.
+type StaffSosPage struct {
+	Items      []StaffSosView
+	NextCursor string
 }
 
 // FeedFilter selects one page of a district feed, newest first.

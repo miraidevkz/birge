@@ -84,8 +84,16 @@ type Tx interface {
 	// ShareSos shares an open, unshared, non-childcare SOS to districtID;
 	// updated is false otherwise.
 	ShareSos(ctx context.Context, id, districtID uuid.UUID, at time.Time) (s model.Sos, updated bool, err error)
-	// CloseSos closes an open SOS; updated is false when it was closed already.
-	CloseSos(ctx context.Context, id uuid.UUID, reason string, at time.Time) (s model.Sos, updated bool, err error)
+	// CloseSos closes an open SOS; updated is false when it was closed
+	// already. closedBy is the staff ID of a moderator's close, nil for the
+	// author and the timer.
+	CloseSos(ctx context.Context, id uuid.UUID, reason string, closedBy *uuid.UUID, at time.Time) (s model.Sos, updated bool, err error)
+	// MarkSosSeen records the first moderator's "Seen"; updated is false
+	// when the SOS was seen already (the first staff ID and time are kept).
+	MarkSosSeen(ctx context.Context, id, staffID uuid.UUID, at time.Time) (s model.Sos, updated bool, err error)
+	// ListStaffSos returns one page of the moderator queue with response
+	// counts: open oldest first, closed newest first.
+	ListStaffSos(ctx context.Context, f model.StaffSosFilter) ([]model.Sos, error)
 	// ListSosFeed returns one page of a district feed: open, shared, never
 	// childcare, never the viewer's own, newest first.
 	ListSosFeed(ctx context.Context, f model.FeedFilter) ([]model.FeedRow, error)
@@ -93,6 +101,8 @@ type Tx interface {
 	// InsertSosResponse records "I can help"; inserted is false when the
 	// responder already responded.
 	InsertSosResponse(ctx context.Context, sosID, responderID uuid.UUID, at time.Time) (created model.SosResponse, inserted bool, err error)
+	// SosRespondedBy reports whether responderID already responded to the SOS.
+	SosRespondedBy(ctx context.Context, sosID, responderID uuid.UUID) (bool, error)
 	// ListSosResponses returns the responses to an SOS, oldest first.
 	ListSosResponses(ctx context.Context, sosID uuid.UUID, limit int32) ([]model.SosResponse, error)
 	// GetSosResponse returns the response, or model.ErrNotFound.
@@ -127,7 +137,8 @@ type Tx interface {
 	// MarkContactsPlanSent records the send on the owner's confirmed contacts.
 	MarkContactsPlanSent(ctx context.Context, ownerID uuid.UUID, at time.Time) (int64, error)
 	// GetSharedPlanContact returns the active, confirmed member contact of
-	// ownerID that is memberID, or model.ErrNotFound.
+	// ownerID that is memberID, or model.ErrNotFound. It is the access check
+	// of everything a trusted contact may read (shared plan, trusted SOS).
 	GetSharedPlanContact(ctx context.Context, ownerID, memberID uuid.UUID) (model.TrustedContact, error)
 
 	// InsertPlanSend records a plan send; inserted is false on a repeated key.

@@ -28,6 +28,16 @@ CREATE TABLE emergency.sos_requests (
     shared_at       timestamptz,
     closed_at       timestamptz,
     close_reason    text        CHECK (close_reason IN ('author', 'auto')),
+    -- Moderator queue (requirements section 6): the first staff member who
+    -- pressed "Seen" and when; later presses keep the first. Staff IDs, not
+    -- member data.
+    seen_at         timestamptz,
+    seen_by         uuid,
+    -- Staff ID when a moderator closed the request. close_reason is then
+    -- 'author' (closed by a person, not by the timer): the reason check
+    -- predates staff closing, and widening it is a constraint swap that the
+    -- migration gate treats as destructive. closed_by tells the two apart.
+    closed_by       uuid,
     CONSTRAINT sos_requests_closes_check CHECK (closes_at > created_at),
     CONSTRAINT sos_requests_shared_check CHECK ((district_id IS NULL) = (shared_at IS NULL)),
     -- N5 (AGENTS.md non-negotiable 5): a childcare request never reaches the
@@ -36,6 +46,10 @@ CREATE TABLE emergency.sos_requests (
     CONSTRAINT sos_requests_lifecycle_check CHECK (
         (status = 'open' AND closed_at IS NULL AND close_reason IS NULL)
         OR (status = 'closed' AND closed_at IS NOT NULL AND close_reason IS NOT NULL)
+    ),
+    CONSTRAINT sos_requests_seen_check CHECK ((seen_at IS NULL) = (seen_by IS NULL)),
+    CONSTRAINT sos_requests_closed_by_check CHECK (
+        closed_by IS NULL OR (status = 'closed' AND close_reason = 'author')
     )
 );
 
@@ -49,6 +63,10 @@ CREATE INDEX sos_requests_member_created_idx
 CREATE INDEX sos_requests_feed_idx
     ON emergency.sos_requests (district_id, created_at DESC, id DESC)
     WHERE status = 'open' AND shared_at IS NOT NULL AND type <> 'childcare';
+-- Moderator queue: open requests oldest first, closed ones newest first
+-- (the same index read backwards).
+CREATE INDEX sos_requests_staff_queue_idx
+    ON emergency.sos_requests (status, created_at, id);
 
 -- "I can help" from a member of the district; one per responder and request.
 CREATE TABLE emergency.sos_responses (

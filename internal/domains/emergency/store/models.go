@@ -49,6 +49,9 @@ type EmergencySosRequest struct {
 	SharedAt       *time.Time
 	ClosedAt       *time.Time
 	CloseReason    *string
+	SeenAt         *time.Time
+	SeenBy         *uuid.UUID
+	ClosedBy       *uuid.UUID
 }
 
 type EmergencySosResponse struct {

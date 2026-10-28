@@ -41,21 +41,21 @@ WHERE member_id = @member_id
 INSERT INTO emergency.sos_requests (id, member_id, idempotency_key, type, content, status, created_at, closes_at)
 VALUES (@id, @member_id, @idempotency_key, @type, @content, 'open', @created_at, @closes_at)
 ON CONFLICT (member_id, idempotency_key) DO NOTHING
-RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason;
+RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by;
 
 -- name: GetSosByIdempotencyKey :one
-SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason
+SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by
 FROM emergency.sos_requests
 WHERE member_id = @member_id
   AND idempotency_key = @idempotency_key;
 
 -- name: GetSos :one
-SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason
+SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by
 FROM emergency.sos_requests
 WHERE id = @id;
 
 -- name: GetSosForUpdate :one
-SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason
+SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by
 FROM emergency.sos_requests
 WHERE id = @id
 FOR UPDATE;
@@ -67,7 +67,7 @@ WHERE sos_id = @sos_id;
 
 -- name: ListMySos :many
 SELECT s.id, s.member_id, s.idempotency_key, s.type, s.content, s.status, s.created_at, s.closes_at,
-       s.district_id, s.shared_at, s.closed_at, s.close_reason,
+       s.district_id, s.shared_at, s.closed_at, s.close_reason, s.seen_at, s.seen_by, s.closed_by,
        (SELECT count(*) FROM emergency.sos_responses r WHERE r.sos_id = s.id)::integer AS response_count
 FROM emergency.sos_requests s
 WHERE s.member_id = @member_id
@@ -82,14 +82,15 @@ WHERE id = @id
   AND status = 'open'
   AND shared_at IS NULL
   AND type <> 'childcare'
-RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason;
+RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by;
 
 -- name: CloseSos :one
 UPDATE emergency.sos_requests
-SET status = 'closed', closed_at = @closed_at, close_reason = @close_reason
+SET status = 'closed', closed_at = @closed_at, close_reason = @close_reason,
+    closed_by = sqlc.narg('closed_by')::uuid
 WHERE id = @id
   AND status = 'open'
-RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason;
+RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by;
 
 -- name: ListSosFeed :many
 -- The district feed: open, shared, not expired, never childcare (N5), never
@@ -139,3 +140,47 @@ SET accepted_at = @accepted_at
 WHERE id = @id
   AND accepted_at IS NULL
 RETURNING id, sos_id, responder_id, created_at, accepted_at;
+
+-- name: SosRespondedBy :one
+SELECT EXISTS (
+  SELECT 1 FROM emergency.sos_responses
+  WHERE sos_id = @sos_id AND responder_id = @responder_id
+);
+
+-- name: MarkSosSeen :one
+-- Keeps the first moderator: a later "Seen" changes nothing (no row).
+UPDATE emergency.sos_requests
+SET seen_at = @seen_at, seen_by = @seen_by
+WHERE id = @id
+  AND seen_at IS NULL
+RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by;
+
+-- name: ListStaffOpenSos :many
+-- Moderator queue, open requests oldest first (the longest waiting on top),
+-- keyset by (created_at, id). Every type, childcare included: moderators
+-- are among the few who see it (N5).
+SELECT s.id, s.member_id, s.idempotency_key, s.type, s.content, s.status, s.created_at, s.closes_at,
+       s.district_id, s.shared_at, s.closed_at, s.close_reason, s.seen_at, s.seen_by, s.closed_by,
+       (SELECT count(*) FROM emergency.sos_responses r WHERE r.sos_id = s.id)::integer AS response_count
+FROM emergency.sos_requests s
+WHERE s.status = 'open'
+  AND (
+    sqlc.narg('cursor_created_at')::timestamptz IS NULL
+    OR (s.created_at, s.id) > (sqlc.narg('cursor_created_at')::timestamptz, sqlc.narg('cursor_id')::uuid)
+  )
+ORDER BY s.created_at ASC, s.id ASC
+LIMIT @page_limit;
+
+-- name: ListStaffClosedSos :many
+-- Moderator queue, closed requests newest first, keyset by (created_at, id).
+SELECT s.id, s.member_id, s.idempotency_key, s.type, s.content, s.status, s.created_at, s.closes_at,
+       s.district_id, s.shared_at, s.closed_at, s.close_reason, s.seen_at, s.seen_by, s.closed_by,
+       (SELECT count(*) FROM emergency.sos_responses r WHERE r.sos_id = s.id)::integer AS response_count
+FROM emergency.sos_requests s
+WHERE s.status = 'closed'
+  AND (
+    sqlc.narg('cursor_created_at')::timestamptz IS NULL
+    OR (s.created_at, s.id) < (sqlc.narg('cursor_created_at')::timestamptz, sqlc.narg('cursor_id')::uuid)
+  )
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT @page_limit;

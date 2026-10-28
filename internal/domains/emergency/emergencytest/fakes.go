@@ -332,7 +332,7 @@ func (t *memoryTx) ShareSos(_ context.Context, id, districtID uuid.UUID, at time
 }
 
 // CloseSos implements port.Tx.
-func (t *memoryTx) CloseSos(_ context.Context, id uuid.UUID, reason string, at time.Time) (model.Sos, bool, error) {
+func (t *memoryTx) CloseSos(_ context.Context, id uuid.UUID, reason string, closedBy *uuid.UUID, at time.Time) (model.Sos, bool, error) {
 	if err := t.fail("CloseSos"); err != nil {
 		return model.Sos{}, false, err
 	}
@@ -342,8 +342,76 @@ func (t *memoryTx) CloseSos(_ context.Context, id uuid.UUID, reason string, at t
 	}
 	r, a := reason, at
 	s.Status, s.ClosedAt, s.CloseReason = model.SosClosed, &a, &r
+	if closedBy != nil {
+		by := *closedBy
+		s.ClosedBy = &by
+	}
 	t.st.sos[id] = s
 	return s, true, nil
+}
+
+// MarkSosSeen implements port.Tx: the first "Seen" is kept.
+func (t *memoryTx) MarkSosSeen(_ context.Context, id, staffID uuid.UUID, at time.Time) (model.Sos, bool, error) {
+	if err := t.fail("MarkSosSeen"); err != nil {
+		return model.Sos{}, false, err
+	}
+	s, ok := t.st.sos[id]
+	if !ok || s.SeenAt != nil {
+		return model.Sos{}, false, nil
+	}
+	a, by := at, staffID
+	s.SeenAt, s.SeenBy = &a, &by
+	t.st.sos[id] = s
+	return s, true, nil
+}
+
+// ListStaffSos implements port.Tx with the same order and keyset as the
+// SQL queries: open oldest first, closed newest first.
+func (t *memoryTx) ListStaffSos(_ context.Context, f model.StaffSosFilter) ([]model.Sos, error) {
+	if err := t.fail("ListStaffSos"); err != nil {
+		return nil, err
+	}
+	asc := f.Status == model.SosOpen
+	var out []model.Sos
+	for _, s := range t.st.sos {
+		if s.Status != f.Status {
+			continue
+		}
+		if f.CursorCreatedAt != nil {
+			keep := newer(*f.CursorCreatedAt, *f.CursorID, s.CreatedAt, s.ID) // strictly before the cursor
+			if asc {
+				keep = newer(s.CreatedAt, s.ID, *f.CursorCreatedAt, *f.CursorID) // strictly after it
+			}
+			if !keep {
+				continue
+			}
+		}
+		out = append(out, t.withCount(s))
+	}
+	sort.Slice(out, func(i, j int) bool {
+		n := newer(out[i].CreatedAt, out[i].ID, out[j].CreatedAt, out[j].ID)
+		if asc {
+			return !n
+		}
+		return n
+	})
+	if len(out) > int(f.Limit) {
+		out = out[:f.Limit]
+	}
+	return out, nil
+}
+
+// SosRespondedBy implements port.Tx.
+func (t *memoryTx) SosRespondedBy(_ context.Context, sosID, responderID uuid.UUID) (bool, error) {
+	if err := t.fail("SosRespondedBy"); err != nil {
+		return false, err
+	}
+	for _, r := range t.st.responses {
+		if r.SosID == sosID && r.ResponderID == responderID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ListSosFeed implements port.Tx with the same filter as the SQL query.

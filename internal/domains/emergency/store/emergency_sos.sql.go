@@ -51,20 +51,27 @@ func (q *Queries) AdvisoryXactLock(ctx context.Context, scopeKey string) error {
 
 const closeSos = `-- name: CloseSos :one
 UPDATE emergency.sos_requests
-SET status = 'closed', closed_at = $1, close_reason = $2
-WHERE id = $3
+SET status = 'closed', closed_at = $1, close_reason = $2,
+    closed_by = $3::uuid
+WHERE id = $4
   AND status = 'open'
-RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason
+RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by
 `
 
 type CloseSosParams struct {
 	ClosedAt    *time.Time
 	CloseReason *string
+	ClosedBy    *uuid.UUID
 	ID          uuid.UUID
 }
 
 func (q *Queries) CloseSos(ctx context.Context, arg CloseSosParams) (EmergencySosRequest, error) {
-	row := q.db.QueryRow(ctx, closeSos, arg.ClosedAt, arg.CloseReason, arg.ID)
+	row := q.db.QueryRow(ctx, closeSos,
+		arg.ClosedAt,
+		arg.CloseReason,
+		arg.ClosedBy,
+		arg.ID,
+	)
 	var i EmergencySosRequest
 	err := row.Scan(
 		&i.ID,
@@ -79,6 +86,9 @@ func (q *Queries) CloseSos(ctx context.Context, arg CloseSosParams) (EmergencySo
 		&i.SharedAt,
 		&i.ClosedAt,
 		&i.CloseReason,
+		&i.SeenAt,
+		&i.SeenBy,
+		&i.ClosedBy,
 	)
 	return i, err
 }
@@ -185,7 +195,7 @@ func (q *Queries) DeleteMemberTrustedContacts(ctx context.Context, memberID uuid
 }
 
 const getSos = `-- name: GetSos :one
-SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason
+SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by
 FROM emergency.sos_requests
 WHERE id = $1
 `
@@ -206,12 +216,15 @@ func (q *Queries) GetSos(ctx context.Context, id uuid.UUID) (EmergencySosRequest
 		&i.SharedAt,
 		&i.ClosedAt,
 		&i.CloseReason,
+		&i.SeenAt,
+		&i.SeenBy,
+		&i.ClosedBy,
 	)
 	return i, err
 }
 
 const getSosByIdempotencyKey = `-- name: GetSosByIdempotencyKey :one
-SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason
+SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by
 FROM emergency.sos_requests
 WHERE member_id = $1
   AND idempotency_key = $2
@@ -238,12 +251,15 @@ func (q *Queries) GetSosByIdempotencyKey(ctx context.Context, arg GetSosByIdempo
 		&i.SharedAt,
 		&i.ClosedAt,
 		&i.CloseReason,
+		&i.SeenAt,
+		&i.SeenBy,
+		&i.ClosedBy,
 	)
 	return i, err
 }
 
 const getSosForUpdate = `-- name: GetSosForUpdate :one
-SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason
+SELECT id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by
 FROM emergency.sos_requests
 WHERE id = $1
 FOR UPDATE
@@ -265,6 +281,9 @@ func (q *Queries) GetSosForUpdate(ctx context.Context, id uuid.UUID) (EmergencyS
 		&i.SharedAt,
 		&i.ClosedAt,
 		&i.CloseReason,
+		&i.SeenAt,
+		&i.SeenBy,
+		&i.ClosedBy,
 	)
 	return i, err
 }
@@ -292,7 +311,7 @@ const insertSos = `-- name: InsertSos :one
 INSERT INTO emergency.sos_requests (id, member_id, idempotency_key, type, content, status, created_at, closes_at)
 VALUES ($1, $2, $3, $4, $5, 'open', $6, $7)
 ON CONFLICT (member_id, idempotency_key) DO NOTHING
-RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason
+RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by
 `
 
 type InsertSosParams struct {
@@ -330,6 +349,9 @@ func (q *Queries) InsertSos(ctx context.Context, arg InsertSosParams) (Emergency
 		&i.SharedAt,
 		&i.ClosedAt,
 		&i.CloseReason,
+		&i.SeenAt,
+		&i.SeenBy,
+		&i.ClosedBy,
 	)
 	return i, err
 }
@@ -392,7 +414,7 @@ func (q *Queries) ListMemberSosIDs(ctx context.Context, memberID uuid.UUID) ([]u
 
 const listMySos = `-- name: ListMySos :many
 SELECT s.id, s.member_id, s.idempotency_key, s.type, s.content, s.status, s.created_at, s.closes_at,
-       s.district_id, s.shared_at, s.closed_at, s.close_reason,
+       s.district_id, s.shared_at, s.closed_at, s.close_reason, s.seen_at, s.seen_by, s.closed_by,
        (SELECT count(*) FROM emergency.sos_responses r WHERE r.sos_id = s.id)::integer AS response_count
 FROM emergency.sos_requests s
 WHERE s.member_id = $1
@@ -418,6 +440,9 @@ type ListMySosRow struct {
 	SharedAt       *time.Time
 	ClosedAt       *time.Time
 	CloseReason    *string
+	SeenAt         *time.Time
+	SeenBy         *uuid.UUID
+	ClosedBy       *uuid.UUID
 	ResponseCount  int32
 }
 
@@ -443,6 +468,9 @@ func (q *Queries) ListMySos(ctx context.Context, arg ListMySosParams) ([]ListMyS
 			&i.SharedAt,
 			&i.ClosedAt,
 			&i.CloseReason,
+			&i.SeenAt,
+			&i.SeenBy,
+			&i.ClosedBy,
 			&i.ResponseCount,
 		); err != nil {
 			return nil, err
@@ -570,6 +598,200 @@ func (q *Queries) ListSosResponses(ctx context.Context, arg ListSosResponsesPara
 	return items, nil
 }
 
+const listStaffClosedSos = `-- name: ListStaffClosedSos :many
+SELECT s.id, s.member_id, s.idempotency_key, s.type, s.content, s.status, s.created_at, s.closes_at,
+       s.district_id, s.shared_at, s.closed_at, s.close_reason, s.seen_at, s.seen_by, s.closed_by,
+       (SELECT count(*) FROM emergency.sos_responses r WHERE r.sos_id = s.id)::integer AS response_count
+FROM emergency.sos_requests s
+WHERE s.status = 'closed'
+  AND (
+    $1::timestamptz IS NULL
+    OR (s.created_at, s.id) < ($1::timestamptz, $2::uuid)
+  )
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT $3
+`
+
+type ListStaffClosedSosParams struct {
+	CursorCreatedAt *time.Time
+	CursorID        *uuid.UUID
+	PageLimit       int32
+}
+
+type ListStaffClosedSosRow struct {
+	ID             uuid.UUID
+	MemberID       uuid.UUID
+	IdempotencyKey uuid.UUID
+	Type           string
+	Content        []byte
+	Status         string
+	CreatedAt      time.Time
+	ClosesAt       time.Time
+	DistrictID     *uuid.UUID
+	SharedAt       *time.Time
+	ClosedAt       *time.Time
+	CloseReason    *string
+	SeenAt         *time.Time
+	SeenBy         *uuid.UUID
+	ClosedBy       *uuid.UUID
+	ResponseCount  int32
+}
+
+// Moderator queue, closed requests newest first, keyset by (created_at, id).
+func (q *Queries) ListStaffClosedSos(ctx context.Context, arg ListStaffClosedSosParams) ([]ListStaffClosedSosRow, error) {
+	rows, err := q.db.Query(ctx, listStaffClosedSos, arg.CursorCreatedAt, arg.CursorID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStaffClosedSosRow
+	for rows.Next() {
+		var i ListStaffClosedSosRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MemberID,
+			&i.IdempotencyKey,
+			&i.Type,
+			&i.Content,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ClosesAt,
+			&i.DistrictID,
+			&i.SharedAt,
+			&i.ClosedAt,
+			&i.CloseReason,
+			&i.SeenAt,
+			&i.SeenBy,
+			&i.ClosedBy,
+			&i.ResponseCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStaffOpenSos = `-- name: ListStaffOpenSos :many
+SELECT s.id, s.member_id, s.idempotency_key, s.type, s.content, s.status, s.created_at, s.closes_at,
+       s.district_id, s.shared_at, s.closed_at, s.close_reason, s.seen_at, s.seen_by, s.closed_by,
+       (SELECT count(*) FROM emergency.sos_responses r WHERE r.sos_id = s.id)::integer AS response_count
+FROM emergency.sos_requests s
+WHERE s.status = 'open'
+  AND (
+    $1::timestamptz IS NULL
+    OR (s.created_at, s.id) > ($1::timestamptz, $2::uuid)
+  )
+ORDER BY s.created_at ASC, s.id ASC
+LIMIT $3
+`
+
+type ListStaffOpenSosParams struct {
+	CursorCreatedAt *time.Time
+	CursorID        *uuid.UUID
+	PageLimit       int32
+}
+
+type ListStaffOpenSosRow struct {
+	ID             uuid.UUID
+	MemberID       uuid.UUID
+	IdempotencyKey uuid.UUID
+	Type           string
+	Content        []byte
+	Status         string
+	CreatedAt      time.Time
+	ClosesAt       time.Time
+	DistrictID     *uuid.UUID
+	SharedAt       *time.Time
+	ClosedAt       *time.Time
+	CloseReason    *string
+	SeenAt         *time.Time
+	SeenBy         *uuid.UUID
+	ClosedBy       *uuid.UUID
+	ResponseCount  int32
+}
+
+// Moderator queue, open requests oldest first (the longest waiting on top),
+// keyset by (created_at, id). Every type, childcare included: moderators
+// are among the few who see it (N5).
+func (q *Queries) ListStaffOpenSos(ctx context.Context, arg ListStaffOpenSosParams) ([]ListStaffOpenSosRow, error) {
+	rows, err := q.db.Query(ctx, listStaffOpenSos, arg.CursorCreatedAt, arg.CursorID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStaffOpenSosRow
+	for rows.Next() {
+		var i ListStaffOpenSosRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MemberID,
+			&i.IdempotencyKey,
+			&i.Type,
+			&i.Content,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ClosesAt,
+			&i.DistrictID,
+			&i.SharedAt,
+			&i.ClosedAt,
+			&i.CloseReason,
+			&i.SeenAt,
+			&i.SeenBy,
+			&i.ClosedBy,
+			&i.ResponseCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markSosSeen = `-- name: MarkSosSeen :one
+UPDATE emergency.sos_requests
+SET seen_at = $1, seen_by = $2
+WHERE id = $3
+  AND seen_at IS NULL
+RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by
+`
+
+type MarkSosSeenParams struct {
+	SeenAt *time.Time
+	SeenBy *uuid.UUID
+	ID     uuid.UUID
+}
+
+// Keeps the first moderator: a later "Seen" changes nothing (no row).
+func (q *Queries) MarkSosSeen(ctx context.Context, arg MarkSosSeenParams) (EmergencySosRequest, error) {
+	row := q.db.QueryRow(ctx, markSosSeen, arg.SeenAt, arg.SeenBy, arg.ID)
+	var i EmergencySosRequest
+	err := row.Scan(
+		&i.ID,
+		&i.MemberID,
+		&i.IdempotencyKey,
+		&i.Type,
+		&i.Content,
+		&i.Status,
+		&i.CreatedAt,
+		&i.ClosesAt,
+		&i.DistrictID,
+		&i.SharedAt,
+		&i.ClosedAt,
+		&i.CloseReason,
+		&i.SeenAt,
+		&i.SeenBy,
+		&i.ClosedBy,
+	)
+	return i, err
+}
+
 const shareSos = `-- name: ShareSos :one
 UPDATE emergency.sos_requests
 SET district_id = $1, shared_at = $2
@@ -577,7 +799,7 @@ WHERE id = $3
   AND status = 'open'
   AND shared_at IS NULL
   AND type <> 'childcare'
-RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason
+RETURNING id, member_id, idempotency_key, type, content, status, created_at, closes_at, district_id, shared_at, closed_at, close_reason, seen_at, seen_by, closed_by
 `
 
 type ShareSosParams struct {
@@ -603,6 +825,28 @@ func (q *Queries) ShareSos(ctx context.Context, arg ShareSosParams) (EmergencySo
 		&i.SharedAt,
 		&i.ClosedAt,
 		&i.CloseReason,
+		&i.SeenAt,
+		&i.SeenBy,
+		&i.ClosedBy,
 	)
 	return i, err
+}
+
+const sosRespondedBy = `-- name: SosRespondedBy :one
+SELECT EXISTS (
+  SELECT 1 FROM emergency.sos_responses
+  WHERE sos_id = $1 AND responder_id = $2
+)
+`
+
+type SosRespondedByParams struct {
+	SosID       uuid.UUID
+	ResponderID uuid.UUID
+}
+
+func (q *Queries) SosRespondedBy(ctx context.Context, arg SosRespondedByParams) (bool, error) {
+	row := q.db.QueryRow(ctx, sosRespondedBy, arg.SosID, arg.ResponderID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

@@ -23,6 +23,7 @@ Contract merged, code pending (answers 501):
 - [x] Mentor role: `grantMentorRole` / `revokeMentorRole` (membership) and chat dropping her from rooms on `membership.MentorRoleChanged`
 - [x] Staff accounts and the audit log for admins (`listAuditEntries`, `listStaffAccounts`, `getStaffAccount`, platform `staffdir`)
 - [ ] Record the concrete staff role in membership and chat audit rows (today `staff`)
+- [x] SOS for trusted contacts and moderators, invitation read and decline (`getTrustedSos`, `respondAsTrustedContact`, `getTrustedInvitation`, `declineTrustedInvitation`, `listStaffSos`, `markSosSeen`, `closeSosAsStaff`, emergency)
 - [x] One-time link for external trusted contacts to view a sent emergency plan (`viewExternalPlan`, emergency)
 - [x] Metric input events for analytics: `membership.MemberActiveDay`, `circle.TeaRequested`, `assistant.QuestionAnswered`
 - [x] Analytics (ADR-0024): wellbeing cohort aggregates, the `analytics` context with `getMetrics` and `getMetricsCsv`
