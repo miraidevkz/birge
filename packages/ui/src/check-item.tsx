@@ -1,6 +1,7 @@
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
 import { cn } from './cn';
+import { PressableBox } from './pressable-box';
 import { Text } from './text';
 
 /** CheckItemProps: one option that can be on or off. */
@@ -17,19 +18,20 @@ export interface CheckItemProps {
 /**
  * CheckItem is a full-width row that toggles (needs of a child) or selects
  * one of several (a district). The whole row is the touch target and is
- * announced as a checkbox or radio with its state.
+ * announced as a checkbox or radio with its state. Press feedback comes from
+ * PressableBox.
  */
 export function CheckItem({ title, checked, onChange, radio = false, disabled = false, testID }: CheckItemProps) {
   return (
-    <Pressable
+    <PressableBox
       accessibilityRole={radio ? 'radio' : 'checkbox'}
       accessibilityState={{ checked, disabled }}
       accessibilityLabel={title}
       disabled={disabled}
       onPress={() => onChange(radio ? true : !checked)}
       testID={testID}
-      className={cn(
-        'min-h-touch flex-row items-center gap-3 border-b border-separator py-3 active:opacity-80',
+      boxClassName={cn(
+        'min-h-touch flex-row items-center gap-3 border-b border-separator py-3',
         disabled && 'opacity-50',
       )}
     >
@@ -45,6 +47,6 @@ export function CheckItem({ title, checked, onChange, radio = false, disabled = 
         ) : null}
       </View>
       <Text className="flex-1">{title}</Text>
-    </Pressable>
+    </PressableBox>
   );
 }

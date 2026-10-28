@@ -1,6 +1,7 @@
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
 import { cn } from './cn';
+import { PressableBox } from './pressable-box';
 import { Text } from './text';
 
 /** ChoiceOption is one exclusive option in a ChoiceGroup. */
@@ -23,7 +24,8 @@ export interface ChoiceGroupProps<T extends string = string> {
 /**
  * ChoiceGroup is a row of exclusive choices (language, knowledge kind, chat
  * scope). Selected state uses the primary fill so the screen can still keep
- * one primary Button for its main action.
+ * one primary Button for its main action. Each chip gives press feedback
+ * through PressableBox.
  */
 export function ChoiceGroup<T extends string>({
   label,
@@ -40,7 +42,7 @@ export function ChoiceGroup<T extends string>({
         {options.map((opt) => {
           const selected = opt.value === value;
           return (
-            <Pressable
+            <PressableBox
               key={opt.value}
               accessibilityRole="radio"
               accessibilityLabel={opt.label}
@@ -48,8 +50,8 @@ export function ChoiceGroup<T extends string>({
               disabled={disabled}
               onPress={() => onChange(opt.value)}
               testID={testID ? `${testID}-${opt.value}` : undefined}
-              className={cn(
-                'min-h-touch items-center justify-center rounded-md border px-3 py-1 active:opacity-80',
+              boxClassName={cn(
+                'min-h-touch items-center justify-center rounded-md border px-3 py-1',
                 selected ? 'border-primary bg-primary' : 'border-border bg-secondary',
                 disabled && 'opacity-50',
               )}
@@ -57,7 +59,7 @@ export function ChoiceGroup<T extends string>({
               <Text variant="label" tone={selected ? 'onPrimary' : 'onSecondary'}>
                 {opt.label}
               </Text>
-            </Pressable>
+            </PressableBox>
           );
         })}
       </View>

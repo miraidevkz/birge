@@ -3,6 +3,7 @@ import { ScrollView, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Appear } from './appear';
 import { useScreenBack } from './back';
 import { Button } from './button';
 import { cn } from './cn';
@@ -34,6 +35,12 @@ export interface ScreenProps {
    * title in the top bar and the footer pinned below the content.
    */
   layout?: 'default' | 'form';
+  /**
+   * transitionKey names the content that is showing (a step of a flow). When
+   * it changes, the new content fades in; the title, SOS entry and footer stay.
+   * Static under reduce motion and on crisis screens.
+   */
+  transitionKey?: string;
   /** footer stays with the content: the screen's one primary action. */
   footer?: ReactNode;
   testID?: string;
@@ -50,6 +57,7 @@ export function Screen({
   variant = 'default',
   layout = 'default',
   footer,
+  transitionKey,
   testID,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
@@ -58,6 +66,18 @@ export function Screen({
   const bottomPad = Math.max(insets.bottom, tokens.spacing[3]);
   const onBack = useScreenBack();
   const { t } = useTranslation('ui');
+  // The key remounts the wrapper, so the new step plays its fade once; the
+  // wrapper repeats the parent's gap-5 because the content is no longer the
+  // parent's direct children. The old step leaves at once: a fade-out would
+  // stack both steps in the scroll view for its duration.
+  const content =
+    transitionKey === undefined ? (
+      children
+    ) : (
+      <Appear key={transitionKey} rise={false} className="gap-5">
+        {children}
+      </Appear>
+    );
 
   const header = (
     <View
@@ -98,17 +118,17 @@ export function Screen({
       bottomOffset={tokens.touchTarget + tokens.spacing[16]}
     >
       {title ? <Heading level={1}>{title}</Heading> : null}
-      {children}
+      {content}
       {footer ? <View className="gap-2 pt-2">{footer}</View> : null}
     </KeyboardAwareScrollView>
   );
 
   const defaultContent = scroll ? (
     <ScrollView className="flex-1" contentContainerClassName="gap-5 px-5 pb-8" keyboardShouldPersistTaps="handled">
-      {children}
+      {content}
     </ScrollView>
   ) : (
-    <View className="flex-1 gap-5 px-5">{children}</View>
+    <View className="flex-1 gap-5 px-5">{content}</View>
   );
 
   const frame = (

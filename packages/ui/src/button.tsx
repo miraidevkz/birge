@@ -1,7 +1,8 @@
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 
 import { cn } from './cn';
 import { useMotionAllowed } from './motion';
+import { PressableBox } from './pressable-box';
 import { Text, type TextTone } from './text';
 import { useThemeColors, type ColorName } from './theme';
 
@@ -38,8 +39,8 @@ export interface ButtonProps {
 
 /**
  * Button is a pressable action with pressed, disabled and loading states.
- * Pressed feedback is an instant opacity change, not an animation, so it is
- * the same on crisis screens.
+ * Pressed feedback is a slight scale on the UI thread (PressableBox); under
+ * reduce motion and on crisis screens it is an instant opacity change.
  */
 export function Button({
   title,
@@ -57,7 +58,7 @@ export function Button({
   const v = variants[variant];
   const inactive = disabled || loading;
   return (
-    <Pressable
+    <PressableBox
       accessibilityRole="button"
       accessibilityLabel={title}
       accessibilityHint={accessibilityHint}
@@ -65,13 +66,13 @@ export function Button({
       disabled={inactive}
       onPress={onPress}
       testID={testID}
-      className={cn(
+      className={className}
+      boxClassName={cn(
         // Fully rounded (ADR-0025): soft, friendly, and clearly tappable.
-        'flex-row items-center justify-center gap-2 rounded-full active:opacity-80',
+        'flex-row items-center justify-center gap-2 rounded-full',
         v.box,
         sizes[size],
         disabled && 'opacity-50',
-        className,
       )}
     >
       {/* A spinning indicator is motion; under reduce motion or on crisis
@@ -89,6 +90,6 @@ export function Button({
           {title}
         </Text>
       </View>
-    </Pressable>
+    </PressableBox>
   );
 }

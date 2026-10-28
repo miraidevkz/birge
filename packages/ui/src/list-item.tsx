@@ -1,7 +1,7 @@
 import { memo, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 
-import { cn } from './cn';
+import { PressableBox } from './pressable-box';
 import { Text } from './text';
 
 /** ListItemProps: a title, optional subtitle, leading (avatar) and trailing element (badge, chevron). */
@@ -21,7 +21,8 @@ export interface ListItemProps {
 
 /**
  * ListItem is one row of a List: at least one touch target high, text wraps
- * at large font sizes. Memoized because lists re-render rows often.
+ * at large font sizes. Memoized because lists re-render rows often. List
+ * fades its rows in; the row itself only adds press feedback (PressableBox).
  */
 export const ListItem = memo(function ListItem({
   title,
@@ -51,15 +52,15 @@ export const ListItem = memo(function ListItem({
   const row = 'min-h-touch flex-row items-center gap-3 border-b border-separator py-3';
   if (onPress) {
     return (
-      <Pressable
+      <PressableBox
         accessibilityRole="button"
         accessibilityLabel={label}
         onPress={onPress}
         testID={testID}
-        className={cn(row, 'active:opacity-80')}
+        boxClassName={row}
       >
         {body}
-      </Pressable>
+      </PressableBox>
     );
   }
   return (

@@ -46,6 +46,7 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
   return (
     <Screen
       layout="form"
+      transitionKey={key}
       footer={
         <>
           <Button
