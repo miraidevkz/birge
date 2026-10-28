@@ -12,9 +12,12 @@ up)
 	docker compose ps --format '{{.Service}} {{.State}} {{.Status}}'
 	;;
 web)
+	# BIRGE_PUBLIC_URL (e.g. https://demo.example.org) builds the member app for
+	# the stack published at that origin; the admin stays local-only.
+	member_url=${BIRGE_PUBLIC_URL:-http://localhost:8081}
 	(cd ../../apps/mobile &&
-		EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=http://localhost:8081/v1 \
-			EXPO_PUBLIC_KRATOS_URL=http://localhost:8081/auth \
+		EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=$member_url/v1 \
+			EXPO_PUBLIC_KRATOS_URL=$member_url/auth \
 			npx expo export --platform web --output-dir dist)
 	(cd ../../apps/admin &&
 		EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=http://localhost:8082/v1 \

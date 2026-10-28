@@ -143,6 +143,8 @@ Sign-in limits are looser than in production so testers can retry from one numbe
 
 Staff sign in through a development Ory Hydra (issuer `http://localhost:4444/`) and `cmd/birge-devlogin` on `http://localhost:3000`, which lists one fixed account per staff role and signs in without a password. Its tokens carry `amr` `dev` in place of a second factor, and only this stack's API accepts that (`BIRGE_STAFF_MFA_AMR=dev`); never deploy it. The admin app is the public client `birge-admin` (authorization code with PKCE, redirect `http://localhost:8082/`, see `deploy/compose/hydra/admin-client.json`). From another machine forward ports 4444, 3000 and 8082 as well.
 
+To show the member app outside the machine, publish only port 8081 through an HTTPS tunnel or reverse proxy, then run `BIRGE_PUBLIC_URL=https://<host> BIRGE_CHAT_WS_ORIGINS=<host> deploy/compose/up.sh web` and build the APK with `EXPO_PUBLIC_API_URL=https://<host>/v1 EXPO_PUBLIC_KRATOS_URL=https://<host>/auth`. Never publish the admin (8082), Hydra (4444) or the development login app (3000): the login app signs anyone in as any staff role. A tunnel that terminates TLS outside the deployment's jurisdiction is for synthetic demo data only (non-negotiable 3).
+
 To run the binaries yourself instead, start PostgreSQL, NATS with JetStream and Kratos however you like. Create local development keys under `secrets/` (git-ignored; never commit keys). Production keys come from the secret store, not from `keygen`:
 
 ```sh

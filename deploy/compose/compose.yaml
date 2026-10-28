@@ -23,8 +23,9 @@ x-birge-env: &birge-env
   BIRGE_AUTH_RATE_PER_NUMBER: ${BIRGE_AUTH_RATE_PER_NUMBER:-60/1s}
   BIRGE_AUTH_RATE_PER_IP: ${BIRGE_AUTH_RATE_PER_IP:-120/1s}
   BIRGE_SMS_PER_NUMBER_LIMIT: ${BIRGE_SMS_PER_NUMBER_LIMIT:-500}
-  # The web client below; native clients send no Origin and stay allowed.
-  BIRGE_CHAT_WS_ORIGINS: localhost:8081
+  # The web client below (and its public host, if the stack is published
+  # through a tunnel); native clients send no Origin and stay allowed.
+  BIRGE_CHAT_WS_ORIGINS: ${BIRGE_CHAT_WS_ORIGINS:-localhost:8081}
   # Staff sign-in through the development Hydra below. amr "dev" stands in
   # for the second factor: only this stack accepts it (cmd/birge-devlogin).
   BIRGE_STAFF_INTROSPECTION_URL: http://hydra:4445/admin/oauth2/introspect
