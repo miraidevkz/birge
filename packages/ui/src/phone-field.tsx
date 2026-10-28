@@ -25,7 +25,7 @@ export type PhoneFieldProps = Omit<
 /**
  * PhoneField is a labelled phone input that formats as the user types.
  * Screens keep only the E.164-shaped value; formatting and caret rules live in phone.ts.
- * Controlled `selection` places the caret where applyPhoneEdit decided;
+ * Controlled `selection` places the caret where applyPhoneEdit decided, one frame after the value;
  * onSelectionChange only keeps that state in sync with taps — it does not feed caret math
  * (RN does not guarantee onSelectionChange vs onChangeText order).
  */
@@ -46,8 +46,14 @@ export function PhoneField({ value, onChangePhone, ...props }: PhoneFieldProps) 
     if (digitsOf(display) === '') explicitPlus.current = text.trimStart().startsWith('+');
     const result = applyPhoneEdit(display, text, explicitPlus.current);
     if (result.e164 === '') explicitPlus.current = false;
-    setSelection({ start: result.caret, end: result.caret });
     onChangePhone(result.e164);
+    // Android applies a selection given in the same render as the new value to
+    // the old, shorter text, so the caret landed one place early and the next
+    // digit went before the last one ("+7 (7" + 0 -> "+7 (07"). Release the
+    // selection now and place the caret on the next frame, after the
+    // formatted text is on screen.
+    setSelection(undefined);
+    requestAnimationFrame(() => setSelection({ start: result.caret, end: result.caret }));
   }
 
   return (
