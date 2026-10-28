@@ -66,8 +66,32 @@ func TestExternalPlanLinksPostgres(t *testing.T) {
 	if _, err := e.svc.ViewExternalPlan(ctx, tok); !errors.Is(err, model.ErrNotFound) {
 		t.Fatalf("token after resend: %v", err)
 	}
-	if _, err := e.svc.ExternalPlanLink(ctx, ext.ID); err != nil {
+	tok2, err := e.svc.ExternalPlanLink(ctx, ext.ID)
+	if err != nil {
 		t.Fatal(err)
+	}
+
+	// The outcome of a mint racing a resend or a removal under READ
+	// COMMITTED: the link row stays unrevoked, because the other transaction's
+	// revoke ran before the mint inserted it. The view re-checks the contact,
+	// so it is dead anyway. Simulated by changing the contact without a revoke.
+	if _, err := e.pool.Exec(ctx, `UPDATE emergency.trusted_contacts SET plan_sent_at = plan_sent_at + interval '1 second' WHERE id = $1`, ext.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.ViewExternalPlan(ctx, tok2); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("link of an earlier send after a racing resend: %v", err)
+	}
+	if _, err := e.pool.Exec(ctx, `UPDATE emergency.trusted_contacts SET plan_sent_at = plan_sent_at - interval '1 second', removed_at = now() WHERE id = $1`, ext.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.ViewExternalPlan(ctx, tok2); !errors.Is(err, model.ErrNotFound) {
+		t.Fatalf("link of a removed contact: %v", err)
+	}
+	if _, err := e.pool.Exec(ctx, `UPDATE emergency.trusted_contacts SET removed_at = NULL WHERE id = $1`, ext.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.ViewExternalPlan(ctx, tok2); err != nil {
+		t.Fatalf("link with the contact restored: %v", err)
 	}
 
 	// Retention: both purge timers fire 24 h + 7 days after their send.

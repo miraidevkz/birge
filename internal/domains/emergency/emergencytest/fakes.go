@@ -725,6 +725,10 @@ func (t *memoryTx) GetLivePlanLink(_ context.Context, tokenHash []byte, now time
 	}
 	for _, l := range t.st.links {
 		if bytes.Equal(l.TokenHash, tokenHash) && l.RevokedAt == nil && l.ExpiresAt.After(now) {
+			c, ok := t.st.contacts[l.ContactID]
+			if !ok || !c.Active() || c.PlanSentAt == nil || !c.PlanSentAt.Equal(l.SentAt) {
+				return model.PlanLink{}, model.ErrNotFound
+			}
 			return l, nil
 		}
 	}

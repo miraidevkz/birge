@@ -51,12 +51,20 @@ WHERE owner_id = @owner_id
 
 -- name: GetLivePlanLink :one
 -- One query for every failure (unknown, revoked, expired), so they cannot be
--- told apart by status or by the number of round trips.
-SELECT id, token_hash, contact_id, owner_id, sent_at, created_at, expires_at, revoked_at
-FROM emergency.plan_links
-WHERE token_hash = @token_hash
-  AND revoked_at IS NULL
-  AND expires_at > @now;
+-- told apart by status or by the number of round trips. The join re-checks
+-- the contact at view time: still not removed, and her latest plan send is
+-- the one the link was minted for. Revocation alone is not enough under READ
+-- COMMITTED: a mint that read the contact before a concurrent removal or
+-- resend committed inserts its link after that transaction's revoke ran, and
+-- the revoke never saw it.
+SELECT l.id, l.token_hash, l.contact_id, l.owner_id, l.sent_at, l.created_at, l.expires_at, l.revoked_at
+FROM emergency.plan_links l
+JOIN emergency.trusted_contacts c ON c.id = l.contact_id
+WHERE l.token_hash = @token_hash
+  AND l.revoked_at IS NULL
+  AND l.expires_at > @now
+  AND c.removed_at IS NULL
+  AND c.plan_sent_at = l.sent_at;
 
 -- name: DeleteExpiredPlanLink :execrows
 -- Retention (emergency.PlanLinkPurge): only a link that expired before cutoff.
