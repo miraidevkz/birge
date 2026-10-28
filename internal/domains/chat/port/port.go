@@ -154,6 +154,9 @@ type Tx interface {
 	// AssignMentor and RemoveMentor change the room's mentors.
 	AssignMentor(ctx context.Context, roomID, memberID, by uuid.UUID, at time.Time) error
 	RemoveMentor(ctx context.Context, roomID, memberID uuid.UUID, at time.Time) (bool, error)
+	// RemoveMemberMentorships sets removed_at on every active assignment of
+	// the member and returns the rooms it ended (none on a replay).
+	RemoveMemberMentorships(ctx context.Context, memberID uuid.UUID, at time.Time) ([]uuid.UUID, error)
 	// IsRoomMentor reports whether the member is an assigned mentor of the room.
 	IsRoomMentor(ctx context.Context, roomID, memberID uuid.UUID) (bool, error)
 

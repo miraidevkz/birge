@@ -20,7 +20,8 @@
 //     chat, sharing, directory, moderation) and GET /v1/chat/ws.
 //   - The worker (RunWorker): outbox relay to JetStream, the notify
 //     DeliveryRequested consumer, the emergency.SosShared district-push
-//     consumer, chat.RoomOpenerConsumer, moderation.QueueConsumer (five
+//     consumer, chat.RoomOpenerConsumer, chat.MentorRoleConsumer
+//     (membership.MentorRoleChanged), moderation.QueueConsumer (five
 //     submission events), sharing/directory/chat/membership
 //     moderation.Decided consumers, the knowledge retrieval indexer (when
 //     TEI+Qdrant are set) and the timers worker with notify, privacy,

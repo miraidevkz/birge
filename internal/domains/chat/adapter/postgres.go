@@ -1,7 +1,8 @@
 // Package adapter implements the chat ports on PostgreSQL (schema chat, sqlc
 // in ../store) with the platform hooks (outbox, timers, audit,
-// processed_events), the room fan-out on NATS core, the JetStream consumer
-// that opens direct rooms, the timer handlers and the DEMO room seed. Ports
+// processed_events), the room fan-out on NATS core, the JetStream consumers
+// (direct rooms, moderation.Decided, membership.MentorRoleChanged), the timer
+// handlers and the DEMO room seed. Ports
 // onto other contexts (membership, safety) are wired later.
 package adapter
 
@@ -334,6 +335,15 @@ func (t *postgresTx) RemoveMentor(ctx context.Context, roomID, memberID uuid.UUI
 		return false, fmt.Errorf("remove mentor: %w", err)
 	}
 	return n == 1, nil
+}
+
+// RemoveMemberMentorships implements port.Tx.
+func (t *postgresTx) RemoveMemberMentorships(ctx context.Context, memberID uuid.UUID, at time.Time) ([]uuid.UUID, error) {
+	rooms, err := t.q.RemoveMemberMentorships(ctx, chatstore.RemoveMemberMentorshipsParams{RemovedAt: &at, MemberID: memberID})
+	if err != nil {
+		return nil, fmt.Errorf("remove member mentorships: %w", err)
+	}
+	return rooms, nil
 }
 
 // IsRoomMentor implements port.Tx.

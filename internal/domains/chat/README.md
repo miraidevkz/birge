@@ -9,11 +9,11 @@ In-app chats (ADR-0016, `docs/requirements/mvp.md` § 4.4 «Chats»): district r
 | `rooms` | District room (one per membership district id), topic room (one per needs code), direct room (one per origin `circle.match` / `emergency.sos` / `sharing.listing`, origin id and ordered pair); `slow_mode_seconds`; `last_seq`, the per-room sequence counter | IDs and locale keys only |
 | `room_members` | Membership (`left_at` when she leaves; never deleted), push mute, `last_push_at` (throttle), `connected_until` (gateway presence) | IDs only |
 | `room_restrictions` | Ban (`banned_at`) and `mute_1h` (`muted_until`) per room and member | IDs only |
-| `room_mentors` | Mentors assigned to group rooms by staff (`removed_at`) | IDs only |
+| `room_mentors` | Mentors assigned to group rooms by staff (`removed_at`, also set on every active row when membership takes the mentor role) | IDs only |
 | `messages` | Message with `seq` (unique per room), `client_id` (unique per author), status `visible`/`held`/`hidden`, `hold_reason` `crisis`/`newcomer`/`link`/`phone`, the crisis `escalation_id`, `legal_hold`, `purged_at` | `body`: the text sealed with the **author's** key (AD `chat.messages.text\|<message id>`); NULL once purged |
 | `reports` | One report per reporter and message; `closed_at` | IDs and the reason code |
 
-Uses `platform.processed_events` (consumers `chat.DirectRoomOpener`, `chat.moderation.Decided`), `platform.outbox`, `platform.timers` and `platform.audit_log`.
+Uses `platform.processed_events` (consumers `chat.DirectRoomOpener`, `chat.moderation.Decided`, `chat.membership.MentorRoleChanged`), `platform.outbox`, `platform.timers` and `platform.audit_log`.
 
 ## API
 
@@ -53,6 +53,7 @@ Operations of tag `chat` in `contracts/openapi/birge.yaml`, plus the WebSocket `
 | publishes | `notify.DeliveryRequested` v1 | `chat.PushFanout` timer: one per eligible member (class `normal`, template `chat.new_message`, params `{room_id}`) | outbox, the timer's transaction; `request_id` = SHA-1 UUID of message + template + member |
 | consumes | `circle.MatchAccepted` v1, `emergency.SosResponseAccepted` v1, `sharing.ContactAccepted` v1 | open the direct room of the pair | JetStream durable consumer `chat-direct-rooms`; deduplicated by event id in `platform.processed_events` and by the room's natural key; needs only the chat database |
 | consumes | `moderation.Decided` v1 | kinds `chat_message` and `report` only | JetStream durable `chat-moderation-decided` (filter `birge.events.moderation.Decided`); deduplicated as `chat.moderation.Decided`; object gone → no-op; audits as role `system` with ActorID = moderation item id |
+| consumes | `membership.MentorRoleChanged` v1 | `mentor: false` → sets `removed_at` on every active `room_mentors` row of the member; `mentor: true` → nothing (assignment stays a staff action per room) | JetStream durable `chat-mentor-role-changed`; deduplicated as `chat.membership.MentorRoleChanged` in the removal transaction (a replay or a second revoke ends nothing); one audit row `chat.room.mentor_remove` per room ended, role `system`, ActorID = event id, object `chat.member`, reason `membership.mentor_revoke`; needs only the chat database |
 | consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `chat-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `chat.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
 `moderation.Decided` application:
@@ -83,6 +84,7 @@ Fan-out (not domain events): NATS **core** subjects `birge.chat.room.<room id>` 
 | `HandleCrisisEscalation`, `HandlePush`, `HandleRetention` | Timer handlers (`adapter.TimerHandlers`). `EnsureRetentionTimer` must be called once at worker start. |
 | `ApplyModerationDecided(ctx, eventID, data)` | Applies `moderation.Decided` for `chat_message` / `report` (`adapter.ModerationConsumer`). |
 | `ModerationSummary(ctx, messageID)` | Opened message text for moderation's `ContentSource` (hidden still returns text; purged/gone → `ErrNotFound`; no contacts). |
+| `ApplyMentorRoleChanged(ctx, eventID, data)` | Applies `membership.MentorRoleChanged` (`adapter.MentorRoleConsumer`); idempotent per event id. |
 | `CloseReports(ctx, staff, messageID)`, `SetLegalHold(ctx, staff, messageID, on)` | Staff (`moderator`/`admin`), audited; also via staff HTTP legal-hold routes. |
 | `AssignMentor(ctx, staff, roomID, memberID, assign)` | Staff, audited; the member must hold the mentor role; also via staff HTTP mentor routes. |
 | `StaffListRooms(ctx, staff)` | Staff (`moderator`/`admin`); group rooms with counts and mentors for the admin app. |
@@ -109,7 +111,7 @@ Gateway (`gateway.Options`): `QueueSize` 256, `AuthTimeout` 10 s, `IdleTimeout` 
 - **Idempotent send:** `UNIQUE (author_id, client_id)`; the existence check runs under the author's lock; a concurrent duplicate in another room rolls back (no sequence gap). `TestIdempotentSendPostgres`.
 - **Crisis first:** the lexicon runs before filters, limits and any membership call; crisis messages are never visible to others, never in `chat.MessageHeld`, never restorable; the escalation has a durable retry. `TestCrisisMessageHeldEscalatedPostgres`, `TestHappyPathAcrossReplicas`.
 - **Blocks:** messages of members blocked either way are never listed, rendered for the WebSocket, reportable or pushed; lookups fail closed. `TestBlockedFilteringBothDirectionsPostgres`.
-- **Moderation:** staff all actions, mentors only hide/restore/mute_1h in rooms they are assigned to and only while holding the role; every applied action audited. `TestMentorLimitsPostgres`.
+- **Moderation:** staff all actions, mentors only hide/restore/mute_1h in rooms they are assigned to and only while holding the role (checked live at every action; the assignments themselves end when `membership.MentorRoleChanged` `mentor: false` arrives); every applied action audited. `TestMentorLimitsPostgres`, `TestMentorRoleRevokedConsumerJetStream`.
 - **Privacy:** texts sealed with the author's key; events, notices, logs and pushes carry IDs and codes only (tests check logs, outbox and tables for fake text). Display names are first names only; never phones.
 - **No deletion path in normal operation:** members leave, reports close, retention clears the text and keeps the row.
 - **Account deletion** (AGENTS.md N6, ADR-0019): every message she wrote becomes a "message deleted" tombstone like retention does (body cleared, `purged_at` set; row, sequence number and `author_id` stay), so the other members' history and the gap-free sequences stay whole; her name is no longer found in membership and is shown as deleted. Messages under legal hold are left untouched and logged as `DeletionSkippedLegalHold` with the message ID only. Her reports, room memberships, restrictions and mentor assignments are deleted; direct rooms with her stay for the other member; the push timers of the purged messages are cancelled. The crisis-escalation retry timer is left running (crisis path). One transaction; one audit entry `chat.member_deleted` (actor system).
@@ -125,8 +127,8 @@ Gateway (`gateway.Options`): `QueueSize` 256, `AuthTimeout` 10 s, `IdleTimeout` 
 
 ## Tests
 
-- Unit: `model/model_test.go` (filters, visibility, moderation matrix, validation, push ids, retention schedule); `service/moderation_test.go` (ApplyModerationDecided early returns); `api/handler_test.go` (error mapping).
-- Integration (`adapter/integration_test.go`, `testinfra.Postgres`, `testinfra.NATS`): idempotent send incl. concurrent replays; 50 concurrent sends; crisis held + escalation + author notice + timer retry while safety is down + replay; link/phone holds and restore; newcomer hold; rate limit and slow mode; blocks both ways in history, rendering, reports and push; push throttle, mute and presence; mentor limits and audit; retention with report and legal-hold exemptions; shredded author; room join/list rules; direct rooms exactly once per origin (redelivery and re-publish) and through the JetStream consumer; DEMO seed.
+- Unit: `model/model_test.go` (filters, visibility, moderation matrix, validation, push ids, retention schedule); `service/moderation_test.go` (ApplyModerationDecided and ApplyMentorRoleChanged early returns); `api/handler_test.go` (error mapping).
+- Integration (`adapter/integration_test.go`, `testinfra.Postgres`, `testinfra.NATS`): idempotent send incl. concurrent replays; 50 concurrent sends; crisis held + escalation + author notice + timer retry while safety is down + replay; link/phone holds and restore; newcomer hold; rate limit and slow mode; blocks both ways in history, rendering, reports and push; push throttle, mute and presence; mentor limits and audit; mentor role revoked through the JetStream consumer (all her rooms, other mentors kept, audit per room, duplicate delivery and replay after reassignment are no-ops); retention with report and legal-hold exemptions; shredded author; room join/list rules; direct rooms exactly once per origin (redelivery and re-publish) and through the JetStream consumer; DEMO seed.
 - Gateway (`gateway/gateway_test.go`): two replicas over real NATS (happy path, crisis frame private, errors, ping), resume by seq and gap fill after a lost notice, leave ends the subscription, 4401 on a bad token, slow client disconnected (1013) while a fast client in the same room receives every message.
 
 ## Open questions

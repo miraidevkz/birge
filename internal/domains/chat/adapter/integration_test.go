@@ -979,3 +979,144 @@ func TestStaffListRoomsPostgres(t *testing.T) {
 		}
 	}
 }
+
+func TestMentorRoleRevokedConsumerJetStream(t *testing.T) {
+	e := newEnv(t, service.Settings{})
+	nc, err := nats.Connect(testinfra.NATS(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(nc.Close)
+	js, err := jetstream.New(nc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := js.CreateOrUpdateStream(e.ctx, jetstream.StreamConfig{Name: "EVENTS", Subjects: []string{"birge.events.>"}, Duplicates: time.Minute}); err != nil {
+		t.Fatal(err)
+	}
+
+	autism, hearing := e.topicRoom("autism"), e.topicRoom("hearing")
+	mentor, other := e.member(true, nil), e.member(true, nil)
+	mod := staff("moderator")
+	for _, p := range []auth.Principal{mentor, other} {
+		e.members.SetMentor(p.MemberID, true)
+	}
+	for _, a := range []struct {
+		room   uuid.UUID
+		member uuid.UUID
+	}{{autism.ID, mentor.MemberID}, {hearing.ID, mentor.MemberID}, {autism.ID, other.MemberID}} {
+		if err := e.svc.AssignMentor(e.ctx, mod, a.room, a.member, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Membership takes the role, then publishes the event.
+	e.members.SetMentor(mentor.MemberID, false)
+
+	ctx, cancel := context.WithCancel(e.ctx)
+	done := make(chan error, 1)
+	go func() { done <- (&adapter.MentorRoleConsumer{JS: js, Stream: "EVENTS", Service: e.svc}).Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+
+	revokeID := uuid.New()
+	publish := func(id uuid.UUID, mentorFlag bool) {
+		t.Helper()
+		data, _ := json.Marshal(model.MentorRoleChangedData{MemberID: mentor.MemberID, Mentor: mentorFlag})
+		env, _ := json.Marshal(outbox.Envelope{ID: id, Type: model.EventMentorRoleChanged, Version: 1, OccurredAt: e.clock.Now(), Data: data})
+		if _, err := js.Publish(e.ctx, outbox.Subject(model.EventMentorRoleChanged), env, jetstream.WithMsgID(uuid.NewString())); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The same envelope twice under different broker message ids (JetStream
+	// dedup does not catch it): platform.processed_events must.
+	publish(revokeID, false)
+	publish(revokeID, false)
+
+	settled := func() bool {
+		info, err := js.Consumer(e.ctx, "EVENTS", "chat-mentor-role-changed")
+		if err != nil {
+			return false
+		}
+		ci, err := info.Info(e.ctx)
+		return err == nil && ci.NumAckPending == 0 && ci.NumPending == 0
+	}
+	var processed int
+	for range 200 {
+		if err := e.pool.QueryRow(e.ctx, `SELECT count(*) FROM platform.processed_events WHERE consumer = $1`,
+			model.ConsumerMentorRoleChanged).Scan(&processed); err != nil {
+			t.Fatal(err)
+		}
+		if processed == 1 && settled() {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if processed != 1 || !settled() {
+		t.Fatalf("processed=%d settled=%v", processed, settled())
+	}
+
+	mentorsOf := func() map[uuid.UUID][]uuid.UUID {
+		t.Helper()
+		rooms, err := e.svc.StaffListRooms(e.ctx, mod)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[uuid.UUID][]uuid.UUID{}
+		for _, r := range rooms {
+			for _, m := range r.Mentors {
+				out[r.ID] = append(out[r.ID], m.MemberID)
+			}
+		}
+		return out
+	}
+	got := mentorsOf()
+	if len(got[hearing.ID]) != 0 || len(got[autism.ID]) != 1 || got[autism.ID][0] != other.MemberID {
+		t.Fatalf("mentors after revoke = %v", got)
+	}
+	var removedAt int
+	if err := e.pool.QueryRow(e.ctx, `SELECT count(*) FROM chat.room_mentors WHERE member_id = $1 AND removed_at IS NOT NULL`,
+		mentor.MemberID).Scan(&removedAt); err != nil || removedAt != 2 {
+		t.Fatalf("rows kept with removed_at: %d %v", removedAt, err)
+	}
+	systemAudits := func() int {
+		t.Helper()
+		var n int
+		if err := e.pool.QueryRow(e.ctx, `SELECT count(*) FROM platform.audit_log
+			WHERE action = $1 AND actor_role = 'system' AND actor_id = $2 AND object_id = $3 AND reason = $4`,
+			model.AuditMentorRemove, revokeID, mentor.MemberID, model.AuditReasonMentorRevoked).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := systemAudits(); n != 2 {
+		t.Fatalf("system audit rows %d, want one per room", n)
+	}
+
+	// Staff give the role back and reassign one room; granting assigns
+	// nothing by itself, and replaying the old revoke is a no-op.
+	e.members.SetMentor(mentor.MemberID, true)
+	if err := e.svc.ApplyMentorRoleChanged(e.ctx, uuid.New(), model.MentorRoleChangedData{MemberID: mentor.MemberID, Mentor: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := mentorsOf(); len(got[hearing.ID]) != 0 {
+		t.Fatalf("grant assigned a room: %v", got)
+	}
+	if err := e.svc.AssignMentor(e.ctx, mod, hearing.ID, mentor.MemberID, true); err != nil {
+		t.Fatal(err)
+	}
+	publish(revokeID, false)
+	for range 200 {
+		if settled() {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if err := e.svc.ApplyMentorRoleChanged(e.ctx, revokeID, model.MentorRoleChangedData{MemberID: mentor.MemberID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := mentorsOf(); len(got[hearing.ID]) != 1 || got[hearing.ID][0] != mentor.MemberID {
+		t.Fatalf("replayed revoke removed a new assignment: %v", got)
+	}
+	if n := systemAudits(); n != 2 {
+		t.Fatalf("replay audited again: %d", n)
+	}
+}

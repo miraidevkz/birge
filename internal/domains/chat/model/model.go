@@ -65,7 +65,8 @@ const (
 	ModeratorStaff  = "staff"
 	ModeratorMentor = "mentor"
 	// ModeratorSystem is the audit actor role when applying moderation.Decided
-	// (ActorID = the moderation item id).
+	// (ActorID = the moderation item id) or membership.MentorRoleChanged
+	// (ActorID = the event id).
 	ModeratorSystem = "system"
 )
 
@@ -105,6 +106,7 @@ const (
 	EventSosResponseAccepted = "emergency.SosResponseAccepted"
 	EventContactAccepted     = "sharing.ContactAccepted"
 	EventModerationDecided   = "moderation.Decided"
+	EventMentorRoleChanged   = "membership.MentorRoleChanged"
 	EventVersion             = 1
 )
 
@@ -115,6 +117,10 @@ const ConsumerDirectRooms = "chat.DirectRoomOpener"
 // ConsumerModerationDecided is the processed_events consumer name for
 // moderation.Decided (kinds chat_message and report).
 const ConsumerModerationDecided = "chat.moderation.Decided"
+
+// ConsumerMentorRoleChanged is the processed_events consumer name for
+// membership.MentorRoleChanged.
+const ConsumerMentorRoleChanged = "chat.membership.MentorRoleChanged"
 
 // Moderation.Decided kinds this context applies.
 const (
@@ -159,6 +165,9 @@ const (
 	AuditReportsClose  = "chat.message.reports_close"
 	AuditLegalHoldOn   = "chat.message.legal_hold_on"
 	AuditLegalHoldOff  = "chat.message.legal_hold_off"
+	// AuditReasonMentorRevoked is the audit reason of a chat.room.mentor_remove
+	// written by the system because membership took the mentor role away.
+	AuditReasonMentorRevoked = "membership.mentor_revoke"
 )
 
 // FieldText is the associated-data field of a message text
@@ -526,6 +535,12 @@ type ModerationDecidedData struct {
 	Reason      string    `json:"reason,omitempty"`
 	BlockAuthor bool      `json:"block_author"`
 	LegalHold   bool      `json:"legal_hold"`
+}
+
+// MentorRoleChangedData is the payload of membership.MentorRoleChanged v1.
+type MentorRoleChangedData struct {
+	MemberID uuid.UUID `json:"member_id"`
+	Mentor   bool      `json:"mentor"`
 }
 
 // DeliveryRecipient is the recipient object of notify.DeliveryRequested v1.

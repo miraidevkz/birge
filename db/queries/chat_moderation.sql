@@ -59,6 +59,15 @@ UPDATE chat.room_mentors
 SET removed_at = @removed_at
 WHERE room_id = @room_id AND member_id = @member_id AND removed_at IS NULL;
 
+-- name: RemoveMemberMentorships :many
+-- Ends every active assignment of the member (mentor role taken in
+-- membership). Rows stay with removed_at set; already removed rows are
+-- untouched, so a replay returns nothing.
+UPDATE chat.room_mentors
+SET removed_at = @removed_at
+WHERE member_id = @member_id AND removed_at IS NULL
+RETURNING room_id;
+
 -- name: IsRoomMentor :one
 SELECT EXISTS (
     SELECT 1 FROM chat.room_mentors

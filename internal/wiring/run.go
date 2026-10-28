@@ -442,6 +442,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	sharingMod := &sharingadapter.ModerationConsumer{JS: js, Service: sharing, Logger: logger}
 	directoryMod := &directoryadapter.ModerationConsumer{JS: js, Service: directory, Logger: logger}
 	chatMod := &chatadapter.ModerationConsumer{JS: js, Service: chat, Logger: logger}
+	chatMentors := &chatadapter.MentorRoleConsumer{JS: js, Stream: StreamName, Service: chat, Logger: logger}
 	membershipMod := &membershipadapter.ModerationConsumer{JS: js, Service: members, Logger: logger}
 	moderationQueue := &moderationadapter.QueueConsumer{JS: js, Stream: StreamName, Service: moderation, Logger: logger}
 	timerWorker := &timers.Worker{Pool: pool, Clock: clk, Logger: logger, Handlers: handlers, Interval: timersInterval}
@@ -459,6 +460,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		"sharing moderation":    sharingMod.Run,
 		"directory moderation":  directoryMod.Run,
 		"chat moderation":       chatMod.Run,
+		"chat mentor role":      chatMentors.Run,
 		"membership moderation": membershipMod.Run,
 		"timers":                timerWorker.Run,
 		"health endpoints":      func(ctx context.Context) error { return serve(ctx, logger, cfg.HTTPAddr, health) },

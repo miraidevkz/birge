@@ -254,6 +254,41 @@ func (q *Queries) PurgeMessagesByID(ctx context.Context, arg PurgeMessagesByIDPa
 	return result.RowsAffected(), nil
 }
 
+const removeMemberMentorships = `-- name: RemoveMemberMentorships :many
+UPDATE chat.room_mentors
+SET removed_at = $1
+WHERE member_id = $2 AND removed_at IS NULL
+RETURNING room_id
+`
+
+type RemoveMemberMentorshipsParams struct {
+	RemovedAt *time.Time
+	MemberID  uuid.UUID
+}
+
+// Ends every active assignment of the member (mentor role taken in
+// membership). Rows stay with removed_at set; already removed rows are
+// untouched, so a replay returns nothing.
+func (q *Queries) RemoveMemberMentorships(ctx context.Context, arg RemoveMemberMentorshipsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, removeMemberMentorships, arg.RemovedAt, arg.MemberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var room_id uuid.UUID
+		if err := rows.Scan(&room_id); err != nil {
+			return nil, err
+		}
+		items = append(items, room_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removeRoomMentor = `-- name: RemoveRoomMentor :execrows
 UPDATE chat.room_mentors
 SET removed_at = $1

@@ -15,6 +15,8 @@
 //     the timer handlers (adapter.TimerHandlers) and the first retention run;
 //   - ApplyModerationDecided: applies moderation.Decided for chat_message
 //     and report (consumer chat.moderation.Decided);
+//   - ApplyMentorRoleChanged: ends the member's room mentor assignments when
+//     membership takes the role (consumer chat.membership.MentorRoleChanged);
 //   - ModerationSummary: opened message text for the moderation ContentSource;
 //   - CloseReports / SetLegalHold / AssignMentor: staff-principal helpers
 //     (also exposed over staff HTTP).

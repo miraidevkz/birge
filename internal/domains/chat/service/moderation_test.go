@@ -54,3 +54,30 @@ type rejectStore struct{}
 func (rejectStore) InTx(context.Context, func(port.Tx) error) error {
 	return errors.New("store should not be called")
 }
+
+func TestApplyMentorRoleChangedEarlyReturns(t *testing.T) {
+	member := uuid.New()
+	tests := []struct {
+		name    string
+		eventID uuid.UUID
+		data    model.MentorRoleChangedData
+		wantErr error
+	}{
+		// Granting the role assigns no room: assignment stays a staff action.
+		{"grant is a no-op", uuid.New(), model.MentorRoleChangedData{MemberID: member, Mentor: true}, nil},
+		{"nil event id", uuid.Nil, model.MentorRoleChangedData{MemberID: member}, model.ErrInvalidInput},
+		{"nil member id", uuid.New(), model.MentorRoleChangedData{}, model.ErrInvalidInput},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &service.Service{Clock: &chattest.Clock{T: time.Now().UTC()}, Store: rejectStore{}}
+			err := svc.ApplyMentorRoleChanged(context.Background(), tt.eventID, tt.data)
+			if tt.wantErr == nil && err != nil {
+				t.Fatalf("expected no-op, got %v", err)
+			}
+			if tt.wantErr != nil && !errors.Is(err, tt.wantErr) {
+				t.Fatalf("expected %v, got %v", tt.wantErr, err)
+			}
+		})
+	}
+}

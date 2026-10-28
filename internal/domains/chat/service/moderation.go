@@ -199,6 +199,54 @@ func (s *Service) AssignMentor(ctx context.Context, p auth.Principal, roomID, me
 	})
 }
 
+// ApplyMentorRoleChanged applies membership.MentorRoleChanged. mentor=false
+// ends every active room assignment of the member, so staffListRooms and room
+// moderation agree with membership at once; mentor=true changes nothing,
+// because assignment stays a staff action per room. Deduplicated via
+// platform.processed_events in the same transaction as the removal; a replay
+// (or a second revoke) finds no active rows. One audit row per room ended,
+// action chat.room.mentor_remove, actor role system with ActorID = the event
+// id (the outbox row leads to the staff decision in membership), object the
+// member, as for the staff route. Needs only the chat database.
+func (s *Service) ApplyMentorRoleChanged(ctx context.Context, eventID uuid.UUID, data model.MentorRoleChangedData) error {
+	if eventID == uuid.Nil || data.MemberID == uuid.Nil {
+		return fmt.Errorf("%w: mentor role event", model.ErrInvalidInput)
+	}
+	if data.Mentor {
+		return nil
+	}
+	now := s.now()
+	removed := 0
+	err := s.Store.InTx(ctx, func(tx port.Tx) error {
+		newly, err := tx.MarkProcessed(ctx, model.ConsumerMentorRoleChanged, eventID)
+		if err != nil {
+			return err
+		}
+		if !newly {
+			return nil
+		}
+		rooms, err := tx.RemoveMemberMentorships(ctx, data.MemberID, now)
+		if err != nil {
+			return err
+		}
+		for range rooms {
+			if err := tx.Audit(ctx, model.AuditEntry{
+				ActorID: eventID, ActorRole: model.ModeratorSystem, Action: model.AuditMentorRemove,
+				ObjectType: model.AuditObjectMember, ObjectID: data.MemberID, Reason: model.AuditReasonMentorRevoked,
+			}); err != nil {
+				return err
+			}
+		}
+		removed = len(rooms)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	s.log().Info("chat mentor role revoked", "event", "ChatMentorRoleRevoked", "event_id", eventID, "member_id", data.MemberID, "rooms", removed)
+	return nil
+}
+
 // ReportMessage records the caller's report of a message she can see and
 // publishes chat.MessageReported once per reporter and message. The message
 // is then kept past retention until its reports are closed.
