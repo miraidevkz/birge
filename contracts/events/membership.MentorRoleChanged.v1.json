@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:membership.MentorRoleChanged.v1",
+  "title": "membership.MentorRoleChanged",
+  "description": "Staff gave or took the mentor role. On mentor=false chat removes her from every room she mentors.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "member_id",
+    "mentor"
+  ],
+  "properties": {
+    "member_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "mentor": {
+      "type": "boolean"
+    }
+  }
+}

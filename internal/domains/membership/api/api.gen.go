@@ -202,10 +202,13 @@ type StaffMember struct {
 	DisplayName string              `json:"displayName"`
 	DistrictId  *openapi_types.UUID `json:"districtId,omitempty"`
 	Id          openapi_types.UUID  `json:"id"`
-	Suspended   bool                `json:"suspended"`
-	SuspendedAt *time.Time          `json:"suspendedAt,omitempty"`
-	Verified    bool                `json:"verified"`
-	VerifiedAt  *time.Time          `json:"verifiedAt,omitempty"`
+
+	// Mentor She holds the membership role mentor (can be assigned to rooms).
+	Mentor      *bool      `json:"mentor,omitempty"`
+	Suspended   bool       `json:"suspended"`
+	SuspendedAt *time.Time `json:"suspendedAt,omitempty"`
+	Verified    bool       `json:"verified"`
+	VerifiedAt  *time.Time `json:"verifiedAt,omitempty"`
 }
 
 // StaffMemberPage defines model for StaffMemberPage.

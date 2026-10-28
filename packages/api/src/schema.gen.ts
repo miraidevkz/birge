@@ -2426,6 +2426,8 @@ export interface components {
             suspended: boolean;
             /** Format: date-time */
             suspendedAt?: string;
+            /** @description She holds the membership role mentor (can be assigned to rooms). */
+            mentor?: boolean;
         };
         /** @description A short code such as escalation.take or safety.escalation (package platform/audit). */
         AuditCode: string;

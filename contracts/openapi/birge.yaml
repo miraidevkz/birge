@@ -2953,6 +2953,7 @@ components:
         verifiedAt: {type: string, format: date-time}
         suspended: {type: boolean}
         suspendedAt: {type: string, format: date-time}
+        mentor: {type: boolean, description: She holds the membership role mentor (can be assigned to rooms).}
     AuditCode:
       type: string
       pattern: '^[a-z][a-z_.]{1,63}$'
