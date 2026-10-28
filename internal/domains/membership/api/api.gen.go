@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -83,6 +84,24 @@ func (e MemberVerification) Valid() bool {
 	case Pending:
 		return true
 	case Verified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StaffListMembersParamsStatus.
+const (
+	StaffMembersSuspended StaffListMembersParamsStatus = "suspended"
+	StaffMembersVerified  StaffListMembersParamsStatus = "verified"
+)
+
+// Valid indicates whether the value is a known member of the StaffListMembersParamsStatus enum.
+func (e StaffListMembersParamsStatus) Valid() bool {
+	switch e {
+	case StaffMembersSuspended:
+		return true
+	case StaffMembersVerified:
 		return true
 	default:
 		return false
@@ -178,6 +197,23 @@ type Problem struct {
 	Type   string  `json:"type"`
 }
 
+// StaffMember defines model for StaffMember.
+type StaffMember struct {
+	DisplayName string              `json:"displayName"`
+	DistrictId  *openapi_types.UUID `json:"districtId,omitempty"`
+	Id          openapi_types.UUID  `json:"id"`
+	Suspended   bool                `json:"suspended"`
+	SuspendedAt *time.Time          `json:"suspendedAt,omitempty"`
+	Verified    bool                `json:"verified"`
+	VerifiedAt  *time.Time          `json:"verifiedAt,omitempty"`
+}
+
+// StaffMemberPage defines model for StaffMemberPage.
+type StaffMemberPage struct {
+	Items      []StaffMember `json:"items"`
+	NextCursor *string       `json:"nextCursor,omitempty"`
+}
+
 // ArticleId defines model for ArticleId.
 type ArticleId = openapi_types.UUID
 
@@ -223,6 +259,16 @@ type RequestVerificationParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// StaffListMembersParams defines parameters for StaffListMembers.
+type StaffListMembersParams struct {
+	Status     StaffListMembersParamsStatus `form:"status" json:"status"`
+	DistrictId *openapi_types.UUID          `form:"districtId,omitempty" json:"districtId,omitempty"`
+	Cursor     *string                      `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// StaffListMembersParamsStatus defines parameters for StaffListMembers.
+type StaffListMembersParamsStatus string
+
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = MemberUpdate
 
@@ -267,6 +313,9 @@ type ServerInterface interface {
 	// ListNeeds Special-needs categories (localized labels come from locale files by code).
 	// (GET /reference/needs)
 	ListNeeds(w http.ResponseWriter, r *http.Request)
+	// StaffListMembers Verified or suspended members, for mentor assignment and suspension review. Staff moderator or admin, MFA. Audited.
+	// (GET /staff/members)
+	StaffListMembers(w http.ResponseWriter, r *http.Request, params StaffListMembersParams)
 	// LiftMemberSuspension Lift a member suspension. Staff admin, MFA. Audited.
 	// (DELETE /staff/members/{memberId}/suspension)
 	LiftMemberSuspension(w http.ResponseWriter, r *http.Request, memberId openapi_types.UUID)
@@ -579,6 +628,65 @@ func (siw *ServerInterfaceWrapper) ListNeeds(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// StaffListMembers operation middleware
+func (siw *ServerInterfaceWrapper) StaffListMembers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StaffListMembersParams
+
+	// ------------- Required query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "districtId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "districtId", r.URL.Query(), &params.DistrictId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "districtId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "districtId", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StaffListMembers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // LiftMemberSuspension operation middleware
 func (siw *ServerInterfaceWrapper) LiftMemberSuspension(w http.ResponseWriter, r *http.Request) {
 
@@ -762,6 +870,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/blocks/{memberId}", wrapper.BlockMember)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/reference/districts", wrapper.ListDistricts)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/reference/needs", wrapper.ListNeeds)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/staff/members", wrapper.StaffListMembers)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/staff/members/{memberId}/suspension", wrapper.LiftMemberSuspension)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/staff/members/{memberId}/suspension", wrapper.GetMemberSuspension)
 
@@ -1180,6 +1289,61 @@ func (response ListNeedsdefaultApplicationProblemPlusJSONResponse) VisitListNeed
 	return err
 }
 
+type StaffListMembersRequestObject struct {
+	Params StaffListMembersParams
+}
+
+type StaffListMembersResponseObject interface {
+	VisitStaffListMembersResponse(w http.ResponseWriter) error
+}
+
+type StaffListMembers200JSONResponse StaffMemberPage
+
+func (response StaffListMembers200JSONResponse) VisitStaffListMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StaffListMembers403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response StaffListMembers403ApplicationProblemPlusJSONResponse) VisitStaffListMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StaffListMembersdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response StaffListMembersdefaultApplicationProblemPlusJSONResponse) VisitStaffListMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type LiftMemberSuspensionRequestObject struct {
 	MemberId openapi_types.UUID `json:"memberId"`
 }
@@ -1319,6 +1483,9 @@ type StrictServerInterface interface {
 	// ListNeeds Special-needs categories (localized labels come from locale files by code).
 	// (GET /reference/needs)
 	ListNeeds(ctx context.Context, request ListNeedsRequestObject) (ListNeedsResponseObject, error)
+	// StaffListMembers Verified or suspended members, for mentor assignment and suspension review. Staff moderator or admin, MFA. Audited.
+	// (GET /staff/members)
+	StaffListMembers(ctx context.Context, request StaffListMembersRequestObject) (StaffListMembersResponseObject, error)
 	// LiftMemberSuspension Lift a member suspension. Staff admin, MFA. Audited.
 	// (DELETE /staff/members/{memberId}/suspension)
 	LiftMemberSuspension(ctx context.Context, request LiftMemberSuspensionRequestObject) (LiftMemberSuspensionResponseObject, error)
@@ -1658,6 +1825,32 @@ func (sh *strictHandler) ListNeeds(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListNeedsResponseObject); ok {
 		if err := validResponse.VisitListNeedsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StaffListMembers operation middleware
+func (sh *strictHandler) StaffListMembers(w http.ResponseWriter, r *http.Request, params StaffListMembersParams) {
+	var request StaffListMembersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StaffListMembers(ctx, request.(StaffListMembersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StaffListMembers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StaffListMembersResponseObject); ok {
+		if err := validResponse.VisitStaffListMembersResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

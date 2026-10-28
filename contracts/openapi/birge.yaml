@@ -1672,6 +1672,29 @@ paths:
         '204': {description: Decided.}
         '409': {$ref: '#/components/responses/Problem'}
         default: {$ref: '#/components/responses/Problem'}
+  /staff/members:
+    get:
+      operationId: staffListMembers
+      tags: [membership]
+      summary: Verified or suspended members, for mentor assignment and suspension review. Staff moderator or admin, MFA. Audited.
+      description: |
+        Moderation items carry no member IDs by design, so this is how staff find a member to
+        make a mentor or to review a suspension. First name and district only: never the
+        phone, children, needs or check-ins. Each read is written to the audit log.
+      security:
+        - staffOidc: []
+      parameters:
+        - {name: status, in: query, required: true, schema: {type: string, enum: [verified, suspended], x-enum-varnames: [StaffMembersVerified, StaffMembersSuspended]}}
+        - {name: districtId, in: query, required: false, schema: {type: string, format: uuid}}
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 128}}
+      responses:
+        '200':
+          description: Members, most recently verified or suspended first.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffMemberPage'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
   /staff/members/{memberId}/suspension:
     parameters:
       - {name: memberId, in: path, required: true, schema: {type: string, format: uuid}}
@@ -2820,3 +2843,22 @@ components:
           properties:
             answeredFromKnowledge: {$ref: '#/components/schemas/MetricCell'}
             helpedShare: {$ref: '#/components/schemas/MetricCell'}
+    StaffMemberPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/StaffMember'}}
+        nextCursor: {type: string, maxLength: 128}
+    StaffMember:
+      type: object
+      additionalProperties: false
+      required: [id, displayName, verified, suspended]
+      properties:
+        id: {type: string, format: uuid}
+        displayName: {type: string, maxLength: 40}
+        districtId: {type: string, format: uuid}
+        verified: {type: boolean}
+        verifiedAt: {type: string, format: date-time}
+        suspended: {type: boolean}
+        suspendedAt: {type: string, format: date-time}

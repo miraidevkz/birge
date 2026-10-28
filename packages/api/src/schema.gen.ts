@@ -1441,6 +1441,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/staff/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verified or suspended members, for mentor assignment and suspension review. Staff moderator or admin, MFA. Audited.
+         * @description Moderation items carry no member IDs by design, so this is how staff find a member to
+         *     make a mentor or to review a suspension. First name and district only: never the
+         *     phone, children, needs or check-ins. Each read is written to the audit log.
+         */
+        get: operations["staffListMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/staff/members/{memberId}/suspension": {
         parameters: {
             query?: never;
@@ -2304,6 +2326,23 @@ export interface components {
                 answeredFromKnowledge: components["schemas"]["MetricCell"];
                 helpedShare: components["schemas"]["MetricCell"];
             };
+        };
+        StaffMemberPage: {
+            items: components["schemas"]["StaffMember"][];
+            nextCursor?: string;
+        };
+        StaffMember: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            /** Format: uuid */
+            districtId?: string;
+            verified: boolean;
+            /** Format: date-time */
+            verifiedAt?: string;
+            suspended: boolean;
+            /** Format: date-time */
+            suspendedAt?: string;
         };
     };
     responses: {
@@ -4681,6 +4720,32 @@ export interface operations {
                 content?: never;
             };
             409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    staffListMembers: {
+        parameters: {
+            query: {
+                status: "verified" | "suspended";
+                districtId?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Members, most recently verified or suspended first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMemberPage"];
+                };
+            };
+            403: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
