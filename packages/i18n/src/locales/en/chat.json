@@ -35,7 +35,8 @@
       "child_safety": "Child safety",
       "spam": "Spam",
       "other": "Other"
-    }
+    },
+    "review": "Your message will appear once a moderator has checked it. This keeps the chats free of spam."
   },
   "roomTitle": {
     "district": "Mothers of {{name}}",

@@ -29,6 +29,8 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 
 - **A browser client on the Kratos API flow needs `Origin` stripped at the gateway.** Kratos answers 400 "the request was made as part of an AJAX request" to any API flow with an `Origin` header; the native apps send none, so only the web build failed ("Could not sign in"). The auth gateway drops it, as it drops `Cookie`. Test sign-in in a browser, not only on a device. (web demo)
 
+- **A held chat message is not a crisis unless it says so.** The chat client showed the red crisis banner with Help for every held message, and a newcomer's "hello" (held for review, reason `newcomer`) looked like an emergency. Only a crisis hold carries `crisisPhones`; any other hold is a calm review notice. (chat)
+
 ## Contracts and code generation
 
 - **Quote YAML strings that contain punctuation in flow style.** A comma inside `{description: ...}` split it into an extra field and invalidated the whole OpenAPI document; the generator accepted it, the validator did not. The validator's tests load the real contract. (68739b9) A bulk fix must touch only `description` keys that describe a schema, not properties named `description`. (The validator caught a second case before commit.)

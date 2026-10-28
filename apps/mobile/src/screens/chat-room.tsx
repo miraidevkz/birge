@@ -30,7 +30,9 @@ export function ChatRoomScreen({ roomId, title }: { roomId: string; title?: stri
   const { t } = useTranslation('chat');
   const client = useQueryClient();
   const [text, setText] = useState('');
-  const [held, setHeld] = useState(false);
+  // 'crisis': the lexicon held it (Help first); 'review': held for a moderator
+  // (a newcomer's first messages, links, phone numbers), nothing alarming.
+  const [held, setHeld] = useState<'crisis' | 'review' | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
   const [reportDone, setReportDone] = useState(false);
 
@@ -58,7 +60,9 @@ export function ChatRoomScreen({ roomId, title }: { roomId: string; title?: stri
     onSuccess: async (msg) => {
       setText('');
       if (msg.status === 'held') {
-        setHeld(true);
+        // Only a crisis hold carries crisis phones (chat API); any other hold
+        // is a routine review and must not look like an emergency.
+        setHeld(msg.crisisPhones ? 'crisis' : 'review');
         if (msg.crisisPhones) await saveCrisisPhones(msg.crisisPhones);
       }
       await client.invalidateQueries({ queryKey: ['chat-messages', roomId] });
@@ -87,7 +91,8 @@ export function ChatRoomScreen({ roomId, title }: { roomId: string; title?: stri
       scroll={false}
       footer={
         <>
-          {held ? (
+          {held === 'review' ? <Banner tone="info">{t('room.review')}</Banner> : null}
+          {held === 'crisis' ? (
             <Banner
               tone="danger"
               action={

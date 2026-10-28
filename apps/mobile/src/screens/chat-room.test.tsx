@@ -71,6 +71,38 @@ describe('ChatRoomScreen', () => {
     expect(await screen.findByText(/Something went wrong/)).toBeTruthy();
   });
 
+  async function sendHeld(extra: Record<string, unknown>) {
+    mockFetch.mockImplementation(async (input, init) => {
+      const req = input instanceof Request ? input : new Request(String(input), init);
+      if (req.method === 'GET') return json(200, []);
+      return json(201, {
+        id: MSG_ID,
+        roomId: ROOM_ID,
+        seq: 1,
+        authorId: '01900000-0000-7000-8000-0000000000a2',
+        authorName: 'Me',
+        status: 'held',
+        mine: true,
+        createdAt: '2026-01-01T00:01:00Z',
+        ...extra,
+      });
+    });
+    await renderRoom();
+    await fireEvent.changeText(await screen.findByTestId('chat-composer'), 'Hello, we live nearby');
+    await fireEvent.press(screen.getByTestId('chat-send'));
+  }
+
+  it('a routine hold (a newcomer) is a calm notice, not an emergency', async () => {
+    await sendHeld({});
+    expect(await screen.findByText(/once a moderator has checked it/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open Help' })).toBeNull();
+  });
+
+  it('a crisis hold shows Help first', async () => {
+    await sendHeld({ crisisPhones: [{ number: '+70000000000', label: 'Example line' }] });
+    expect(await screen.findByRole('button', { name: 'Open Help' })).toBeTruthy();
+  });
+
   it('sends a message with Idempotency-Key and reports another message', async () => {
     const other = {
       id: OTHER_ID,
