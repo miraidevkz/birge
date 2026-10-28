@@ -41,6 +41,8 @@ tags:
     description: Staff queue for listings, specialists, reviews, reports, held chat messages and verification requests.
   - name: analytics
     description: Pseudonymous pilot metrics as aggregates with small-cell suppression (ADR-0024). Staff admin only.
+  - name: staff
+    description: Staff accounts seen by the deployment and the audit log of staff actions. Staff admin only.
 security:
   - memberSession: []
 paths:
@@ -1695,6 +1697,31 @@ paths:
               schema: {$ref: '#/components/schemas/StaffMemberPage'}
         '403': {$ref: '#/components/responses/Problem'}
         default: {$ref: '#/components/responses/Problem'}
+  /staff/members/{memberId}/roles/mentor:
+    parameters:
+      - {name: memberId, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: grantMentorRole
+      tags: [membership]
+      summary: Give a verified member the mentor role, so she can be assigned to a room (409 when she is not verified or is suspended). Staff moderator or admin, MFA. Audited.
+      security:
+        - staffOidc: []
+      responses:
+        '204': {description: Granted (idempotent).}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: revokeMentorRole
+      tags: [membership]
+      summary: Take the mentor role away; chat removes her from every room she mentors. Staff moderator or admin, MFA. Audited.
+      security:
+        - staffOidc: []
+      responses:
+        '204': {description: Revoked (idempotent).}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
   /staff/members/{memberId}/suspension:
     parameters:
       - {name: memberId, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1721,6 +1748,70 @@ paths:
       responses:
         '204': {description: Lifted (idempotent when not suspended).}
         '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/audit:
+    get:
+      operationId: listAuditEntries
+      tags: [staff]
+      summary: Audit log of staff actions, newest first. Staff admin, MFA. Reading it is audited too.
+      description: |
+        Only entries whose actor is staff (psychologist, moderator, lawyer, admin). Entries by
+        members (for example a trusted contact viewing a shared plan) are not listed here.
+        Entries carry codes and IDs only, never content (package platform/audit).
+      security:
+        - staffOidc: []
+      parameters:
+        - {name: actorId, in: query, required: false, schema: {type: string, format: uuid}}
+        - {name: objectType, in: query, required: false, schema: {$ref: '#/components/schemas/AuditCode'}}
+        - {name: objectId, in: query, required: false, schema: {type: string, format: uuid}}
+        - {name: action, in: query, required: false, schema: {$ref: '#/components/schemas/AuditCode'}}
+        - {name: from, in: query, required: false, schema: {type: string, format: date-time}}
+        - {name: to, in: query, required: false, schema: {type: string, format: date-time}}
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 128}}
+      responses:
+        '200':
+          description: One page, newest first.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuditPage'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/accounts:
+    get:
+      operationId: listStaffAccounts
+      tags: [staff]
+      summary: Staff who have signed in to this deployment, most recently active first. Staff admin, MFA.
+      description: |
+        A staff account is recorded the first time a valid staff token reaches the API and
+        refreshed at most once an hour (name and roles as the IdP last sent them). The IdP
+        stays the authority on who is staff; this list is for reading the audit log.
+      security:
+        - staffOidc: []
+      responses:
+        '200':
+          description: All staff accounts.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffAccountList'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/accounts/{staffId}:
+    parameters:
+      - {name: staffId, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getStaffAccount
+      tags: [staff]
+      summary: One staff member's card with action counts for the last 30 days. Staff admin, MFA.
+      security:
+        - staffOidc: []
+      responses:
+        '200':
+          description: Staff card.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffAccountCard'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
         default: {$ref: '#/components/responses/Problem'}
   /staff/metrics:
     get:
@@ -2862,3 +2953,64 @@ components:
         verifiedAt: {type: string, format: date-time}
         suspended: {type: boolean}
         suspendedAt: {type: string, format: date-time}
+    AuditCode:
+      type: string
+      pattern: '^[a-z][a-z_.]{1,63}$'
+      description: A short code such as escalation.take or safety.escalation (package platform/audit).
+    StaffRole:
+      type: string
+      enum: [psychologist, moderator, lawyer, admin]
+    AuditEntry:
+      type: object
+      additionalProperties: false
+      required: [id, occurredAt, actorId, actorRole, action, objectType]
+      properties:
+        id: {type: string, format: uuid}
+        occurredAt: {type: string, format: date-time}
+        actorId: {type: string, format: uuid, description: Staff ID; open its card with getStaffAccount.}
+        actorRole: {$ref: '#/components/schemas/StaffRole'}
+        actorName: {type: string, maxLength: 80, description: The staff account's display name when known.}
+        action: {$ref: '#/components/schemas/AuditCode'}
+        objectType: {$ref: '#/components/schemas/AuditCode'}
+        objectId: {type: string, format: uuid}
+        reason: {$ref: '#/components/schemas/AuditCode'}
+    AuditPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/AuditEntry'}}
+        nextCursor: {type: string, maxLength: 128}
+    StaffAccount:
+      type: object
+      additionalProperties: false
+      required: [id, roles, firstSeenAt, lastSeenAt]
+      properties:
+        id: {type: string, format: uuid}
+        displayName: {type: string, maxLength: 80, description: From the IdP name or preferred_username claim; absent when the IdP sends neither.}
+        roles: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/StaffRole'}}
+        firstSeenAt: {type: string, format: date-time}
+        lastSeenAt: {type: string, format: date-time}
+    StaffAccountList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 1000, items: {$ref: '#/components/schemas/StaffAccount'}}
+    StaffAccountCard:
+      type: object
+      additionalProperties: false
+      required: [account, actions30d]
+      properties:
+        account: {$ref: '#/components/schemas/StaffAccount'}
+        actions30d:
+          type: array
+          maxItems: 200
+          description: Count per action code over the last 30 days; the entries themselves come from listAuditEntries with actorId.
+          items:
+            type: object
+            additionalProperties: false
+            required: [action, count]
+            properties:
+              action: {$ref: '#/components/schemas/AuditCode'}
+              count: {type: integer, minimum: 0}

@@ -316,6 +316,12 @@ type ServerInterface interface {
 	// StaffListMembers Verified or suspended members, for mentor assignment and suspension review. Staff moderator or admin, MFA. Audited.
 	// (GET /staff/members)
 	StaffListMembers(w http.ResponseWriter, r *http.Request, params StaffListMembersParams)
+	// RevokeMentorRole Take the mentor role away; chat removes her from every room she mentors. Staff moderator or admin, MFA. Audited.
+	// (DELETE /staff/members/{memberId}/roles/mentor)
+	RevokeMentorRole(w http.ResponseWriter, r *http.Request, memberId openapi_types.UUID)
+	// GrantMentorRole Give a verified member the mentor role, so she can be assigned to a room (409 when she is not verified or is suspended). Staff moderator or admin, MFA. Audited.
+	// (PUT /staff/members/{memberId}/roles/mentor)
+	GrantMentorRole(w http.ResponseWriter, r *http.Request, memberId openapi_types.UUID)
 	// LiftMemberSuspension Lift a member suspension. Staff admin, MFA. Audited.
 	// (DELETE /staff/members/{memberId}/suspension)
 	LiftMemberSuspension(w http.ResponseWriter, r *http.Request, memberId openapi_types.UUID)
@@ -687,6 +693,58 @@ func (siw *ServerInterfaceWrapper) StaffListMembers(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// RevokeMentorRole operation middleware
+func (siw *ServerInterfaceWrapper) RevokeMentorRole(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "memberId" -------------
+	var memberId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "memberId", r.PathValue("memberId"), &memberId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "memberId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeMentorRole(w, r, memberId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GrantMentorRole operation middleware
+func (siw *ServerInterfaceWrapper) GrantMentorRole(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "memberId" -------------
+	var memberId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "memberId", r.PathValue("memberId"), &memberId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "memberId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GrantMentorRole(w, r, memberId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // LiftMemberSuspension operation middleware
 func (siw *ServerInterfaceWrapper) LiftMemberSuspension(w http.ResponseWriter, r *http.Request) {
 
@@ -871,6 +929,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/reference/districts", wrapper.ListDistricts)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/reference/needs", wrapper.ListNeeds)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/staff/members", wrapper.StaffListMembers)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/staff/members/{memberId}/roles/mentor", wrapper.RevokeMentorRole)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/staff/members/{memberId}/roles/mentor", wrapper.GrantMentorRole)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/staff/members/{memberId}/suspension", wrapper.LiftMemberSuspension)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/staff/members/{memberId}/suspension", wrapper.GetMemberSuspension)
 
@@ -1344,6 +1404,132 @@ func (response StaffListMembersdefaultApplicationProblemPlusJSONResponse) VisitS
 	return err
 }
 
+type RevokeMentorRoleRequestObject struct {
+	MemberId openapi_types.UUID `json:"memberId"`
+}
+
+type RevokeMentorRoleResponseObject interface {
+	VisitRevokeMentorRoleResponse(w http.ResponseWriter) error
+}
+
+type RevokeMentorRole204Response struct {
+}
+
+func (response RevokeMentorRole204Response) VisitRevokeMentorRoleResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeMentorRole403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeMentorRole403ApplicationProblemPlusJSONResponse) VisitRevokeMentorRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeMentorRoledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RevokeMentorRoledefaultApplicationProblemPlusJSONResponse) VisitRevokeMentorRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GrantMentorRoleRequestObject struct {
+	MemberId openapi_types.UUID `json:"memberId"`
+}
+
+type GrantMentorRoleResponseObject interface {
+	VisitGrantMentorRoleResponse(w http.ResponseWriter) error
+}
+
+type GrantMentorRole204Response struct {
+}
+
+func (response GrantMentorRole204Response) VisitGrantMentorRoleResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type GrantMentorRole403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GrantMentorRole403ApplicationProblemPlusJSONResponse) VisitGrantMentorRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GrantMentorRole404ApplicationProblemPlusJSONResponse Problem
+
+func (response GrantMentorRole404ApplicationProblemPlusJSONResponse) VisitGrantMentorRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GrantMentorRole409ApplicationProblemPlusJSONResponse Problem
+
+func (response GrantMentorRole409ApplicationProblemPlusJSONResponse) VisitGrantMentorRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GrantMentorRoledefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GrantMentorRoledefaultApplicationProblemPlusJSONResponse) VisitGrantMentorRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type LiftMemberSuspensionRequestObject struct {
 	MemberId openapi_types.UUID `json:"memberId"`
 }
@@ -1486,6 +1672,12 @@ type StrictServerInterface interface {
 	// StaffListMembers Verified or suspended members, for mentor assignment and suspension review. Staff moderator or admin, MFA. Audited.
 	// (GET /staff/members)
 	StaffListMembers(ctx context.Context, request StaffListMembersRequestObject) (StaffListMembersResponseObject, error)
+	// RevokeMentorRole Take the mentor role away; chat removes her from every room she mentors. Staff moderator or admin, MFA. Audited.
+	// (DELETE /staff/members/{memberId}/roles/mentor)
+	RevokeMentorRole(ctx context.Context, request RevokeMentorRoleRequestObject) (RevokeMentorRoleResponseObject, error)
+	// GrantMentorRole Give a verified member the mentor role, so she can be assigned to a room (409 when she is not verified or is suspended). Staff moderator or admin, MFA. Audited.
+	// (PUT /staff/members/{memberId}/roles/mentor)
+	GrantMentorRole(ctx context.Context, request GrantMentorRoleRequestObject) (GrantMentorRoleResponseObject, error)
 	// LiftMemberSuspension Lift a member suspension. Staff admin, MFA. Audited.
 	// (DELETE /staff/members/{memberId}/suspension)
 	LiftMemberSuspension(ctx context.Context, request LiftMemberSuspensionRequestObject) (LiftMemberSuspensionResponseObject, error)
@@ -1851,6 +2043,58 @@ func (sh *strictHandler) StaffListMembers(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(StaffListMembersResponseObject); ok {
 		if err := validResponse.VisitStaffListMembersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeMentorRole operation middleware
+func (sh *strictHandler) RevokeMentorRole(w http.ResponseWriter, r *http.Request, memberId openapi_types.UUID) {
+	var request RevokeMentorRoleRequestObject
+
+	request.MemberId = memberId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeMentorRole(ctx, request.(RevokeMentorRoleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeMentorRole")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeMentorRoleResponseObject); ok {
+		if err := validResponse.VisitRevokeMentorRoleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GrantMentorRole operation middleware
+func (sh *strictHandler) GrantMentorRole(w http.ResponseWriter, r *http.Request, memberId openapi_types.UUID) {
+	var request GrantMentorRoleRequestObject
+
+	request.MemberId = memberId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GrantMentorRole(ctx, request.(GrantMentorRoleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GrantMentorRole")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GrantMentorRoleResponseObject); ok {
+		if err := validResponse.VisitGrantMentorRoleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

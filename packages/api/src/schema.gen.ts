@@ -1463,6 +1463,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/staff/members/{memberId}/roles/mentor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Give a verified member the mentor role, so she can be assigned to a room (409 when she is not verified or is suspended). Staff moderator or admin, MFA. Audited. */
+        put: operations["grantMentorRole"];
+        post?: never;
+        /** Take the mentor role away; chat removes her from every room she mentors. Staff moderator or admin, MFA. Audited. */
+        delete: operations["revokeMentorRole"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/staff/members/{memberId}/suspension": {
         parameters: {
             query?: never;
@@ -1478,6 +1498,69 @@ export interface paths {
         post?: never;
         /** Lift a member suspension. Staff admin, MFA. Audited. */
         delete: operations["liftMemberSuspension"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit log of staff actions, newest first. Staff admin, MFA. Reading it is audited too.
+         * @description Only entries whose actor is staff (psychologist, moderator, lawyer, admin). Entries by
+         *     members (for example a trusted contact viewing a shared plan) are not listed here.
+         *     Entries carry codes and IDs only, never content (package platform/audit).
+         */
+        get: operations["listAuditEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Staff who have signed in to this deployment, most recently active first. Staff admin, MFA.
+         * @description A staff account is recorded the first time a valid staff token reaches the API and
+         *     refreshed at most once an hour (name and roles as the IdP last sent them). The IdP
+         *     stays the authority on who is staff; this list is for reading the audit log.
+         */
+        get: operations["listStaffAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/accounts/{staffId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staffId: string;
+            };
+            cookie?: never;
+        };
+        /** One staff member's card with action counts for the last 30 days. Staff admin, MFA. */
+        get: operations["getStaffAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2343,6 +2426,55 @@ export interface components {
             suspended: boolean;
             /** Format: date-time */
             suspendedAt?: string;
+        };
+        /** @description A short code such as escalation.take or safety.escalation (package platform/audit). */
+        AuditCode: string;
+        /** @enum {string} */
+        StaffRole: "psychologist" | "moderator" | "lawyer" | "admin";
+        AuditEntry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            occurredAt: string;
+            /**
+             * Format: uuid
+             * @description Staff ID; open its card with getStaffAccount.
+             */
+            actorId: string;
+            actorRole: components["schemas"]["StaffRole"];
+            /** @description The staff account's display name when known. */
+            actorName?: string;
+            action: components["schemas"]["AuditCode"];
+            objectType: components["schemas"]["AuditCode"];
+            /** Format: uuid */
+            objectId?: string;
+            reason?: components["schemas"]["AuditCode"];
+        };
+        AuditPage: {
+            items: components["schemas"]["AuditEntry"][];
+            nextCursor?: string;
+        };
+        StaffAccount: {
+            /** Format: uuid */
+            id: string;
+            /** @description From the IdP name or preferred_username claim; absent when the IdP sends neither. */
+            displayName?: string;
+            roles: components["schemas"]["StaffRole"][];
+            /** Format: date-time */
+            firstSeenAt: string;
+            /** Format: date-time */
+            lastSeenAt: string;
+        };
+        StaffAccountList: {
+            items: components["schemas"]["StaffAccount"][];
+        };
+        StaffAccountCard: {
+            account: components["schemas"]["StaffAccount"];
+            /** @description Count per action code over the last 30 days; the entries themselves come from listAuditEntries with actorId. */
+            actions30d: {
+                action: components["schemas"]["AuditCode"];
+                count: number;
+            }[];
         };
     };
     responses: {
@@ -4749,6 +4881,52 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    grantMentorRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Granted (idempotent). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    revokeMentorRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revoked (idempotent). */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     getMemberSuspension: {
         parameters: {
             query?: never;
@@ -4792,6 +4970,83 @@ export interface operations {
                 content?: never;
             };
             403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listAuditEntries: {
+        parameters: {
+            query?: {
+                actorId?: string;
+                objectType?: components["schemas"]["AuditCode"];
+                objectId?: string;
+                action?: components["schemas"]["AuditCode"];
+                from?: string;
+                to?: string;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditPage"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listStaffAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All staff accounts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAccountList"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getStaffAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staffId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Staff card. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAccountCard"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
