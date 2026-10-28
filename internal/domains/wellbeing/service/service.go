@@ -336,6 +336,30 @@ func (s *Service) GetHistory(ctx context.Context, memberID uuid.UUID, weeks int)
 	return out, nil
 }
 
+// CohortAggregates returns the stress and isolation aggregates for the cohort of
+// members whose first check-in falls in [from, to): PSS-4 at that first check-in and
+// at her check-in nearest to 8 weeks later (model.CohortFollowUp*). The follow-up may
+// lie after to, so a cohort of a short period still gets its week-8 numbers once they
+// exist. Only count, mean and median leave this method (ADR-0024); per-member scores
+// stay inside wellbeing. There is no member check: this is not an HTTP operation and
+// is reached only through the analytics port in internal/wiring, which enforces the
+// staff role, MFA, audit and small-cell suppression.
+func (s *Service) CohortAggregates(ctx context.Context, from, to time.Time) (model.CohortAggregates, error) {
+	if from.IsZero() || to.IsZero() || !from.Before(to) {
+		return model.CohortAggregates{}, fmt.Errorf("%w: cohort period", model.ErrInvalidInput)
+	}
+	var rows []model.CohortCheckin
+	err := s.Store.InTx(ctx, func(tx port.Tx) error {
+		var err error
+		rows, err = tx.ListCohortCheckins(ctx, from.UTC(), to.UTC(), to.UTC().Add(model.CohortFollowUpMax))
+		return err
+	})
+	if err != nil {
+		return model.CohortAggregates{}, err
+	}
+	return model.BuildCohortAggregates(rows), nil
+}
+
 // ListPractices returns audio practices for lang with URLs from PracticesBaseURL + object key.
 func (s *Service) ListPractices(ctx context.Context, memberID uuid.UUID, lang string) ([]model.Practice, error) {
 	if err := s.requireMember(memberID); err != nil {

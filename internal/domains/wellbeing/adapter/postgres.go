@@ -122,6 +122,24 @@ func (t *postgresTx) ListCheckinHistory(ctx context.Context, memberID uuid.UUID,
 	return out, nil
 }
 
+// ListCohortCheckins returns the scores of members whose first check-in is in
+// [firstFrom, firstTo), completed before until, ordered by member then time.
+func (t *postgresTx) ListCohortCheckins(ctx context.Context, firstFrom, firstTo, until time.Time) ([]model.CohortCheckin, error) {
+	rows, err := t.wellbeing.ListCohortCheckins(ctx, wellbeingstore.ListCohortCheckinsParams{
+		FirstFrom: firstFrom,
+		FirstTo:   firstTo,
+		Until:     until,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list cohort checkins: %w", err)
+	}
+	out := make([]model.CohortCheckin, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, model.CohortCheckin{MemberID: row.MemberID, PSS4: int(row.Pss4), CompletedAt: row.CompletedAt})
+	}
+	return out, nil
+}
+
 // ListPracticesByLang returns practices for lang (URL filled by the service).
 func (t *postgresTx) ListPracticesByLang(ctx context.Context, lang string) ([]model.Practice, error) {
 	rows, err := t.wellbeing.ListPracticesByLang(ctx, lang)

@@ -3,6 +3,7 @@ package wellbeingtest
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -216,6 +217,45 @@ func (t *memoryTx) ListCheckinHistory(_ context.Context, memberID uuid.UUID, sin
 		out = out[:int(limit)]
 	}
 	return out, nil
+}
+
+// ListCohortCheckins mirrors the PostgreSQL query: members whose first check-in is in
+// [firstFrom, firstTo), rows before until, ordered by member then time.
+func (t *memoryTx) ListCohortCheckins(_ context.Context, firstFrom, firstTo, until time.Time) ([]model.CohortCheckin, error) {
+	first := make(map[uuid.UUID]time.Time)
+	for _, c := range t.s.checkins {
+		if f, ok := first[c.MemberID]; !ok || c.CompletedAt.Before(f) {
+			first[c.MemberID] = c.CompletedAt
+		}
+	}
+	out := make([]model.CohortCheckin, 0)
+	for _, c := range t.s.checkins {
+		f := first[c.MemberID]
+		if f.Before(firstFrom) || !f.Before(firstTo) || !c.CompletedAt.Before(until) {
+			continue
+		}
+		out = append(out, model.CohortCheckin{MemberID: c.MemberID, PSS4: c.PSS4, CompletedAt: c.CompletedAt})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].MemberID != out[j].MemberID {
+			return out[i].MemberID.String() < out[j].MemberID.String()
+		}
+		return out[i].CompletedAt.Before(out[j].CompletedAt)
+	})
+	return out, nil
+}
+
+// AddCheckin seeds a stored check-in (cohort tests); ID and idempotency key are filled when empty.
+func (s *MemoryStore) AddCheckin(c model.Checkin) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c.ID == uuid.Nil {
+		c.ID = uuid.Must(uuid.NewV7())
+	}
+	if c.IdempotencyKey == uuid.Nil {
+		c.IdempotencyKey = uuid.Must(uuid.NewV7())
+	}
+	s.checkins = append(s.checkins, c)
 }
 
 // ListPracticesByLang returns practices for lang.

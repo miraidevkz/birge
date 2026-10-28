@@ -240,3 +240,49 @@ func TestReminderTimerHandlerPostgres(t *testing.T) {
 		t.Fatalf("next timer active=%d", active)
 	}
 }
+
+func TestCohortAggregatesPostgres(t *testing.T) {
+	ctx := context.Background()
+	pool := testinfra.Postgres(t)
+	week := 7 * 24 * time.Hour
+	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+	svc := &service.Service{
+		Store:    &adapter.PostgresStore{Pool: pool},
+		Clock:    &fixedClock{t: to.Add(20 * week)},
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Settings: testSettings(),
+	}
+	q := store.New(pool)
+	add := func(member uuid.UUID, pss int, at time.Time) {
+		t.Helper()
+		if _, err := q.InsertCheckin(ctx, store.InsertCheckinParams{
+			ID: uuid.Must(uuid.NewV7()), MemberID: member, QuestionnaireVersion: "v1",
+			Answers: []byte("S"), Pss4: int32(pss), Flag: model.FlagNone, //nolint:gosec // G115: test scores 0..16
+			IdempotencyKey: uuid.Must(uuid.NewV7()), CompletedAt: at,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a, b, c, old := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	add(a, 12, from.Add(time.Hour))
+	add(a, 9, from.Add(time.Hour+7*week))
+	add(a, 6, from.Add(time.Hour+8*week+time.Hour)) // nearest to 8 weeks
+	add(b, 10, from.Add(48*time.Hour))
+	add(b, 2, from.Add(48*time.Hour+9*week))
+	add(c, 5, to.Add(-time.Minute)) // no follow-up yet
+	add(old, 16, from.Add(-time.Hour))
+	add(old, 16, from.Add(2*week)) // first check-in before the period: not in the cohort
+
+	got, err := svc.CohortAggregates(ctx, from, to)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := model.CohortAggregates{
+		StressBaseline: model.ScoreStats{Count: 3, Mean: 9, Median: 10},
+		StressWeek8:    model.ScoreStats{Count: 2, Mean: 4, Median: 4},
+	}
+	if got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}

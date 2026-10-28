@@ -36,6 +36,10 @@ type Tx interface {
 	InsertCheckin(ctx context.Context, c model.Checkin) (created model.Checkin, inserted bool, err error)
 	GetCheckinByIdempotencyKey(ctx context.Context, memberID, key uuid.UUID) (model.Checkin, error)
 	ListCheckinHistory(ctx context.Context, memberID uuid.UUID, since time.Time, limit int32) ([]model.Checkin, error)
+	// ListCohortCheckins returns the scores of members whose first check-in is in
+	// [firstFrom, firstTo), completed before until, ordered by member then time.
+	// Only the service may read them, to build cohort aggregates (ADR-0024).
+	ListCohortCheckins(ctx context.Context, firstFrom, firstTo, until time.Time) ([]model.CohortCheckin, error)
 
 	ListPracticesByLang(ctx context.Context, lang string) ([]model.Practice, error)
 

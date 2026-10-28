@@ -38,7 +38,11 @@ Operations of tag `wellbeing` in `contracts/openapi/birge.yaml`:
 
 ## Service API for other contexts
 
-none (safety implements `CrisisOpener`; notify consumes DeliveryRequested).
+| Method | Caller | Rules |
+|---|---|---|
+| `Service.CohortAggregates(ctx, from, to)` | analytics, through its port implemented in `internal/wiring` (ADR-0024) | Cohort = members whose **first** check-in is in `[from, to)`. Stress baseline = PSS-4 at that check-in; week 8 = her check-in nearest to baseline + 8 weeks within 6–10 weeks (earlier on a tie; may lie after `to`). Returns count, mean and median only, never a per-member value. Isolation stays empty (count 0): the questionnaire has no isolation item and answers are sealed. No HTTP and no member check; analytics enforces staff role, MFA, audit and small-cell suppression. |
+
+safety implements `CrisisOpener`; notify consumes DeliveryRequested.
 
 Ports used by this context (wired in `internal/wiring`): `Sealer` (platform envelope, AD `wellbeing.checkins.answers\|<id>`), `CrisisOpener` → `safety.OpenEscalation`.
 
@@ -64,6 +68,7 @@ Ports used by this context (wired in `internal/wiring`): `Sealer` (platform enve
 - Questionnaire answers: every configured question answered exactly once with a legal option (model).
 - PHQ-4 0–12, PSS-4 0–16 after reverse scoring (model).
 - Reminder next occurrence computed with `time.LoadLocation` in the deployment zone; no in-process cron (ADR-0020).
+- Cohort aggregates expose count, mean and median only; per-member scores never leave the service package (model `BuildCohortAggregates`; ADR-0024).
 - Account deletion (AGENTS.md N6): her schedule and every check-in are deleted and her pending `wellbeing.Reminder` timer is cancelled, in one transaction. Nothing is tombstoned: no other record refers to a check-in (the safety escalation it may have opened keeps only IDs). One audit entry `wellbeing.member_deleted` (actor system).
 
 ## Failure modes
@@ -76,6 +81,7 @@ Ports used by this context (wired in `internal/wiring`): `Sealer` (platform enve
 
 ## Tests
 
+- Unit: `model/cohort_test.go`, `service/cohort_test.go` — cohort selection by first check-in, follow-up window and ties, mean/median, bad period, store failure.
 - Unit: `model/model_test.go`, `service/service_test.go` — scoring (reverse + thresholds + crisis item), validation, crisis phones on opener failure, next-occurrence across the week in Asia/Almaty, schedule enable/disable.
-- Integration: `adapter/integration_test.go` — PostgreSQL store, outbox payload (flag only), reminder worker with `testinfra.Postgres`.
+- Integration: `adapter/integration_test.go` — PostgreSQL store, outbox payload (flag only), reminder worker, cohort aggregates with `testinfra.Postgres`.
 - Fakes: `wellbeingtest/` (memory store, sealer, crisis opener).
