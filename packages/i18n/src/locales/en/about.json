@@ -1,0 +1,23 @@
+{
+  "title": "About me",
+  "intro": "This lets us show mothers nearby and chats on your children's topics. Only you see this; other mothers see only what you have in common.",
+  "district": {
+    "heading": "My district",
+    "none": "The list of districts is empty for now.",
+    "saved": "District saved."
+  },
+  "children": {
+    "heading": "My children",
+    "none": "No one added yet.",
+    "item": "Child, born {{year}}",
+    "noNeeds": "no needs given",
+    "add": "Add a child",
+    "year": "Year of birth",
+    "yearHint": "For example, 2019",
+    "needs": "Needs",
+    "save": "Save",
+    "remove": "Remove",
+    "invalidYear": "Enter the year of birth as four digits."
+  },
+  "failed": "Could not save. Try again."
+}

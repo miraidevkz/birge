@@ -71,6 +71,19 @@ describe('ProfileScreen', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });
 
+  it('asks a moderator for verification when she is not verified', async () => {
+    mockFetch.mockImplementation(async (input) => {
+      const req = input as Request;
+      if (req.method === 'GET') return json({ ...member, verification: 'new' });
+      return json({ ...member, verification: 'pending' }, 202);
+    });
+    await renderProfile();
+    await fireEvent.press(await screen.findByTestId('profile-verification-request'));
+    expect(await screen.findByText('Request sent. A moderator will call you.')).toBeTruthy();
+    const post = mockFetch.mock.calls.map((c) => c[0] as Request).find((r) => r.method === 'POST');
+    expect(new URL(post!.url).pathname).toBe('/v1/me/verification-requests');
+  });
+
   it('saves a new display name', async () => {
     mockFetch.mockImplementation(async (input) => {
       const req = input as Request;

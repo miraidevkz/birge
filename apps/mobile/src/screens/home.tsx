@@ -113,6 +113,25 @@ function CircleCard() {
   );
 }
 
+/** AboutCard invites her to add district and children while the district is unset. */
+function AboutCard({ show }: { show: boolean }) {
+  const { t } = useTranslation('home');
+  if (!show) return null;
+  return (
+    <Card
+      testID="home-about"
+      onPress={() => router.push('/about-me')}
+      accessibilityLabel={`${t('about.heading')}. ${t('about.body')}`}
+    >
+      <Heading>{t('about.heading')}</Heading>
+      <Text>{t('about.body')}</Text>
+      <Text variant="label" tone="primary">
+        {t('about.open')}
+      </Text>
+    </Card>
+  );
+}
+
 /** TIP_COUNT is how many tips home.json has (tip.1 .. tip.N); one per day. */
 const TIP_COUNT = 7;
 
@@ -167,6 +186,7 @@ export function HomeScreen() {
             <Text tone="muted">{t('howAreYou')}</Text>
             <MoodCard />
             <CheckinCard />
+            <AboutCard show={me.data !== undefined && !me.data.districtId} />
             <CircleCard />
             <TipCard />
             <Heading>{t('inbox.heading')}</Heading>

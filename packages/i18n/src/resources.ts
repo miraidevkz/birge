@@ -3,6 +3,7 @@
 //
 // To add a namespace: create <ns>.json in kk/, ru/ and en/, then add it to the
 // three objects below. The parity test fails if a language misses a key.
+import enAbout from './locales/en/about.json';
 import enAdmin from './locales/en/admin.json';
 import enAssistant from './locales/en/assistant.json';
 import enAuth from './locales/en/auth.json';
@@ -17,11 +18,13 @@ import enInbox from './locales/en/inbox.json';
 import enOnboarding from './locales/en/onboarding.json';
 import enKnowledge from './locales/en/knowledge.json';
 import enPrivacy from './locales/en/privacy.json';
+import enReference from './locales/en/reference.json';
 import enProfile from './locales/en/profile.json';
 import enSharing from './locales/en/sharing.json';
 import enSos from './locales/en/sos.json';
 import enUi from './locales/en/ui.json';
 import enWellbeing from './locales/en/wellbeing.json';
+import kkAbout from './locales/kk/about.json';
 import kkAdmin from './locales/kk/admin.json';
 import kkAssistant from './locales/kk/assistant.json';
 import kkAuth from './locales/kk/auth.json';
@@ -36,11 +39,13 @@ import kkInbox from './locales/kk/inbox.json';
 import kkOnboarding from './locales/kk/onboarding.json';
 import kkKnowledge from './locales/kk/knowledge.json';
 import kkPrivacy from './locales/kk/privacy.json';
+import kkReference from './locales/kk/reference.json';
 import kkProfile from './locales/kk/profile.json';
 import kkSharing from './locales/kk/sharing.json';
 import kkSos from './locales/kk/sos.json';
 import kkUi from './locales/kk/ui.json';
 import kkWellbeing from './locales/kk/wellbeing.json';
+import ruAbout from './locales/ru/about.json';
 import ruAdmin from './locales/ru/admin.json';
 import ruAssistant from './locales/ru/assistant.json';
 import ruAuth from './locales/ru/auth.json';
@@ -55,6 +60,7 @@ import ruInbox from './locales/ru/inbox.json';
 import ruOnboarding from './locales/ru/onboarding.json';
 import ruKnowledge from './locales/ru/knowledge.json';
 import ruPrivacy from './locales/ru/privacy.json';
+import ruReference from './locales/ru/reference.json';
 import ruProfile from './locales/ru/profile.json';
 import ruSharing from './locales/ru/sharing.json';
 import ruSos from './locales/ru/sos.json';
@@ -69,6 +75,8 @@ export const namespaces = [
   'admin',
   'home',
   'inbox',
+  'about',
+  'reference',
   'onboarding',
   'help',
   'circle',
@@ -96,6 +104,8 @@ export const resources = {
     admin: kkAdmin,
     home: kkHome,
     inbox: kkInbox,
+    about: kkAbout,
+    reference: kkReference,
     onboarding: kkOnboarding,
     help: kkHelp,
     circle: kkCircle,
@@ -117,6 +127,8 @@ export const resources = {
     admin: ruAdmin,
     home: ruHome,
     inbox: ruInbox,
+    about: ruAbout,
+    reference: ruReference,
     onboarding: ruOnboarding,
     help: ruHelp,
     circle: ruCircle,
@@ -138,6 +150,8 @@ export const resources = {
     admin: enAdmin,
     home: enHome,
     inbox: enInbox,
+    about: enAbout,
+    reference: enReference,
     onboarding: enOnboarding,
     help: enHelp,
     circle: enCircle,

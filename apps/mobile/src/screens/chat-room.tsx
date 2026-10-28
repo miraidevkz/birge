@@ -8,6 +8,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 
 import { api } from '@/lib/api';
+import { roomTitle } from '@/lib/reference';
 import { saveCrisisPhones } from '@/lib/crisis-phones';
 import { newIdempotencyKey } from '@/lib/platform-crypto';
 
@@ -82,7 +83,7 @@ export function ChatRoomScreen({ roomId, title }: { roomId: string; title?: stri
 
   return (
     <Screen
-      title={title ?? t('title')}
+      title={title ? roomTitle(title) : t('title')}
       scroll={false}
       footer={
         <>

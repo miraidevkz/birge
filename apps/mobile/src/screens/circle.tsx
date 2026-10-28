@@ -9,6 +9,7 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 
 import { api } from '@/lib/api';
+import { needLabel } from '@/lib/reference';
 
 type Match = Schemas['Match'];
 type TeaFormat = Schemas['TeaRequestInput']['format'];
@@ -36,7 +37,7 @@ function matchSubtitle(m: Match, t: (key: string, opts?: Record<string, string>)
     parts.push(t('matches.ages', { ages: m.otherChildAges.join(', ') }));
   }
   if (m.sharedNeeds.length > 0) {
-    parts.push(t('matches.sharedNeeds', { needs: m.sharedNeeds.join(', ') }));
+    parts.push(t('matches.sharedNeeds', { needs: m.sharedNeeds.map(needLabel).join(', ') }));
   }
   return parts.join(' · ');
 }

@@ -39,5 +39,10 @@
     "5": "Notice one thing that went well today.",
     "6": "A short walk helps you reset.",
     "7": "Write to someone who understands: a few words are often enough."
+  },
+  "about": {
+    "heading": "Tell us about yourself",
+    "body": "Add your district and children to see mothers nearby and the right chats.",
+    "open": "Fill in"
   }
 }

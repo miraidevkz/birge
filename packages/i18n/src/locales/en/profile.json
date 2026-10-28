@@ -16,12 +16,17 @@
     "heading": "Verification",
     "new": "Not verified",
     "pending": "Verification pending",
-    "verified": "Verified"
+    "verified": "Verified",
+    "why": "Verified mothers see district and topic chats. A moderator will call you to make sure you are a mother from our community.",
+    "request": "Ask to be verified",
+    "requested": "Request sent. A moderator will call you.",
+    "failed": "Could not send the request. Try again."
   },
   "links": {
     "privacy": "Privacy and data",
     "knowledge": "Knowledge base",
-    "assistant": "AI assistant"
+    "assistant": "AI assistant",
+    "about": "About me: district and children"
   },
   "emergencyPlan": "Emergency plan",
   "emergencyPlanHint": "Child card and trusted contacts",

@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 
 import { isCrisisPhone, parseConfig } from './config';
 import { fetchDemoCode } from './demo-code';
+import { roomTitle } from './reference';
 import { nextCheckin } from './next-checkin';
 import { notificationKey } from './notification-text';
 
@@ -93,5 +94,14 @@ describe('demo codes', () => {
     } finally {
       global.fetch = realFetch;
     }
+  });
+});
+
+describe('roomTitle', () => {
+  it('names group rooms from their locale key and keeps direct rooms as they are', () => {
+    expect(roomTitle('chat.room.district.demo_district_a')).toBe('Mothers of Demo district A');
+    expect(roomTitle('chat.room.topic.autism')).toBe('Topic: Autism');
+    expect(roomTitle('chat.room.topic.unknown_code')).toBe('Topic: unknown_code');
+    expect(roomTitle('Dana')).toBe('Dana');
   });
 });

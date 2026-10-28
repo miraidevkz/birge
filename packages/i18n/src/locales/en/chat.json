@@ -11,7 +11,10 @@
     "join": "Join",
     "leave": "Leave",
     "muted": "Muted",
-    "discoverHeading": "Chats you can join"
+    "discoverHeading": "Chats you can join",
+    "unverifiedTitle": "Chats open once you are verified",
+    "unverifiedBody": "District and topic chats are for verified mothers. Ask to be verified in your profile; a moderator will call you.",
+    "toProfile": "Go to profile"
   },
   "room": {
     "emptyTitle": "No messages yet",
@@ -33,5 +36,9 @@
       "spam": "Spam",
       "other": "Other"
     }
+  },
+  "roomTitle": {
+    "district": "Mothers of {{name}}",
+    "topic": "Topic: {{name}}"
   }
 }

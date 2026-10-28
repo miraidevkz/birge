@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 
 import { api } from '@/lib/api';
+import { roomTitle } from '@/lib/reference';
 
 type Room = Schemas['Room'];
 
@@ -37,6 +38,17 @@ export function ChatRoomsScreen() {
   });
 
   const discoverable = discover.data?.filter((r) => !r.joined) ?? [];
+  // Group rooms are for verified members only (chat service): an unverified
+  // member is told why the list is empty and where to ask, not to "join".
+  const me = useQuery({ queryKey: ['me'], queryFn: () => unwrap(api.GET('/me')) });
+  const unverified = me.data !== undefined && me.data.verification !== 'verified';
+  const empty = unverified
+    ? {
+        title: t('rooms.unverifiedTitle'),
+        description: t('rooms.unverifiedBody'),
+        action: { label: t('rooms.toProfile'), onPress: () => router.push('/profile') },
+      }
+    : { title: t('rooms.emptyTitle'), description: t('rooms.emptyDescription') };
 
   return (
     <Screen title={t('title')} scroll={false}>
@@ -48,14 +60,14 @@ export function ChatRoomsScreen() {
         keyExtractor={(r) => r.id}
         renderItem={({ item }) => (
           <ListItem
-            leading={<Avatar name={item.title} />}
-            title={item.title}
+            leading={<Avatar name={roomTitle(item.title)} />}
+            title={roomTitle(item.title)}
             subtitle={roomSubtitle(item, t)}
             onPress={() => router.push(`/chat/${item.id}`)}
             testID={`room-${item.id}`}
           />
         )}
-        empty={{ title: t('rooms.emptyTitle'), description: t('rooms.emptyDescription') }}
+        empty={empty}
         header={
           discoverable.length > 0 ? (
             <>
@@ -63,7 +75,7 @@ export function ChatRoomsScreen() {
               {discoverable.map((room) => (
                 <ListItem
                   key={room.id}
-                  title={room.title}
+                  title={roomTitle(room.title)}
                   subtitle={roomSubtitle(room, t)}
                   trailing={
                     <Button

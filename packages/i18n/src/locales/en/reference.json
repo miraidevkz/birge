@@ -1,0 +1,15 @@
+{
+  "_comment": "Labels of reference codes (cities, districts, needs). A code without a label is shown as is. DEMO entries match presets/demo/reference.json.",
+  "city": {
+    "demo_city": "Demo city"
+  },
+  "district": {
+    "demo_district_a": "Demo district A",
+    "demo_district_b": "Demo district B",
+    "demo_district_c": "Demo district C"
+  },
+  "need": {
+    "autism": "Autism",
+    "hearing": "Hearing"
+  }
+}

@@ -61,6 +61,25 @@ describe('ChatRoomsScreen', () => {
     expect(await screen.findByRole('header', { name: 'Chats' })).toBeTruthy();
   });
 
+  it('tells an unverified member why there are no chats and where to ask', async () => {
+    mockFetch.mockImplementation(async (input) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.includes('joined=')) return json(200, []);
+      if (url.endsWith('/v1/me'))
+        return json(200, {
+          id: '01900000-0000-7000-8000-000000000010',
+          lang: 'en',
+          verification: 'new',
+          roles: ['mom'],
+          children: [],
+        });
+      return json(500, { title: 'unhandled' });
+    });
+    await renderRooms();
+    expect(await screen.findByText('Chats open once you are verified')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Go to profile' })).toBeTruthy();
+  });
+
   it('shows the empty state when there are no joined rooms', async () => {
     mockFetch.mockImplementation(async (input) => {
       const url = String(input instanceof Request ? input.url : input);

@@ -77,6 +77,7 @@ export default function RootLayout() {
                 <Stack.Screen name="onboarding" />
                 <Stack.Screen name="sign-in" />
                 <Stack.Screen name="privacy" />
+                <Stack.Screen name="about-me" />
                 <Stack.Screen name="knowledge" />
                 <Stack.Screen name="knowledge-article/[articleId]" />
                 <Stack.Screen name="assistant" />

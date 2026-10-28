@@ -10,6 +10,8 @@ export { Button } from './button';
 export type { ButtonProps, ButtonVariant } from './button';
 export { Card } from './card';
 export type { CardProps } from './card';
+export { CheckItem } from './check-item';
+export type { CheckItemProps } from './check-item';
 export { ChoiceGroup } from './choice-group';
 export type { ChoiceGroupProps, ChoiceOption } from './choice-group';
 export { cn } from './cn';

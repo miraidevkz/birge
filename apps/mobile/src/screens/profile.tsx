@@ -48,6 +48,12 @@ export function ProfileScreen() {
     onError: () => setStatus('failed'),
   });
 
+  // A moderator calls her back; the member row says "pending" until then.
+  const requestVerification = useMutation({
+    mutationFn: () => unwrap(api.POST('/me/verification-requests')),
+    onSuccess: (m) => client.setQueryData(['me'], m),
+  });
+
   const saveLang = useMutation({
     mutationFn: (lang: Language) => unwrap(api.PATCH('/me', { body: { lang } })),
     onSuccess: (member) => {
@@ -131,6 +137,20 @@ export function ProfileScreen() {
       <Card testID="profile-verification">
         <Heading>{t('verification.heading')}</Heading>
         <Text tone="muted">{t(`verification.${member.verification}`)}</Text>
+        {member.verification === 'new' ? (
+          <>
+            <Text>{t('verification.why')}</Text>
+            <Button
+              title={t('verification.request')}
+              variant="secondary"
+              loading={requestVerification.isPending}
+              onPress={() => requestVerification.mutate()}
+              testID="profile-verification-request"
+            />
+          </>
+        ) : null}
+        {requestVerification.isSuccess ? <Banner tone="success">{t('verification.requested')}</Banner> : null}
+        {requestVerification.isError ? <Banner tone="danger">{t('verification.failed')}</Banner> : null}
       </Card>
 
       <Card>
@@ -140,6 +160,7 @@ export function ProfileScreen() {
           onPress={() => router.push('/emergency-plan')}
           testID="profile-emergency-plan"
         />
+        <ListItem title={t('links.about')} onPress={() => router.push('/about-me')} testID="profile-link-about" />
         <ListItem title={t('links.privacy')} onPress={() => router.push('/privacy')} testID="profile-link-privacy" />
         <ListItem
           title={t('links.knowledge')}
