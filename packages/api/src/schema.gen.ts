@@ -722,6 +722,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/external/plans/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The child card behind a link an external trusted contact got by SMS.
+         * @description No session: the link in the SMS is `<public URL>/plan#<token>`. The fragment never
+         *     reaches a server or its access log; the static page reads it and posts it here.
+         *     The token is 32 random bytes (base64url, 43 characters); only its keyed hash is
+         *     stored. It is valid for 24 hours from sendEmergencyPlan and dies earlier when the
+         *     member sends the plan again or removes that contact. Every view is audited
+         *     (contact id, no IP). Rate limited per client IP; unknown, expired and revoked
+         *     tokens all answer the same 404 so a token cannot be probed.
+         */
+        post: operations["viewExternalPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/assistant/messages": {
         parameters: {
             query?: never;
@@ -1177,6 +1203,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/staff/chat/rooms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Group rooms with member counts and mentors, for mentor assignment. Staff moderator or admin, MFA.
+         * @description District and topic rooms only; private rooms are never listed to staff. Mentors carry
+         *     their display name only (no phone, no district).
+         */
+        get: operations["staffListRooms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/staff/chat/rooms/{roomId}/mentors/{memberId}": {
         parameters: {
             query?: never;
@@ -1409,6 +1456,44 @@ export interface paths {
         post?: never;
         /** Lift a member suspension. Staff admin, MFA. Audited. */
         delete: operations["liftMemberSuspension"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pilot metrics of requirements section 9 for a period. Staff admin, MFA. Audited. */
+        get: operations["getMetrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/metrics.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The same metrics as CSV (one row per metric and period bucket). Staff admin, MFA. Audited.
+         * @description Columns: metric, bucket, members, value, suppressed. A suppressed row has empty
+         *     members and value and suppressed=true. UTF-8 with a header row.
+         */
+        get: operations["getMetricsCsv"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2140,6 +2225,86 @@ export interface components {
             /** @description Preserve the content for the lawyer (ADR-0019). */
             legalHold?: boolean;
         };
+        StaffRoomList: {
+            items: components["schemas"]["StaffRoom"][];
+        };
+        StaffRoom: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "district" | "topic";
+            /** @description Locale key of the room title. */
+            title: string;
+            memberCount: number;
+            mentors: {
+                /** Format: uuid */
+                memberId: string;
+                displayName: string;
+            }[];
+        };
+        /**
+         * @description One aggregate. members is how many distinct members it is built from. When that is
+         *     fewer than k, suppressed is true and members and value are absent (ADR-0024).
+         */
+        MetricCell: {
+            members?: number;
+            /** @description Count, share (0..1), mean, median or minutes; see the field it sits in. */
+            value?: number;
+            suppressed: boolean;
+        };
+        ScoreAggregate: {
+            mean: components["schemas"]["MetricCell"];
+            median: components["schemas"]["MetricCell"];
+        };
+        BucketCell: {
+            /**
+             * Format: date
+             * @description First day of the week (Monday) or month.
+             */
+            bucket: string;
+            cell: components["schemas"]["MetricCell"];
+        };
+        Metrics: {
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            /** @description Suppression threshold in effect. */
+            k: number;
+            /** @description PSS-4 at the first check-in and at the check-in nearest to 8 weeks later. */
+            stress: {
+                baseline: components["schemas"]["ScoreAggregate"];
+                week8: components["schemas"]["ScoreAggregate"];
+            };
+            isolation: {
+                before: components["schemas"]["ScoreAggregate"];
+                after: components["schemas"]["ScoreAggregate"];
+            };
+            activity: {
+                weekly: components["schemas"]["BucketCell"][];
+                monthly: components["schemas"]["BucketCell"][];
+                retention4w: components["schemas"]["MetricCell"];
+                retention8w: components["schemas"]["MetricCell"];
+            };
+            tea: {
+                requests: components["schemas"]["MetricCell"];
+                pairs: components["schemas"]["MetricCell"];
+                meetings: components["schemas"]["MetricCell"];
+            };
+            sos: {
+                raised: components["schemas"]["MetricCell"];
+                closedShare: components["schemas"]["MetricCell"];
+                firstResponseMedianMinutes: components["schemas"]["MetricCell"];
+            };
+            escalations: {
+                opened: components["schemas"]["MetricCell"];
+                takenWithin15mShare: components["schemas"]["MetricCell"];
+            };
+            rights: {
+                answeredFromKnowledge: components["schemas"]["MetricCell"];
+                helpedShare: components["schemas"]["MetricCell"];
+            };
+        };
     };
     responses: {
         /** @description Error (RFC 9457 problem details). */
@@ -2166,6 +2331,10 @@ export interface components {
         AppPlatform: "ios" | "android" | "web";
         /** @description Client-generated UUIDv7; repeated requests with the same key have one effect. */
         IdempotencyKey: string;
+        /** @description First day of the period (inclusive, deployment time zone). */
+        MetricsFrom: string;
+        /** @description Last day of the period (inclusive); at most 12 months after from. */
+        MetricsTo: string;
     };
     requestBodies: never;
     headers: never;
@@ -3343,6 +3512,36 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    viewExternalPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Shared plan. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedPlan"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     sendAssistantMessage: {
         parameters: {
             query?: never;
@@ -4074,6 +4273,28 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    staffListRooms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description All group rooms, ordered by kind then title key. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRoomList"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
     assignRoomMentor: {
         parameters: {
             query?: never;
@@ -4505,6 +4726,65 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getMetrics: {
+        parameters: {
+            query: {
+                /** @description First day of the period (inclusive, deployment time zone). */
+                from: components["parameters"]["MetricsFrom"];
+                /** @description Last day of the period (inclusive); at most 12 months after from. */
+                to: components["parameters"]["MetricsTo"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Aggregates; every cell from fewer than k members is suppressed. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Metrics"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getMetricsCsv: {
+        parameters: {
+            query: {
+                /** @description First day of the period (inclusive, deployment time zone). */
+                from: components["parameters"]["MetricsFrom"];
+                /** @description Last day of the period (inclusive); at most 12 months after from. */
+                to: components["parameters"]["MetricsTo"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV export. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            400: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };

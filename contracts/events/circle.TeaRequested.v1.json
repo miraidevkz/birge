@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:circle.TeaRequested.v1",
+  "title": "circle.TeaRequested",
+  "description": "A member created a Tea request. For the tea funnel (requests, pairs, meetings); preferences are not carried.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "member_id",
+    "format"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "member_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "format": {
+      "type": "string",
+      "enum": [
+        "meeting",
+        "call"
+      ]
+    }
+  }
+}

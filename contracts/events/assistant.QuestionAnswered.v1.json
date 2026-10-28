@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:assistant.QuestionAnswered.v1",
+  "title": "assistant.QuestionAnswered",
+  "description": "The assistant finished one turn. source says where the answer came from; no text, no topic. For metrics only (ADR-0024).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "message_id",
+    "scope",
+    "source"
+  ],
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "general",
+        "rights"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "knowledge",
+        "no_answer",
+        "crisis",
+        "unavailable"
+      ],
+      "description": "knowledge: grounded in reviewed articles; no_answer: nothing relevant found; crisis: the fixed crisis response; unavailable: the LLM or retrieval was down."
+    }
+  }
+}

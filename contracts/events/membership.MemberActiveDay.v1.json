@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:birge:events:membership.MemberActiveDay.v1",
+  "title": "membership.MemberActiveDay",
+  "description": "The member used the app on this day (deployment time zone). Emitted at most once per member per day, from the session middleware. For metrics only (ADR-0024).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "member_id",
+    "day"
+  ],
+  "properties": {
+    "member_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "day": {
+      "type": "string",
+      "format": "date"
+    }
+  }
+}

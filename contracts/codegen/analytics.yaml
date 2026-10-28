@@ -1,0 +1,8 @@
+# oapi-codegen config: one generated package per tag.
+package: api
+generate:
+  std-http-server: true
+  strict-server: true
+  models: true
+output-options:
+  include-tags: [analytics]

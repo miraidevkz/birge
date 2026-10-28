@@ -126,6 +126,24 @@ func (e RoomModerationInputAction) Valid() bool {
 	}
 }
 
+// Defines values for StaffRoomKind.
+const (
+	StaffRoomKindDistrict StaffRoomKind = "district"
+	StaffRoomKindTopic    StaffRoomKind = "topic"
+)
+
+// Valid indicates whether the value is a known member of the StaffRoomKind enum.
+func (e StaffRoomKind) Valid() bool {
+	switch e {
+	case StaffRoomKindDistrict:
+		return true
+	case StaffRoomKindTopic:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListRoomsParamsKind.
 const (
 	ListRoomsParamsKindDirect   ListRoomsParamsKind = "direct"
@@ -230,6 +248,28 @@ type RoomModerationInput struct {
 // RoomModerationInputAction defines model for RoomModerationInput.Action.
 type RoomModerationInputAction string
 
+// StaffRoom defines model for StaffRoom.
+type StaffRoom struct {
+	Id          openapi_types.UUID `json:"id"`
+	Kind        StaffRoomKind      `json:"kind"`
+	MemberCount int                `json:"memberCount"`
+	Mentors     []struct {
+		DisplayName string             `json:"displayName"`
+		MemberId    openapi_types.UUID `json:"memberId"`
+	} `json:"mentors"`
+
+	// Title Locale key of the room title.
+	Title string `json:"title"`
+}
+
+// StaffRoomKind defines model for StaffRoom.Kind.
+type StaffRoomKind string
+
+// StaffRoomList defines model for StaffRoomList.
+type StaffRoomList struct {
+	Items []StaffRoom `json:"items"`
+}
+
 // ArticleId defines model for ArticleId.
 type ArticleId = openapi_types.UUID
 
@@ -319,6 +359,9 @@ type ServerInterface interface {
 	// PutMessageLegalHold Put a message under legal hold (ADR-0019). Staff moderator or admin, MFA. Audited.
 	// (PUT /staff/chat/messages/{messageId}/legal-hold)
 	PutMessageLegalHold(w http.ResponseWriter, r *http.Request, messageId openapi_types.UUID)
+	// StaffListRooms Group rooms with member counts and mentors, for mentor assignment. Staff moderator or admin, MFA.
+	// (GET /staff/chat/rooms)
+	StaffListRooms(w http.ResponseWriter, r *http.Request)
 	// RemoveRoomMentor Remove a mentor from a group room. Staff moderator or admin, MFA. Audited.
 	// (DELETE /staff/chat/rooms/{roomId}/mentors/{memberId})
 	RemoveRoomMentor(w http.ResponseWriter, r *http.Request, roomId RoomId, memberId openapi_types.UUID)
@@ -658,6 +701,20 @@ func (siw *ServerInterfaceWrapper) PutMessageLegalHold(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// StaffListRooms operation middleware
+func (siw *ServerInterfaceWrapper) StaffListRooms(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StaffListRooms(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // RemoveRoomMentor operation middleware
 func (siw *ServerInterfaceWrapper) RemoveRoomMentor(w http.ResponseWriter, r *http.Request) {
 
@@ -856,6 +913,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chat/rooms/{roomId}/messages", wrapper.SendMessage)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chat/messages/{messageId}/report", wrapper.ReportMessage)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/chat/rooms/{roomId}/moderation", wrapper.ModerateRoom)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/staff/chat/rooms", wrapper.StaffListRooms)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/staff/chat/rooms/{roomId}/mentors/{memberId}", wrapper.RemoveRoomMentor)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/staff/chat/rooms/{roomId}/mentors/{memberId}", wrapper.AssignRoomMentor)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/staff/chat/messages/{messageId}/legal-hold", wrapper.DeleteMessageLegalHold)
@@ -1289,6 +1347,60 @@ func (response PutMessageLegalHolddefaultApplicationProblemPlusJSONResponse) Vis
 	return err
 }
 
+type StaffListRoomsRequestObject struct {
+}
+
+type StaffListRoomsResponseObject interface {
+	VisitStaffListRoomsResponse(w http.ResponseWriter) error
+}
+
+type StaffListRooms200JSONResponse StaffRoomList
+
+func (response StaffListRooms200JSONResponse) VisitStaffListRoomsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StaffListRooms403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response StaffListRooms403ApplicationProblemPlusJSONResponse) VisitStaffListRoomsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type StaffListRoomsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response StaffListRoomsdefaultApplicationProblemPlusJSONResponse) VisitStaffListRoomsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type RemoveRoomMentorRequestObject struct {
 	RoomId   RoomId             `json:"roomId"`
 	MemberId openapi_types.UUID `json:"memberId"`
@@ -1435,6 +1547,9 @@ type StrictServerInterface interface {
 	// PutMessageLegalHold Put a message under legal hold (ADR-0019). Staff moderator or admin, MFA. Audited.
 	// (PUT /staff/chat/messages/{messageId}/legal-hold)
 	PutMessageLegalHold(ctx context.Context, request PutMessageLegalHoldRequestObject) (PutMessageLegalHoldResponseObject, error)
+	// StaffListRooms Group rooms with member counts and mentors, for mentor assignment. Staff moderator or admin, MFA.
+	// (GET /staff/chat/rooms)
+	StaffListRooms(ctx context.Context, request StaffListRoomsRequestObject) (StaffListRoomsResponseObject, error)
 	// RemoveRoomMentor Remove a mentor from a group room. Staff moderator or admin, MFA. Audited.
 	// (DELETE /staff/chat/rooms/{roomId}/mentors/{memberId})
 	RemoveRoomMentor(ctx context.Context, request RemoveRoomMentorRequestObject) (RemoveRoomMentorResponseObject, error)
@@ -1764,6 +1879,30 @@ func (sh *strictHandler) PutMessageLegalHold(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PutMessageLegalHoldResponseObject); ok {
 		if err := validResponse.VisitPutMessageLegalHoldResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// StaffListRooms operation middleware
+func (sh *strictHandler) StaffListRooms(w http.ResponseWriter, r *http.Request) {
+	var request StaffListRoomsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.StaffListRooms(ctx, request.(StaffListRoomsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "StaffListRooms")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(StaffListRoomsResponseObject); ok {
+		if err := validResponse.VisitStaffListRoomsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

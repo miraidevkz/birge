@@ -286,6 +286,11 @@ type TopicId = openapi_types.UUID
 // VersionId defines model for VersionId.
 type VersionId = openapi_types.UUID
 
+// ViewExternalPlanJSONBody defines parameters for ViewExternalPlan.
+type ViewExternalPlanJSONBody struct {
+	Token string `json:"token"`
+}
+
 // SetChildCardJSONBody defines parameters for SetChildCard.
 type SetChildCardJSONBody struct {
 	// Text Free text from the template (needs, medicines, how to calm, fears). Stored encrypted.
@@ -323,6 +328,9 @@ type GetSosFeedParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ViewExternalPlanJSONRequestBody defines body for ViewExternalPlan for application/json ContentType.
+type ViewExternalPlanJSONRequestBody ViewExternalPlanJSONBody
+
 // SetChildCardJSONRequestBody defines body for SetChildCard for application/json ContentType.
 type SetChildCardJSONRequestBody SetChildCardJSONBody
 
@@ -337,6 +345,9 @@ type AddTrustedContactJSONRequestBody = TrustedContactInput
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// ViewExternalPlan The child card behind a link an external trusted contact got by SMS.
+	// (POST /external/plans/view)
+	ViewExternalPlan(w http.ResponseWriter, r *http.Request)
 
 	// (GET /me/emergency-plan)
 	GetEmergencyPlan(w http.ResponseWriter, r *http.Request)
@@ -392,6 +403,20 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ViewExternalPlan operation middleware
+func (siw *ServerInterfaceWrapper) ViewExternalPlan(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ViewExternalPlan(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetEmergencyPlan operation middleware
 func (siw *ServerInterfaceWrapper) GetEmergencyPlan(w http.ResponseWriter, r *http.Request) {
@@ -955,11 +980,91 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/trusted-invitations/{contactId}/accept", wrapper.AcceptTrustedInvitation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/emergency-plan/send", wrapper.SendEmergencyPlan)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/trusted/plans/{ownerId}", wrapper.GetSharedPlan)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/external/plans/view", wrapper.ViewExternalPlan)
 
 	return m
 }
 
 type ProblemApplicationProblemPlusJSONResponse Problem
+
+type ViewExternalPlanRequestObject struct {
+	Body *ViewExternalPlanJSONRequestBody
+}
+
+type ViewExternalPlanResponseObject interface {
+	VisitViewExternalPlanResponse(w http.ResponseWriter) error
+}
+
+type ViewExternalPlan200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type ViewExternalPlan200JSONResponse struct {
+	Body    SharedPlan
+	Headers ViewExternalPlan200ResponseHeaders
+}
+
+func (response ViewExternalPlan200JSONResponse) VisitViewExternalPlanResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ViewExternalPlan404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ViewExternalPlan404ApplicationProblemPlusJSONResponse) VisitViewExternalPlanResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ViewExternalPlan429ApplicationProblemPlusJSONResponse Problem
+
+func (response ViewExternalPlan429ApplicationProblemPlusJSONResponse) VisitViewExternalPlanResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ViewExternalPlandefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ViewExternalPlandefaultApplicationProblemPlusJSONResponse) VisitViewExternalPlanResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type GetEmergencyPlanRequestObject struct {
 }
@@ -1634,6 +1739,9 @@ func (response GetSharedPlandefaultApplicationProblemPlusJSONResponse) VisitGetS
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// ViewExternalPlan The child card behind a link an external trusted contact got by SMS.
+	// (POST /external/plans/view)
+	ViewExternalPlan(ctx context.Context, request ViewExternalPlanRequestObject) (ViewExternalPlanResponseObject, error)
 
 	// (GET /me/emergency-plan)
 	GetEmergencyPlan(ctx context.Context, request GetEmergencyPlanRequestObject) (GetEmergencyPlanResponseObject, error)
@@ -1718,6 +1826,37 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// ViewExternalPlan operation middleware
+func (sh *strictHandler) ViewExternalPlan(w http.ResponseWriter, r *http.Request) {
+	var request ViewExternalPlanRequestObject
+
+	var body ViewExternalPlanJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ViewExternalPlan(ctx, request.(ViewExternalPlanRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ViewExternalPlan")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ViewExternalPlanResponseObject); ok {
+		if err := validResponse.VisitViewExternalPlanResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetEmergencyPlan operation middleware

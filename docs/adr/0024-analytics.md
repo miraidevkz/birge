@@ -17,3 +17,6 @@ The pilot must report the metrics of requirements § 9 (stress, isolation, activ
 
 ## Consequences
 A new event is counted only when analytics adds it to its consumer. Metrics start from the first event after deployment; there is no backfill from other contexts' tables. A cohort smaller than `k` shows no stress or isolation numbers, by design.
+
+## Addendum 2026-10-28: inputs
+The metrics of § 9 map to events as follows. Activity: `membership.MemberActiveDay` (new; once per member per day from the session middleware). Tea: `circle.TeaRequested` (new) → `circle.MatchAccepted` → `circle.AcquaintanceEstablished`. SOS: `emergency.SosRaised`, `SosResponseAccepted` (first response), `SosClosed`. Escalations: `safety.EscalationOpened`, `EscalationTaken`. Rights: `assistant.QuestionAnswered` (new; `scope=rights`, `source=knowledge`) and `assistant.ReplyRated`. Stress and isolation come from the wellbeing cohort aggregates, not from events. The response shape is `Metrics` in the contract; a cell below `k` carries only `suppressed: true`.

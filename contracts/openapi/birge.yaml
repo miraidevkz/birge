@@ -39,6 +39,8 @@ tags:
     description: Specialists and reviews.
   - name: moderation
     description: Staff queue for listings, specialists, reviews, reports, held chat messages and verification requests.
+  - name: analytics
+    description: Pseudonymous pilot metrics as aggregates with small-cell suppression (ADR-0024). Staff admin only.
 security:
   - memberSession: []
 paths:
@@ -864,6 +866,43 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         default: {$ref: '#/components/responses/Problem'}
 
+  /external/plans/view:
+    post:
+      operationId: viewExternalPlan
+      tags: [emergency]
+      summary: The child card behind a link an external trusted contact got by SMS.
+      description: |
+        No session: the link in the SMS is `<public URL>/plan#<token>`. The fragment never
+        reaches a server or its access log; the static page reads it and posts it here.
+        The token is 32 random bytes (base64url, 43 characters); only its keyed hash is
+        stored. It is valid for 24 hours from sendEmergencyPlan and dies earlier when the
+        member sends the plan again or removes that contact. Every view is audited
+        (contact id, no IP). Rate limited per client IP; unknown, expired and revoked
+        tokens all answer the same 404 so a token cannot be probed.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+      responses:
+        '200':
+          description: Shared plan.
+          headers:
+            Cache-Control:
+              schema: {type: string, enum: [no-store]}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SharedPlan'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+
   /me/assistant/messages:
     post:
       operationId: sendAssistantMessage
@@ -1384,6 +1423,24 @@ paths:
         '204': {description: Applied.}
         '403': {$ref: '#/components/responses/Problem'}
         default: {$ref: '#/components/responses/Problem'}
+  /staff/chat/rooms:
+    get:
+      operationId: staffListRooms
+      tags: [chat]
+      summary: Group rooms with member counts and mentors, for mentor assignment. Staff moderator or admin, MFA.
+      description: |
+        District and topic rooms only; private rooms are never listed to staff. Mentors carry
+        their display name only (no phone, no district).
+      security:
+        - staffOidc: []
+      responses:
+        '200':
+          description: All group rooms, ordered by kind then title key.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffRoomList'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
   /staff/chat/rooms/{roomId}/mentors/{memberId}:
     parameters:
       - $ref: '#/components/parameters/RoomId'
@@ -1642,6 +1699,55 @@ paths:
         '204': {description: Lifted (idempotent when not suspended).}
         '403': {$ref: '#/components/responses/Problem'}
         default: {$ref: '#/components/responses/Problem'}
+  /staff/metrics:
+    get:
+      operationId: getMetrics
+      tags: [analytics]
+      summary: Pilot metrics of requirements section 9 for a period. Staff admin, MFA. Audited.
+      security:
+        - staffOidc: []
+      parameters:
+        - $ref: '#/components/parameters/MetricsFrom'
+        - $ref: '#/components/parameters/MetricsTo'
+      responses:
+        '200':
+          description: Aggregates; every cell from fewer than k members is suppressed.
+          headers:
+            Cache-Control:
+              schema: {type: string, enum: [no-store]}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Metrics'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/metrics.csv:
+    get:
+      operationId: getMetricsCsv
+      tags: [analytics]
+      summary: The same metrics as CSV (one row per metric and period bucket). Staff admin, MFA. Audited.
+      description: |
+        Columns: metric, bucket, members, value, suppressed. A suppressed row has empty
+        members and value and suppressed=true. UTF-8 with a header row.
+      security:
+        - staffOidc: []
+      parameters:
+        - $ref: '#/components/parameters/MetricsFrom'
+        - $ref: '#/components/parameters/MetricsTo'
+      responses:
+        '200':
+          description: CSV export.
+          headers:
+            Cache-Control:
+              schema: {type: string, enum: [no-store]}
+            Content-Disposition:
+              schema: {type: string, maxLength: 120}
+          content:
+            text/csv:
+              schema: {type: string}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     memberSession:
@@ -1709,6 +1815,18 @@ components:
       schema:
         type: string
         format: uuid
+    MetricsFrom:
+      name: from
+      in: query
+      required: true
+      description: First day of the period (inclusive, deployment time zone).
+      schema: {type: string, format: date}
+    MetricsTo:
+      name: to
+      in: query
+      required: true
+      description: Last day of the period (inclusive); at most 12 months after from.
+      schema: {type: string, format: date}
   responses:
     Problem:
       description: Error (RFC 9457 problem details).
@@ -2590,3 +2708,115 @@ components:
         reason: {type: string, enum: [rules_medicine, rules_money, person_in_photo, unsafe, spam, inaccurate, duplicate, other]}
         blockAuthor: {type: boolean, description: "Also block the author (reports, illegal content); audited."}
         legalHold: {type: boolean, description: Preserve the content for the lawyer (ADR-0019).}
+    StaffRoomList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 1000, items: {$ref: '#/components/schemas/StaffRoom'}}
+    StaffRoom:
+      type: object
+      additionalProperties: false
+      required: [id, kind, title, memberCount, mentors]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [district, topic]}
+        title: {type: string, maxLength: 80, description: Locale key of the room title.}
+        memberCount: {type: integer, minimum: 0}
+        mentors:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            additionalProperties: false
+            required: [memberId, displayName]
+            properties:
+              memberId: {type: string, format: uuid}
+              displayName: {type: string, maxLength: 40}
+    MetricCell:
+      type: object
+      additionalProperties: false
+      required: [suppressed]
+      description: |
+        One aggregate. members is how many distinct members it is built from. When that is
+        fewer than k, suppressed is true and members and value are absent (ADR-0024).
+      properties:
+        members: {type: integer, minimum: 0}
+        value: {type: number, description: "Count, share (0..1), mean, median or minutes; see the field it sits in."}
+        suppressed: {type: boolean}
+    ScoreAggregate:
+      type: object
+      additionalProperties: false
+      required: [mean, median]
+      properties:
+        mean: {$ref: '#/components/schemas/MetricCell'}
+        median: {$ref: '#/components/schemas/MetricCell'}
+    BucketCell:
+      type: object
+      additionalProperties: false
+      required: [bucket, cell]
+      properties:
+        bucket: {type: string, format: date, description: First day of the week (Monday) or month.}
+        cell: {$ref: '#/components/schemas/MetricCell'}
+    Metrics:
+      type: object
+      additionalProperties: false
+      required: [from, to, k, stress, isolation, activity, tea, sos, escalations, rights]
+      properties:
+        from: {type: string, format: date}
+        to: {type: string, format: date}
+        k: {type: integer, minimum: 1, description: Suppression threshold in effect.}
+        stress:
+          type: object
+          additionalProperties: false
+          required: [baseline, week8]
+          description: PSS-4 at the first check-in and at the check-in nearest to 8 weeks later.
+          properties:
+            baseline: {$ref: '#/components/schemas/ScoreAggregate'}
+            week8: {$ref: '#/components/schemas/ScoreAggregate'}
+        isolation:
+          type: object
+          additionalProperties: false
+          required: [before, after]
+          properties:
+            before: {$ref: '#/components/schemas/ScoreAggregate'}
+            after: {$ref: '#/components/schemas/ScoreAggregate'}
+        activity:
+          type: object
+          additionalProperties: false
+          required: [weekly, monthly, retention4w, retention8w]
+          properties:
+            weekly: {type: array, maxItems: 60, items: {$ref: '#/components/schemas/BucketCell'}}
+            monthly: {type: array, maxItems: 13, items: {$ref: '#/components/schemas/BucketCell'}}
+            retention4w: {$ref: '#/components/schemas/MetricCell'}
+            retention8w: {$ref: '#/components/schemas/MetricCell'}
+        tea:
+          type: object
+          additionalProperties: false
+          required: [requests, pairs, meetings]
+          properties:
+            requests: {$ref: '#/components/schemas/MetricCell'}
+            pairs: {$ref: '#/components/schemas/MetricCell'}
+            meetings: {$ref: '#/components/schemas/MetricCell'}
+        sos:
+          type: object
+          additionalProperties: false
+          required: [raised, closedShare, firstResponseMedianMinutes]
+          properties:
+            raised: {$ref: '#/components/schemas/MetricCell'}
+            closedShare: {$ref: '#/components/schemas/MetricCell'}
+            firstResponseMedianMinutes: {$ref: '#/components/schemas/MetricCell'}
+        escalations:
+          type: object
+          additionalProperties: false
+          required: [opened, takenWithin15mShare]
+          properties:
+            opened: {$ref: '#/components/schemas/MetricCell'}
+            takenWithin15mShare: {$ref: '#/components/schemas/MetricCell'}
+        rights:
+          type: object
+          additionalProperties: false
+          required: [answeredFromKnowledge, helpedShare]
+          properties:
+            answeredFromKnowledge: {$ref: '#/components/schemas/MetricCell'}
+            helpedShare: {$ref: '#/components/schemas/MetricCell'}
