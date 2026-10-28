@@ -50,11 +50,15 @@ type Service struct {
 	SMS        port.SMSSender
 	// Links fills the {link} placeholder of an SMS text at send time; nil
 	// skips every SMS whose text has one.
-	Links  port.SMSLinks
-	Guard  *guard.Guard
-	Clock  clock.Clock
-	Logger *slog.Logger
-	Config Config
+	Links port.SMSLinks
+	Guard *guard.Guard
+	// SignInGuard guards sign-in code SMS (SendSignInCode) with counters of
+	// its own, so sign-in traffic never uses up Guard's limits or budget.
+	// Nil refuses every sign-in SMS.
+	SignInGuard *guard.Guard
+	Clock       clock.Clock
+	Logger      *slog.Logger
+	Config      Config
 }
 
 func (s *Service) criticalAfter() time.Duration {

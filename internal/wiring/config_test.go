@@ -187,6 +187,9 @@ func TestLoadValid(t *testing.T) {
 				if cfg.NATSURL == "" || cfg.SMSGuard.DailyBudget != 1000 || cfg.PublicURL != "https://app.example.invalid" {
 					t.Error("worker settings not loaded")
 				}
+				if cfg.InternalAddr != "" || cfg.CourierSecret != nil {
+					t.Error("internal listener must be off unless BIRGE_INTERNAL_ADDR is set")
+				}
 				if cfg.EventsMaxAge != defaultEventsMaxAge || cfg.EventsMaxBytes != defaultEventsMaxBytes {
 					t.Errorf("events retention: age %s, bytes %d", cfg.EventsMaxAge, cfg.EventsMaxBytes)
 				}
@@ -242,6 +245,11 @@ func TestLoadRejects(t *testing.T) {
 		{"missing practices url", CommandAPI, map[string]string{"BIRGE_PRACTICES_BASE_URL": ""}, nil, "BIRGE_PRACTICES_BASE_URL is required"},
 		{"bad staff lang", CommandAPI, map[string]string{"BIRGE_STAFF_SMS_LANG": "en"}, nil, "BIRGE_STAFF_SMS_LANG"},
 		{"bad time zone", CommandWorker, map[string]string{"BIRGE_TIME_ZONE": "Not/AZone"}, nil, "BIRGE_TIME_ZONE"},
+		{"internal listener without secret", CommandWorker, map[string]string{"BIRGE_INTERNAL_ADDR": ":8090"}, nil, "BIRGE_COURIER_SECRET_FILE is required"},
+		{"short courier secret", CommandWorker, map[string]string{"BIRGE_INTERNAL_ADDR": ":8090", "BIRGE_COURIER_SECRET_FILE": "/keys/courier"},
+			func(f fakeFiles) { f["/keys/courier"] = []byte("short") }, "BIRGE_COURIER_SECRET_FILE: the key must be at least 32 bytes"},
+		{"bad internal addr", CommandWorker, map[string]string{"BIRGE_INTERNAL_ADDR": "8090"}, nil, "BIRGE_INTERNAL_ADDR"},
+		{"internal addr on the health port", CommandWorker, map[string]string{"BIRGE_INTERNAL_ADDR": ":8080"}, nil, "another port than BIRGE_HTTP_ADDR"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

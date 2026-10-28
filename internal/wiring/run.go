@@ -257,8 +257,9 @@ func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
 // SosShared district-push consumer, the analytics facts consumer, one
 // privacy.DataDeletionRequested consumer per context (Deleters) and the
 // timers worker with every context's handlers (analytics retention among
-// them), plus /healthz and
-// /readyz (database and NATS) on the HTTP address. When one loop fails, the
+// them), plus /healthz and /readyz (database and NATS) on the HTTP address,
+// and, with BIRGE_INTERNAL_ADDR, the Kratos courier hook on the internal
+// listener (InternalHandler). When one loop fails, the
 // others are stopped and the error is returned, so the orchestrator restarts
 // the process instead of running it half-working.
 func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
@@ -335,13 +336,16 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		Recipients: &Recipients{
 			Members: members, Phones: identities, Staff: safety, Emergency: emergency, StaffLang: cfg.StaffSMSLang,
 		},
-		Push:   pushSender,
-		SMS:    smsSender,
-		Links:  &PlanSMSLinks{Emergency: emergency, PublicURL: cfg.PublicURL},
-		Guard:  guard.New(cfg.SMSGuard),
-		Clock:  clk,
-		Logger: logger,
-		Config: notifyservice.Config{CriticalSMSAfter: cfg.CriticalSMSAfter, SMSTexts: cfg.SMSTexts, PushTitles: cfg.PushTitles},
+		Push:  pushSender,
+		SMS:   smsSender,
+		Links: &PlanSMSLinks{Emergency: emergency, PublicURL: cfg.PublicURL},
+		Guard: guard.New(cfg.SMSGuard),
+		// Same limits, separate counters: sign-in pumping must never use
+		// up what a critical or plan SMS needs (notify SendSignInCode).
+		SignInGuard: guard.New(cfg.SMSGuard),
+		Clock:       clk,
+		Logger:      logger,
+		Config:      notifyservice.Config{CriticalSMSAfter: cfg.CriticalSMSAfter, SMSTexts: cfg.SMSTexts, PushTitles: cfg.PushTitles},
 	}
 	privacy := &privacyservice.Service{
 		Store:    &privacyadapter.PostgresStore{Pool: pool},
@@ -478,6 +482,13 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		"membership moderation": membershipMod.Run,
 		"timers":                timerWorker.Run,
 		"health endpoints":      func(ctx context.Context) error { return serve(ctx, logger, cfg.HTTPAddr, health) },
+	}
+	if cfg.InternalAddr != "" {
+		internal, err := InternalHandler(cfg, notify, logger)
+		if err != nil {
+			return err
+		}
+		loops["internal endpoints"] = func(ctx context.Context) error { return serve(ctx, logger, cfg.InternalAddr, internal) }
 	}
 	// One privacy.DataDeletionRequested consumer per context (ADR-0009, AGENTS.md N6).
 	for _, c := range deleters.Consumers(js, pool, logger) {

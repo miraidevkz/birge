@@ -77,9 +77,19 @@ services:
       - >-
         export SECRETS_DEFAULT=$$(cat /secrets/kratos-secret) SECRETS_COOKIE=$$(cat /secrets/kratos-secret)
         SECRETS_CIPHER=$$(cat /secrets/kratos-cipher) &&
-        exec kratos serve -c /etc/config/kratos/kratos.yml --dev --watch-courier
+        set -- -c /etc/config/kratos/kratos.yml &&
+        if [ "$$BIRGE_KRATOS_COURIER" = hook ]; then
+        sed "s/Bearer @COURIER_SECRET@/Bearer $$(cat /secrets/courier-hook.secret)/" /etc/config/kratos/courier-hook.yml >/tmp/courier-hook.yml &&
+        set -- "$$@" -c /tmp/courier-hook.yml; fi &&
+        exec kratos serve "$$@" --dev --watch-courier
     environment:
       DSN: postgres://kratos@postgres:5432/kratos?sslmode=disable
+      # devsms (default): sign-in codes go to the development relay below,
+      # which serves the demo codes. hook: Kratos also loads
+      # kratos/courier-hook.yml and hands codes to the worker's courier hook,
+      # which sends them through notify (BIRGE_SMS_PROVIDER, log here) with
+      # the SMS guard; read them with ./up.sh codes.
+      BIRGE_KRATOS_COURIER: ${BIRGE_KRATOS_COURIER:-devsms}
     volumes:
       - ./kratos:/etc/config/kratos:ro
       - secrets:/secrets:ro
@@ -89,7 +99,9 @@ services:
 
   # Writes the development keys and the Kratos secrets once into the secrets
   # volume; later starts keep them (and the data stays readable). Keys added
-  # after a volume was made (plan-link.key, analytics.key) are generated on their own. Runs as
+  # after a volume was made (plan-link.key, analytics.key, courier-hook.secret)
+  # are generated on their own. The courier hook secret is readable by Kratos'
+  # user. Runs as
   # root only to hand the new volume to the image's birge user.
   keygen:
     build: { context: ../.., dockerfile: deploy/compose/Dockerfile }
@@ -106,7 +118,8 @@ services:
         { test -f /secrets/kratos-cipher || od -An -tx1 -N16 /dev/urandom | tr -d ' \n' >/secrets/kratos-cipher; } &&
         { test -f /secrets/hydra-system || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >/secrets/hydra-system; } &&
         { test -f /secrets/hydra-introspect || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >/secrets/hydra-introspect; } &&
-        chown -R birge /secrets && chmod 0644 /secrets/kratos-secret /secrets/kratos-cipher /secrets/hydra-system
+        { test -f /secrets/courier-hook.secret || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >/secrets/courier-hook.secret; } &&
+        chown -R birge /secrets && chmod 0644 /secrets/kratos-secret /secrets/kratos-cipher /secrets/hydra-system /secrets/courier-hook.secret
     volumes:
       - secrets:/secrets
 
@@ -136,7 +149,12 @@ services:
   worker:
     image: birge-dev:local
     command: ["worker"]
-    environment: *birge-env
+    environment:
+      <<: *birge-env
+      # Internal listener of the Kratos courier hook: reached by Kratos on
+      # the compose network only, never published or routed by Caddy.
+      BIRGE_INTERNAL_ADDR: ":8090"
+      BIRGE_COURIER_SECRET_FILE: /secrets/courier-hook.secret
     volumes:
       - secrets:/secrets:ro
     depends_on:

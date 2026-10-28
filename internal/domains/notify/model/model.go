@@ -77,6 +77,27 @@ const ConsumerDeliveryRequested = "notify.DeliveryRequested"
 // fixed sentence (ADR-0013).
 const SMSLinkPlaceholder = "{link}"
 
+// Sign-in code length bounds. Kratos generates 6 digits today; the range
+// leaves room for a configuration change and refuses anything that is not a
+// short run of digits, so no other text can ride in the code slot.
+const (
+	minSignInCodeLen = 4
+	maxSignInCodeLen = 10
+)
+
+// ValidSignInCode reports whether code is 4 to 10 ASCII digits.
+func ValidSignInCode(code string) bool {
+	if len(code) < minSignInCodeLen || len(code) > maxSignInCodeLen {
+		return false
+	}
+	for i := 0; i < len(code); i++ {
+		if code[i] < '0' || code[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 var (
 	// ErrUnauthorized means the caller has no member session.
 	ErrUnauthorized = errors.New("notify: unauthorized")

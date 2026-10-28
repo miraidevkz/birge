@@ -2,6 +2,8 @@
 # the birge auth gateway at /auth/; the public and admin ports are not
 # published. SMS go to the development relay (cmd/birge-devsms), which drops
 # them unless Telegram delivery is enabled: read codes with `up.sh codes`.
+# Production hands codes to the Birge courier hook instead: courier-hook.yml,
+# loaded after this file (compose: BIRGE_KRATOS_COURIER=hook).
 version: v26.2.0
 serve:
   public:

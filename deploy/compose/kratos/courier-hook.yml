@@ -1,0 +1,26 @@
+# Production courier: Kratos hands sign-in codes to Birge, which sends them
+# through notify's SMS provider with the SMS guard (ADR-0008 addendum). Load
+# it after kratos.yml (`kratos serve -c kratos.yml -c courier-hook.yml`); it
+# replaces the development relay channel. The default compose stack does not
+# load it: start it with BIRGE_KRATOS_COURIER=hook to try the hook locally.
+#
+# The auth value below is a placeholder, never a secret: at start the Kratos
+# entrypoint replaces @COURIER_SECRET@ with the content of the courier
+# secret file (the same file the worker reads as BIRGE_COURIER_SECRET_FILE)
+# and writes the result outside the read-only config directory. The URL is
+# the worker's internal listener (BIRGE_INTERNAL_ADDR), which no ingress
+# routes; use https and the cluster-internal name in production.
+courier:
+  channels:
+    - id: sms
+      type: http
+      request_config:
+        url: http://worker:8090/internal/kratos/courier
+        method: POST
+        body: file:///etc/config/kratos/courier-hook.jsonnet
+        auth:
+          type: api_key
+          config:
+            in: header
+            name: Authorization
+            value: Bearer @COURIER_SECRET@

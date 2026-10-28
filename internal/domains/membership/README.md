@@ -33,6 +33,8 @@ Operations of tag `membership` in `contracts/openapi/birge.yaml`:
 
 Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 prefix allow-list, per-IP / per-number / global rate limits before proxying to Kratos. Limits are process-local (one replica).
 
+Kratos courier hook (`authgw.CourierHook`, not in the public contract): `POST /internal/kratos/courier` on the worker's internal listener (`BIRGE_INTERNAL_ADDR`), never routed by the ingress. `Authorization: Bearer <secret>` from `BIRGE_COURIER_SECRET_FILE`, compared in constant time (401 otherwise). Body `{"to", "template", "code"}` built by `deploy/compose/kratos/courier-hook.jsonnet`; only templates `login_code_valid` and `registration_code_valid` (422 otherwise), E.164 in an allowed range (422), code of 4 to 10 digits (400). The code goes to the interface `authgw.CodeSender`, implemented in wiring by notify's synchronous `SendSignInCode`: 204 sent, 429 refused by the SMS guard, 422 refused for good by the provider, 503 provider failure. Kratos retries every non-2xx.
+
 ## Events
 
 | Direction | Event | When | Guarantees |
@@ -76,6 +78,9 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 | `authgw.Config.AllowedPrefixes` | required | Allowed E.164 mobile prefixes |
 | `authgw.Config.PerIP` / `PerNumber` / `Global` | required | Token-bucket rates |
 | `authgw.Config.PhoneTrait` | `phone` | Registration trait holding the phone |
+| `authgw.CourierConfig.Secret` | required (≥32 bytes) | Courier hook secret (`BIRGE_COURIER_SECRET_FILE`) |
+| `authgw.CourierConfig.AllowedPrefixes` | required | Same list as the gateway (`BIRGE_SMS_ALLOWED_PREFIXES`) |
+| `BIRGE_INTERNAL_ADDR` | unset (no hook) | Worker's internal listener for the courier hook |
 | `BIRGE_TIME_ZONE` (`service.NewActiveDays` location) | `Asia/Almaty` | Zone whose calendar day defines `membership.MemberActiveDay` |
 | `adapter.Postgres.SeedReferenceIfEmpty` | — | `birge migrate` seeds DEMO cities/districts/needs from `presets/demo/reference.json` only when those tables are empty |
 | see `docs/development.md` § Configuration | | all variables, defaults and which subcommand reads them |
@@ -83,6 +88,7 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 ## Invariants
 
 - The auth gateway never forwards `Cookie`, `Origin` or its PoW header to Kratos: members (native and web) use the API flow with a session token, and Kratos refuses an API flow that carries `Origin` (authgw).
+- The courier hook never stores, publishes or logs the sign-in code, the number or the secret: it calls a synchronous sender (no event, no outbox, no notification row) and logs only the outcome and template. Only the code is taken from Kratos; the SMS text is fixed in notify, so identity traits and the rendered body never reach the provider (authgw + notify `SendSignInCode`; tests grep the logs).
 - Lazy member creation; unique `identity_id` (database + service); concurrent first calls yield one member and one `MemberRegistered` (service + unique constraint).
 - A member only reads/changes her own data; principal from `internal/platform/auth`; staff sessions refused on member routes (service + API).
 - Display name sealed via `port.Encryptor` (ADR-0009); never logged; events carry IDs only (service + `Member.LogValue`).
@@ -99,14 +105,15 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 - Database down: HTTP handlers and other contexts calling `IsBlocked`/`Member` fail; no partial member create without outbox (same transaction).
 - Outbox/broker lag: events stay in the outbox until the relay publishes (ADR-0007); domain rows are already committed.
 - Kratos unreachable: auth gateway returns upstream/timeout errors; session middleware returns 503 (platform `session`).
+- SMS guard refuses a sign-in code or the provider fails: the courier hook answers non-2xx and Kratos retries the message up to its courier retry limit; the member can ask for a new code. Worker down or `BIRGE_INTERNAL_ADDR` unset while Kratos uses the hook: no codes are sent until it is back (Kratos keeps retrying).
 - Database slow or down while recording the activity day: logged as `membership.MemberActiveDay` with the member ID, the request continues (the recording has its own 2 s deadline); the next request retries because failures are not cached. The member middleware has already read the member at that point, so a dead database fails the request there, not here.
 - Encryptor unavailable: profile updates that set a name fail; reads that need Open fail.
 - Kratos admin API down during deletion: the member data is already erased; `membership.DeleteIdentity` retries until Kratos answers, and the tombstone refuses the identity meanwhile.
 
 ## Tests
 
-- Unit: `service/service_test.go`, `service/deletion_test.go` (tombstone refuses the identity, retries), `service/activity_test.go` (once per day in the deployment zone, cache, store failures never block, replicas, payload against the event schema), `model/model_test.go`, `authgw/authgw_test.go`, `api/server_test.go` — lazy create, idempotent children/verification/blocks, authgw PoW and rate limits, HTTP mapping.
+- Unit: `service/service_test.go`, `service/deletion_test.go` (tombstone refuses the identity, retries), `service/activity_test.go` (once per day in the deployment zone, cache, store failures never block, replicas, payload against the event schema), `model/model_test.go`, `authgw/authgw_test.go`, `authgw/courier_test.go` (secret, templates, numbers, guard refusal → non-2xx, no code/number/secret in logs), `api/server_test.go` — lazy create, idempotent children/verification/blocks, authgw PoW and rate limits, HTTP mapping.
 - Integration: `adapter/postgres_integration_test.go` — PostgreSQL store + outbox with `testinfra.Postgres` (including concurrent replicas recording one active day).
-- Wiring: `internal/wiring/moderation_e2e_test.go` — verification approve and suspension after `block_author`.
+- Wiring: `internal/wiring/moderation_e2e_test.go` — verification approve and suspension after `block_author`; `internal/wiring/courier_test.go` — courier hook through notify's sign-in guard and the log sender.
 
 Suspension (moderation `block_author`) refuses every member route with 403 `member_suspended`, except the crisis and own-data routes (`crisisExempt` in wiring): help request, raising and closing her SOS, the emergency plan, consents and the deletion request (non-negotiable 1). `CrisisMemberID` resolves her for those.

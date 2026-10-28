@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"regexp"
 	"slices"
@@ -130,6 +131,15 @@ type Config struct {
 	// PublicURL is the public origin of the member web app
 	// (BIRGE_PUBLIC_URL, worker): plan SMS links are PublicURL + "/plan#" + token.
 	PublicURL string
+
+	// InternalAddr is the worker's internal listener (BIRGE_INTERNAL_ADDR),
+	// serving the Kratos courier hook; empty means no internal listener and
+	// no hook. Never route it from the ingress.
+	InternalAddr string
+	// CourierSecret is the shared secret Kratos' courier presents to the
+	// hook (BIRGE_COURIER_SECRET_FILE, at least 32 bytes); required when
+	// InternalAddr is set.
+	CourierSecret []byte
 
 	// SMSPrefixes are the allowed E.164 mobile prefixes, shared by the auth
 	// gateway and the notify SMS guard.
@@ -330,6 +340,7 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 			DailyBudget:     l.positiveInt("BIRGE_SMS_DAILY_BUDGET", 1000),
 		}
 		cfg.SMSTexts = l.smsTextsOrDemo(&cfg)
+		l.internalListener(&cfg)
 		cfg.EventsMaxAge = l.duration("BIRGE_EVENTS_MAX_AGE", defaultEventsMaxAge, maxEventsMaxAge)
 		cfg.EventsMaxBytes = l.positiveInt64("BIRGE_EVENTS_MAX_BYTES", defaultEventsMaxBytes)
 		// Reminder scheduling needs the deployment zone; questionnaire is API-only.
@@ -349,6 +360,26 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// internalListener loads the worker's internal listener and the courier
+// hook secret. The listener is opt-in: a worker without it serves no hook,
+// and Kratos keeps its own courier configuration. It must not share the
+// health port, which an orchestrator may expose more widely.
+func (l *loader) internalListener(cfg *Config) {
+	cfg.InternalAddr = strings.TrimSpace(l.getenv("BIRGE_INTERNAL_ADDR"))
+	if cfg.InternalAddr == "" {
+		return
+	}
+	_, port, err := net.SplitHostPort(cfg.InternalAddr)
+	if err != nil || port == "" {
+		l.fail("BIRGE_INTERNAL_ADDR: must be host:port or :port")
+		return
+	}
+	if _, httpPort, err := net.SplitHostPort(cfg.HTTPAddr); err == nil && httpPort == port {
+		l.fail("BIRGE_INTERNAL_ADDR: must use another port than BIRGE_HTTP_ADDR")
+	}
+	cfg.CourierSecret = l.keyFile("BIRGE_COURIER_SECRET_FILE", true)
 }
 
 // delivery loads the delivery mode, the push and SMS providers and their

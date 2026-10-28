@@ -26,6 +26,12 @@
 //
 // Logs carry reasons and a keyed hash of the number (number_hash), never the
 // number, the code, the body or the session token.
+//
+// The other half of sign-in, Kratos sending the code, is CourierHook
+// (courier.go): the endpoint of Kratos' HTTP courier on the worker's internal
+// listener. The gateway limits count flow submissions; the SMS guard behind
+// the hook counts SMS actually sent and alone holds the daily SMS budget, so
+// no SMS is counted twice against a budget.
 package authgw
 
 import (

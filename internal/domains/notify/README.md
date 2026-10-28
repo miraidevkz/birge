@@ -40,7 +40,11 @@ Delivery is not HTTP: JetStream consumer `notify.DeliveryRequested` → `service
 
 ## Service API for other contexts
 
-none (other contexts publish `notify.DeliveryRequested`; they do not call this service directly).
+Other contexts publish `notify.DeliveryRequested`. One exception, for a secret that must never be stored:
+
+| Function | Callers may rely on |
+|---|---|
+| `service.Service.SendSignInCode(ctx, phoneE164, code)` | Synchronous sign-in code SMS for membership's Kratos courier hook (wired in `internal/wiring.SignInCodes`). Never touches the store, the outbox or a timer, so the code is kept only in memory and in the provider request. Text fixed as `SignInCodeText` (`Birge: <code>`); code must be 4 to 10 digits (`model.ErrInvalidInput`). `SignInGuard` first: refusal → `ErrSMSRefused` (wraps the guard reason). Provider errors returned as they are (`port.ErrPermanent` or transient); no retry here, Kratos retries. Logs a random `sms_id` and the outcome, never the phone or the code. No authorization: the hook authenticates Kratos. |
 
 Ports used by this context (wired in `internal/wiring`): `Recipients` (`Resolve` for kind/ref/language only; `PhoneFor` at SMS send time), `PushSender`, `SMSSender`, `SMSLinks` (fills `{link}` at send time: the emergency plan link of an external contact, minted by emergency; optional).
 
@@ -74,6 +78,7 @@ Push payload: `notification_id` and the neutral `Title` (from `Config.PushTitles
 | `guard.Config.PerNumberLimit` / `PerNumberWindow` | 0 disabled / 1h | Per-number rate limit |
 | `guard.Config.GlobalLimit` / `GlobalWindow` | 0 disabled / 1m | Process-wide rate limit |
 | `guard.Config.DailyBudget` | 0 unlimited | UTC-day send budget (bypassed for critical) |
+| `Service.SignInGuard` | nil refuses | Guard for `SendSignInCode`: built from the same `guard.Config`, separate counters |
 | see `docs/development.md` § Configuration | | all variables, defaults and which subcommand reads them |
 
 ## Invariants
@@ -83,6 +88,7 @@ Push payload: `notification_id` and the neutral `Title` (from `Config.PushTitles
 - `Resolve` returns kind, ref and language only — no identity-provider I/O — so a Kratos outage cannot lose `DeliveryRequested`.
 - Push and SMS carry no message content (ADR-0013); SMS bodies from config only. Push carries the notification ID and a neutral title; template, params and class never reach a provider (adapters).
 - Provider adapters never log, and their error texts hold the HTTP status and the provider's reason code only: no token, phone, text or credential (adapters; tests grep logs and errors).
+- Sign-in codes (`SendSignInCode`) are never persisted: no event, notification, delivery or timer row. They pass `SignInGuard`, whose counters are separate from `Guard`, so sign-in traffic cannot block a critical or plan SMS by per-number limit or daily budget (service; `service/signin_test.go` runs without a store).
 - `sms/guard` before every SMS; critical uses `AllowCritical` (no daily budget). Guard rejects for critical → `CriticalSMSBlocked` + delivery `failed` (not `skipped`).
 - Logs and events: IDs and event names only — never text, phones or push tokens (service + ports).
 - Marking critical read acknowledges and cancels CriticalSMS (service).
@@ -102,7 +108,7 @@ Push payload: `notification_id` and the neutral `Title` (from `Config.PushTitles
 
 ## Tests
 
-- Unit: `service/ladder_test.go`, `service/pagination_test.go`, `service/provider_errors_test.go`, `sms/guard/guard_test.go`, `api/handler` tests via notifytest fakes — ladder, idempotency, guard, cursor, provider error mapping.
+- Unit: `service/ladder_test.go`, `service/pagination_test.go`, `service/provider_errors_test.go`, `service/signin_test.go` (guard refusals, separate budget, no store, no code or phone in logs), `sms/guard/guard_test.go`, `api/handler` tests via notifytest fakes — ladder, idempotency, guard, cursor, provider error mapping.
 - Providers: `adapter/push` (httptest FCM with token endpoint and renewal; HTTP/2 TLS httptest APNs; error mapping; bad key files; service end to end with a log grep) and `adapter/smsgw` (httptest SMSC: form, error codes, service end to end with a log grep).
 - Integration: `adapter/integration_test.go` — PostgreSQL + NATS consumer path with `testinfra`; `DeleteRejectedDevice` keeps a re-registered token.
 - Fakes: `notifytest/` (in-memory store, fake push/SMS).
