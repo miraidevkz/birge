@@ -1,0 +1,14 @@
+apiVersion: v2
+name: birge
+description: >-
+  Birge peer-support platform: the birge API and worker, the migration job
+  and the member and staff web clients. Dependencies (PostgreSQL, NATS,
+  Kratos, Hydra, object storage, retrieval, observability) are installed
+  separately; see README.md.
+type: application
+# One chart for every Birge component (README.md, "Why one chart").
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.30.0-0"
+keywords:
+  - birge

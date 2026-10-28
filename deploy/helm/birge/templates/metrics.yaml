@@ -1,0 +1,75 @@
+{{- if .Values.metrics.enabled }}
+{{- /*
+Prometheus listeners (BIRGE_METRICS_ADDR) of the API and the worker on
+ClusterIP Services of their own, never routed by the ingress. The alert
+rules (deploy/prometheus/alerts.yml) expect the job names birge-api and
+birge-worker: the ServiceMonitor takes them from the birge.scrape/job label;
+annotation-based scraping needs the relabelling in README.md.
+*/ -}}
+{{- range $c := list "api" "worker" }}
+{{- $ctx := dict "root" $ "component" $c }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "birge.fullname" $ }}-{{ $c }}-metrics
+  labels:
+    {{- include "birge.labels" $ctx | nindent 4 }}
+    birge.scrape/job: birge-{{ $c }}
+  {{- if $.Values.metrics.scrapeAnnotations }}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: {{ include "birge.metricsPort" $ | quote }}
+    prometheus.io/path: /metrics
+  {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "birge.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ include "birge.metricsPort" $ }}
+      targetPort: metrics
+{{- end }}
+{{- if .Values.metrics.serviceMonitor.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "birge.fullname" . }}
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "metrics") | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  jobLabel: birge.scrape/job
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "birge.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+    matchExpressions:
+      - {key: birge.scrape/job, operator: Exists}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+{{- end }}
+{{- if .Values.metrics.prometheusRule.enabled }}
+---
+# files/alerts.yml is a copy of deploy/prometheus/alerts.yml (make
+# helm-check fails when they differ). Inserted verbatim: Files.Get output
+# is not rendered, so the alert templates ({{ "{{" }} $labels {{ "}}" }}) stay intact.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "birge.fullname" . }}
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "metrics") | nindent 4 }}
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- .Files.Get "files/alerts.yml" | nindent 2 }}
+{{- end }}
+{{- end }}

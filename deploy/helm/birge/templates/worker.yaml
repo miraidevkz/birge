@@ -1,0 +1,104 @@
+{{- $ctx := dict "root" $ "component" "worker" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "birge.fullname" . }}-worker
+  labels:
+    {{- include "birge.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  # Several workers may run at once (JetStream consumers, timers claimed
+  # with row locks), so a surge during a rollout is safe.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "birge.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "birge.labels" $ctx | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "birge.fullname" . }}
+      {{- include "birge.podSecurity" . | nindent 6 }}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: worker
+          image: {{ include "birge.image" (dict "root" $ "image" .Values.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["worker"]
+          {{- include "birge.containerSecurity" . | nindent 10 }}
+          ports:
+            # Serves only /healthz and /readyz; no Service points at it.
+            - name: http
+              containerPort: {{ include "birge.httpPort" . }}
+            {{- if .Values.courierHook.enabled }}
+            - name: internal
+              containerPort: {{ include "birge.internalPort" . }}
+            {{- end }}
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ include "birge.metricsPort" . }}
+            {{- end }}
+          env:
+            {{- include "birge.env" $ctx | nindent 12 }}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+            failureThreshold: 2
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          volumeMounts:
+            - {name: secrets, mountPath: /secrets, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+            {{- with .Values.worker.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        {{- include "birge.secretsVolume" $ctx | nindent 8 }}
+        {{- include "birge.tmpVolume" . | nindent 8 }}
+        {{- with .Values.worker.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.worker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- if .Values.courierHook.enabled }}
+---
+# The Kratos courier hook (POST /internal/kratos/courier). ClusterIP only,
+# never routed by the ingress; the NetworkPolicy admits Kratos alone.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "birge.fullname" . }}-worker-internal
+  labels:
+    {{- include "birge.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "birge.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: internal
+      port: {{ include "birge.internalPort" . }}
+      targetPort: internal
+{{- end }}

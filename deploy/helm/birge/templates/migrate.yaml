@@ -1,0 +1,67 @@
+{{- $ctx := dict "root" $ "component" "migrate" -}}
+# `birge migrate` before every install and upgrade. Helm applies the
+# Deployments only after this Job succeeds, so the API and the worker never
+# run against an older schema; a failed migration stops the release with
+# the old pods still serving. Migrations are additive (ADR-0006), so the
+# old release keeps working on the new schema. Concurrent runs are safe: a
+# PostgreSQL session lock lets one run at a time. A hook cannot use the
+# release's ServiceAccount or ConfigMaps (they do not exist yet on the
+# first install), so it uses the namespace default account without a token
+# and inline configuration.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "birge.fullname" . }}-migrate
+  labels:
+    {{- include "birge.labels" $ctx | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    # Kept after a failure for `kubectl logs`; replaced by the next run.
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrate.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrate.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "birge.labels" $ctx | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      {{- include "birge.podSecurity" . | nindent 6 }}
+      containers:
+        - name: migrate
+          image: {{ include "birge.image" (dict "root" $ "image" .Values.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["migrate"]
+          {{- include "birge.containerSecurity" . | nindent 10 }}
+          env:
+            # The migrator role owns the schemas (db/roles.sql); the
+            # application role used by the API and the worker has no DDL.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "secrets.migratorDatabase.name" .Values.secrets.migratorDatabase.name }}
+                  key: {{ required "secrets.migratorDatabase.key" .Values.secrets.migratorDatabase.key }}
+            {{- $env := dict "BIRGE_APPLY_ROLES" (ternary "1" "0" .Values.migrate.applyRoles) }}
+            {{- if .Values.migrate.referencePresets }}
+            {{- $_ := set $env "BIRGE_REFERENCE_PRESETS" .Values.migrate.referencePresets }}
+            {{- end }}
+            {{- if hasKey (.Values.migrate.env | default dict) "DATABASE_URL" }}
+            {{- fail "DATABASE_URL holds a password: set it through secrets.migratorDatabase" }}
+            {{- end }}
+            {{- include "birge.envMap" (merge $env (.Values.migrate.env | default dict)) | trim | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migrate.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        {{- include "birge.tmpVolume" . | nindent 8 }}
+      {{- with .Values.migrate.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.migrate.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,19 @@
+Birge {{ .Chart.AppVersion }} is installed as {{ include "birge.fullname" . }} in {{ .Release.Namespace }}.
+
+The migrate hook ran before the API and the worker. Check them with:
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "birge.fullname" . }}-api
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "birge.fullname" . }}-worker
+
+A pod stuck in ContainerCreating usually waits for a Secret it references;
+the list of Secrets is in the chart README ("Secrets").
+{{- if .Values.ingress.enabled }}
+
+Member app: https://{{ .Values.ingress.member.host }}/ (API at /v1, sign-in at /auth)
+{{- if .Values.ingress.admin.enabled }}
+Staff admin: https://{{ .Values.ingress.admin.host }}/ (staff VPN only)
+{{- end }}
+{{- end }}
+{{- if eq .Values.migrate.referencePresets "" }}
+
+Reference data includes the DEMO set: set migrate.referencePresets=kz for a real deployment.
+{{- end }}

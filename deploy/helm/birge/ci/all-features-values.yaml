@@ -1,0 +1,44 @@
+# make helm-check renders the chart with every optional part switched on, so
+# templates behind flags are validated too. Not an install profile.
+config:
+  otlpEndpoint: http://otel-collector:4318
+  s3:
+    enabled: true
+    endpoint: http://garage:3900
+    bucket: birge-photos
+    publicBaseUrl: https://objects.example.invalid
+  retrieval:
+    teiUrl: http://tei
+    qdrantUrl: http://qdrant:6333
+    embeddingModelId: intfloat/multilingual-e5-base
+staff:
+  enabled: true
+  introspectionUrl: http://hydra-admin:4445/admin/oauth2/introspect
+  clientId: birge-api
+  issuer: https://auth.example.invalid/
+  audience: birge-admin
+  mfaAmr: webauthn
+delivery:
+  pushProvider: fcm,apns
+  apns: {keyId: KEYID00000, teamId: TEAMID0000, topic: invalid.example.birge}
+secrets:
+  blindIndex: {name: birge-keys, key: blind-index.key}
+  llmApiKey: {name: birge-llm, key: api-key}
+  previousKeks:
+    - {id: kek-0, name: birge-kek-0, key: kek.json}
+metrics:
+  serviceMonitor: {enabled: true}
+  prometheusRule: {enabled: true}
+ingress:
+  admin:
+    enabled: true
+    sourceRange: [10.200.0.0/24]
+  certManager:
+    enabled: true
+    clusterIssuer: letsencrypt
+networkPolicy:
+  egress:
+    tei: {enabled: true}
+    qdrant: {enabled: true}
+    objectStorage: {enabled: true}
+    otel: {enabled: true}

@@ -1,0 +1,170 @@
+{{- if .Values.ingress.enabled }}
+{{- /*
+Routing of deploy/compose/Caddyfile on k3s Traefik:
+  member host: /v1 and /auth -> API, everything else -> member web app;
+               /plan and /sos-link with no-store and no-referrer headers.
+  admin host:  /v1 -> API, everything else -> admin web app; staff VPN only.
+Only the API's http port and the web servers are routed: the worker's
+internal port and every metrics port have no Ingress path (ADR-0008,
+ADR-0021). /demo/code (development relay) does not exist here.
+*/ -}}
+{{- $full := include "birge.fullname" . -}}
+{{- $ing := .Values.ingress -}}
+{{- $mw := printf "%s-%s" .Release.Namespace $full -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $full }}-member
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "ingress") | nindent 4 }}
+  annotations:
+    {{- if $ing.traefik.enabled }}
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ $ing.traefik.entrypoints }}
+    {{- if $ing.tls.enabled }}
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    {{- end }}
+    {{- end }}
+    {{- if $ing.certManager.enabled }}
+    cert-manager.io/cluster-issuer: {{ $ing.certManager.clusterIssuer }}
+    {{- end }}
+    {{- with $ing.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ $ing.className }}
+  {{- if $ing.tls.enabled }}
+  tls:
+    - hosts: [{{ $ing.member.host | quote }}]
+      secretName: {{ $ing.tls.memberSecretName }}
+  {{- end }}
+  rules:
+    - host: {{ $ing.member.host | quote }}
+      http:
+        paths:
+          {{- range $p := list "/v1" "/auth" }}
+          - path: {{ $p }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $full }}-api
+                port: {name: http}
+          {{- end }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $full }}-web-member
+                port: {name: http}
+---
+# The external plan and SOS pages: their own Ingress so the header
+# middleware applies to these exact paths only. Same host and TLS Secret
+# as above; the cert-manager annotation stays on the main Ingress alone so
+# only one Certificate owns the Secret.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $full }}-member-nostore
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "ingress") | nindent 4 }}
+  annotations:
+    {{- if $ing.traefik.enabled }}
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ $ing.traefik.entrypoints }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ $mw }}-nostore@kubernetescrd
+    {{- if $ing.tls.enabled }}
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    {{- end }}
+    {{- end }}
+    {{- with $ing.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ $ing.className }}
+  {{- if $ing.tls.enabled }}
+  tls:
+    - hosts: [{{ $ing.member.host | quote }}]
+      secretName: {{ $ing.tls.memberSecretName }}
+  {{- end }}
+  rules:
+    - host: {{ $ing.member.host | quote }}
+      http:
+        paths:
+          {{- range $p := list "/plan" "/sos-link" }}
+          - path: {{ $p }}
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $full }}-web-member
+                port: {name: http}
+          {{- end }}
+{{- if $ing.admin.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $full }}-admin
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "ingress") | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: {{ $ing.traefik.entrypoints }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ $mw }}-admin-allowlist@kubernetescrd
+    {{- if $ing.tls.enabled }}
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    {{- end }}
+    {{- if $ing.certManager.enabled }}
+    cert-manager.io/cluster-issuer: {{ $ing.certManager.clusterIssuer }}
+    {{- end }}
+    {{- with $ing.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ $ing.className }}
+  {{- if $ing.tls.enabled }}
+  tls:
+    - hosts: [{{ $ing.admin.host | quote }}]
+      secretName: {{ $ing.tls.adminSecretName }}
+  {{- end }}
+  rules:
+    - host: {{ $ing.admin.host | quote }}
+      http:
+        paths:
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $full }}-api
+                port: {name: http}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $full }}-web-admin
+                port: {name: http}
+{{- end }}
+{{- if $ing.traefik.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $full }}-nostore
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "ingress") | nindent 4 }}
+spec:
+  headers:
+    customResponseHeaders:
+      Cache-Control: no-store
+      Referrer-Policy: no-referrer
+{{- if $ing.admin.enabled }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $full }}-admin-allowlist
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "ingress") | nindent 4 }}
+spec:
+  ipAllowList:
+    sourceRange:
+      {{- toYaml $ing.admin.sourceRange | nindent 6 }}
+{{- end }}
+{{- end }}
+{{- end }}

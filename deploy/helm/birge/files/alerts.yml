@@ -1,0 +1,146 @@
+# Required alerts of ADR-0021 as Prometheus rules. Metrics are defined in
+# internal/platform/telemetry (a test checks that every metric named here is
+# registered there). Scrape the API and the worker on BIRGE_METRICS_ADDR with
+# the job names birge-api and birge-worker; never through the ingress.
+#
+# Severity: critical pages on-call through Alertmanager -> notify (push, SMS);
+# warning goes to the operators' channel. Gauges read from the database are
+# reported by every worker replica with the same value, so they use max().
+#
+# Lint: promtool check rules deploy/prometheus/alerts.yml (docs/development.md).
+groups:
+  - name: birge-availability
+    rules:
+      - alert: BirgeTargetDown
+        expr: up{job=~"birge-(api|worker)"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} {{ $labels.instance }} is down"
+          description: "Prometheus cannot scrape the target. The external probe of the public URL is a separate check (blackbox exporter outside the cluster)."
+      - alert: BirgeWorkerAbsent
+        expr: absent(up{job="birge-worker"} == 1)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No birge worker is running"
+          description: "Without a worker no outbox event, timer, escalation alert or SMS goes out."
+      - alert: BirgeTelemetrySamplerStale
+        expr: time() - max(birge_sampler_last_success_timestamp_seconds) > 120
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database gauges are stale"
+          description: "The worker could not refresh outbox, timer and escalation gauges for over 2 minutes; the escalation and outbox alerts below cannot fire. Check the worker log for TelemetrySampleFailed."
+
+  - name: birge-crisis-path
+    rules:
+      - alert: BirgeCrisisPathErrors
+        expr: sum by (stage) (increase(birge_crisis_path_errors_total[5m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Crisis path failure ({{ $labels.stage }})"
+          description: "An escalation could not be opened or the crisis lexicon was missing. Members in crisis may not reach a human."
+      - alert: BirgeCrisisRouteErrors
+        expr: sum by (route) (increase(birge_http_requests_total{route=~"POST /v1/me/(help-requests|sos|checkins|assistant/messages)", status=~"5.."}[5m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "5xx on crisis route {{ $labels.route }}"
+          description: "Help requests, SOS, check-ins or the assistant (which carries the fixed crisis response) answered with a server error."
+      - alert: BirgeEscalationUntaken
+        expr: max(birge_escalations_oldest_untaken_age_seconds) > 900
+        labels:
+          severity: critical
+        annotations:
+          summary: "An escalation has been untaken for over 15 minutes"
+          description: "{{ $value | humanizeDuration }} since the oldest open escalation was raised; nobody took it. Open the staff escalation queue."
+      - alert: BirgeTimerOverdue
+        expr: max(birge_timers_oldest_overdue_age_seconds) > 300
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Timers are overdue"
+          description: "The oldest due timer is {{ $value | humanizeDuration }} late (escalation backups, critical SMS fallback and reminders run on timers). Check the timers worker."
+      - alert: BirgeOutboxLag
+        expr: max(birge_outbox_oldest_unpublished_age_seconds) > 60
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Outbox events are not being published"
+          description: "The oldest unpublished event is {{ $value | humanizeDuration }} old. Escalation alerts and deliveries travel through the outbox. Check the relay and NATS."
+
+  - name: birge-sms
+    rules:
+      - alert: BirgeSMSSpike
+        expr: sum by (guard) (increase(birge_sms_guard_refusals_total{reason="global_limit"}[10m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "SMS spike: the {{ $labels.guard }} guard hit its global limit"
+          description: "More SMS were requested than BIRGE_SMS_GLOBAL_LIMIT allows (possible SMS pumping)."
+      - alert: BirgeSMSPerNumberRefusals
+        expr: sum by (guard) (increase(birge_sms_guard_refusals_total{reason="number_limit"}[15m])) > 20
+        labels:
+          severity: warning
+        annotations:
+          summary: "Many per-number SMS refusals ({{ $labels.guard }})"
+          description: "Repeated sends to the same numbers were refused; possible sign-in abuse."
+      - alert: BirgeSMSBudgetHigh
+        expr: sum by (guard) (birge_sms_guard_daily_used) / max by (guard) (birge_sms_guard_daily_budget > 0) > 0.8
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.guard }} SMS budget over 80% today"
+          description: "Ordinary SMS stop when the daily budget is used up (critical SMS still go out)."
+      - alert: BirgeSMSBudgetExhausted
+        expr: sum by (guard) (increase(birge_sms_guard_refusals_total{reason="daily_budget"}[10m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.guard }} SMS budget exhausted"
+          description: "Ordinary SMS are refused until UTC midnight; critical SMS still go out."
+      - alert: BirgeSMSGuardStoreErrors
+        expr: sum by (guard) (increase(birge_sms_guard_store_errors_total[5m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "SMS guard counter store failing ({{ $labels.guard }})"
+          description: "Ordinary SMS are refused while the store fails (critical SMS still go out)."
+
+  - name: birge-assistant
+    rules:
+      - alert: BirgeLLMErrorRate
+        expr: |
+          sum(rate(birge_llm_requests_total{outcome="error"}[10m]))
+            / sum(rate(birge_llm_requests_total[10m])) > 0.2
+          and sum(increase(birge_llm_requests_total[10m])) >= 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM error rate above 20%"
+          description: "Assistant replies fall back to the degraded answer. The crisis path does not depend on the LLM."
+
+  - name: birge-delivery
+    rules:
+      - alert: BirgeOutboxPublishErrors
+        expr: sum(increase(birge_outbox_publish_errors_total[5m])) > 3
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outbox relay batches are failing"
+          description: "The relay could not claim, publish or mark events; see the worker log (outbox relay)."
+      - alert: BirgeConsumerNaks
+        expr: sum by (consumer) (increase(birge_events_consumed_total{outcome=~"nak|term"}[15m])) > 10
+        labels:
+          severity: warning
+        annotations:
+          summary: "Consumer {{ $labels.consumer }} keeps rejecting events"
+          description: "Events are redelivered or dropped; see the worker log for that consumer."

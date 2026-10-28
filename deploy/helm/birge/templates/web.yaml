@@ -1,0 +1,98 @@
+{{- /*
+The static web clients: the member app ("member", apps/mobile web export)
+and the staff admin ("admin", apps/admin web export), each served by Caddy
+with the Caddyfile below. It keeps the behaviour of deploy/compose/Caddyfile
+except routing: /v1 and /auth reach the API through the ingress, not
+through Caddy, so the web pods need no egress at all.
+*/ -}}
+{{- range $app := list "member" "admin" }}
+{{- $w := index $.Values.web $app }}
+{{- if $w.enabled }}
+{{- $ctx := dict "root" $ "component" (printf "web-%s" $app) }}
+{{- $caddyfile := include "birge.caddyfile" (dict "app" $app) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "birge.fullname" $ }}-web-{{ $app }}
+  labels:
+    {{- include "birge.labels" $ctx | nindent 4 }}
+data:
+  Caddyfile: |
+    {{- $caddyfile | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "birge.fullname" $ }}-web-{{ $app }}
+  labels:
+    {{- include "birge.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ $w.replicas }}
+  selector:
+    matchLabels:
+      {{- include "birge.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "birge.labels" $ctx | nindent 8 }}
+      annotations:
+        # Roll the pods when the Caddyfile changes.
+        checksum/caddyfile: {{ $caddyfile | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "birge.fullname" $ }}
+      {{- include "birge.podSecurity" $ | nindent 6 }}
+      containers:
+        - name: caddy
+          image: {{ include "birge.image" (dict "root" $ "image" $w.image) }}
+          imagePullPolicy: {{ $w.image.pullPolicy }}
+          command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+          {{- include "birge.containerSecurity" $ | nindent 10 }}
+          env:
+            # Caddy's state directories, on the writable scratch volume.
+            - {name: XDG_CONFIG_HOME, value: /tmp/config}
+            - {name: XDG_DATA_HOME, value: /tmp/data}
+          ports:
+            - name: http
+              containerPort: {{ include "birge.httpPort" $ }}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+          resources:
+            {{- toYaml $.Values.web.resources | nindent 12 }}
+          volumeMounts:
+            - {name: caddyfile, mountPath: /etc/caddy, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: caddyfile
+          configMap:
+            name: {{ include "birge.fullname" $ }}-web-{{ $app }}
+        {{- include "birge.tmpVolume" $ | nindent 8 }}
+      {{- with $.Values.web.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.web.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "birge.fullname" $ }}-web-{{ $app }}
+  labels:
+    {{- include "birge.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "birge.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+{{- end }}
+{{- end }}

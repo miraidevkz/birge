@@ -11,7 +11,7 @@ How to build, test and change Birge. Read [`docs/architecture.md`](architecture.
 | make, git | any recent | |
 | Node.js + npm | a current LTS release | mobile app, shared client packages (see [Clients](#clients)) |
 
-No Docker is needed for development or tests (only `make secrets`, `make image`, `make sbom` and `make image-sign` use it). Development tools (sqlc, oapi-codegen, golangci-lint, psqldef) are pinned in `tools/go.mod`, and the CI-only tools (govulncheck, oasdiff, actionlint) in `tools/ci/go.mod`, a separate module so their dependencies never change the versions the others are built with; make builds them into `bin/`, you do not install them.
+No Docker is needed for development or tests (only `make secrets`, `make image`, `make sbom` and `make image-sign` use it). Development tools (sqlc, oapi-codegen, golangci-lint, psqldef) are pinned in `tools/go.mod` and run with `go tool`; you do not install them. `make helm-check` fetches its own pinned helm and kubeconform release binaries.
 
 ## Everyday commands
 
@@ -27,7 +27,8 @@ No Docker is needed for development or tests (only `make secrets`, `make image`,
 | `make lint` | golangci-lint with the project config |
 | `make coverage-check` | race tests, then per-context coverage against `coverage-floor.txt` (see [Coverage ratchet](#coverage-ratchet)) |
 | `make vuln`, `make contract-diff`, `make workflow-lint` | known vulnerabilities, breaking changes against released contracts, workflow lint (see [CI stages](#ci-stages)) |
-| `make image`, `make sbom` | build the `birge` image and its SPDX SBOM (Docker) |
+| `make image`, `make sbom` | build the `birge` release image (Dockerfile target `release`, distroless, `birge` only) and its SPDX SBOM (Docker) |
+| `make helm-check` | Helm chart `deploy/helm/birge`: `helm lint` and `helm template` with the default, pilot and all-features values, kubeconform against pinned schemas, no rendered Secret, no Ingress on a metrics or internal port, alert rules in sync. Downloads helm and kubeconform into `bin/` (pinned versions, SHA-256 checked; needs curl and network) |
 
 Set `BIRGE_REQUIRE_INTEGRATION=1` to make integration tests fail instead of skip when PostgreSQL binaries are missing (CI does this).
 
@@ -165,6 +166,10 @@ The KEK wraps every member's data key (ADR-0009). Rotating it replaces the wrapp
 5. Keep the old keyset in offline custody until every backup made before step 4 has expired: a restored backup still has rows wrapped by it.
 
 A listed file that cannot be read or parsed stops the process at start with `BIRGE_KEK_PREVIOUS_KEYSET_FILES: ... KEK <id>`, so a missing secret is noticed at deploy time, not on the first member it wrapped. An id must never be reused for different key material.
+
+## Deploying
+
+Kubernetes (k3s for a single-node pilot) with the Helm chart in [`deploy/helm/birge`](../deploy/helm/birge/README.md): dependencies and their install order, the Secrets the operator creates (only referenced by the chart, never stored in it), and `values-pilot.yaml`. The production image is the `release` target of `deploy/compose/Dockerfile` (`docker build -f deploy/compose/Dockerfile --target release .`, distroless, only `birge`); the default `dev` target carries the development login app and SMS relay and is for the compose stack only. The chart sets the listen addresses itself: `BIRGE_HTTP_ADDR=:8080`, `BIRGE_METRICS_ADDR=:9090`, and on the worker `BIRGE_INTERNAL_ADDR=:8090` for the Kratos courier hook.
 
 ## Running locally
 

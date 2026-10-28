@@ -1,0 +1,123 @@
+# Single-node k3s pilot in Kazakhstan. Install order and the Secrets to
+# create first: README.md. Every host, URL and ID below is a placeholder to
+# replace; no value here is a secret (non-negotiable 4).
+#
+#   helm upgrade --install birge deploy/helm/birge -n birge \
+#     -f deploy/helm/birge/values-pilot.yaml -f <your overrides>
+
+image:
+  repository: registry.example.invalid/birge/birge   # --target release
+  tag: ""                                            # set to the released version
+
+config:
+  kekId: pilot-kek-1
+  natsUrl: nats://nats:4222
+  kratosPublicUrl: http://kratos-public
+  kratosAdminUrl: http://kratos-admin
+  publicUrl: https://birge.example.invalid
+  # Kazakhstan mobile numbers (BIRGE_SMS_ALLOWED_PREFIXES); narrow to the
+  # operators' ranges if SMS pumping shows up.
+  smsAllowedPrefixes: "+77"
+  timeZone: Asia/Almaty
+  practicesBaseUrl: https://objects.birge.example.invalid
+  # Shared by the two API replicas (required with more than one).
+  rateLimitStore: postgres
+  trustedProxyHeader: X-Forwarded-For
+  retrieval:
+    teiUrl: http://tei
+    qdrantUrl: http://qdrant:6333
+    # The model TEI serves; e5-style, so the default query/passage prefixes apply.
+    embeddingModelId: intfloat/multilingual-e5-base
+  s3:
+    enabled: true
+    endpoint: http://garage:3900
+    bucket: birge-photos
+    region: garage
+    publicBaseUrl: https://objects.birge.example.invalid
+  # The operator replaces the DEMO presets here before members sign up
+  # (docs/development.md, "Demo presets"): BIRGE_CRISIS_PHONES,
+  # BIRGE_CONSENT_VERSIONS, BIRGE_SMS_TEXTS, and the lexicon and
+  # questionnaire files through api/worker extraVolumes. The chart does not
+  # invent crisis numbers.
+  env: {}
+
+staff:
+  enabled: true
+  introspectionUrl: http://hydra-admin:4445/admin/oauth2/introspect
+  clientId: birge-api
+  issuer: https://auth.admin.birge.example.invalid/
+  audience: birge-admin
+  rolesClaim: ext.roles
+  roleMap: psychologist=psychologist,moderator=moderator,lawyer=lawyer,admin=admin
+  # WebAuthn is required for staff (ADR-0008); the login app must report it.
+  mfaAmr: webauthn,hwk,mfa
+
+delivery:
+  mode: production
+  pushProvider: fcm,apns
+  smsProvider: smsc
+  smscSender: Birge
+  apns:
+    keyId: APNSKEYID0        # placeholder: the 10-character key ID
+    teamId: APPLETEAM0       # placeholder: the Apple team ID
+    topic: invalid.example.birge   # placeholder: the iOS bundle ID (BIRGE_APP_ID)
+    environment: production
+
+courierHook:
+  enabled: true
+
+metrics:
+  enabled: true
+  scrapeAnnotations: false
+  serviceMonitor:
+    enabled: true
+  prometheusRule:
+    enabled: true
+
+secrets:
+  # LLM key: the assistant answers degraded without it; the crisis path never
+  # needs it (non-negotiable 1). Anonymized text only, with consent.
+  llmApiKey: {name: birge-llm, key: api-key}
+
+api:
+  replicas: 2
+
+worker:
+  replicas: 1
+
+migrate:
+  # Kazakhstan reference data only; the DEMO city is deactivated, never deleted.
+  referencePresets: kz
+
+ingress:
+  enabled: true
+  className: traefik
+  traefik:
+    enabled: true
+    entrypoints: websecure
+  member:
+    host: birge.example.invalid
+  admin:
+    enabled: true
+    host: admin.birge.example.invalid
+    # Staff VPN range (ADR-0008); replace with the real one.
+    sourceRange: [10.200.0.0/24]
+  tls:
+    enabled: true
+    memberSecretName: birge-member-tls
+    adminSecretName: birge-admin-tls
+  certManager:
+    enabled: true
+    clusterIssuer: letsencrypt
+
+networkPolicy:
+  enabled: true
+  prometheus:
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: monitoring}
+      podSelector:
+        matchLabels: {app.kubernetes.io/name: prometheus}
+  egress:
+    tei: {enabled: true}
+    qdrant: {enabled: true}
+    objectStorage: {enabled: true}

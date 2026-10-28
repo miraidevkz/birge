@@ -1,0 +1,41 @@
+{{- /*
+Refuses values that would deploy a broken or unsafe release. Renders nothing.
+*/ -}}
+{{- $v := .Values -}}
+{{- if and (eq $v.config.rateLimitStore "memory") (or (gt (int $v.api.replicas) 1) (gt (int $v.worker.replicas) 1)) -}}
+{{- fail "config.rateLimitStore=memory gives every replica the full limit: use postgres with more than one API or worker replica" -}}
+{{- end -}}
+{{- if not (has $v.delivery.mode (list "production" "dev")) -}}
+{{- fail "delivery.mode must be production or dev" -}}
+{{- end -}}
+{{- if eq $v.delivery.mode "production" -}}
+{{- if or (not $v.delivery.pushProvider) (include "birge.listHas" (list $v.delivery.pushProvider "log")) -}}
+{{- fail "delivery.mode=production needs a real push provider (fcm, apns), never log" -}}
+{{- end -}}
+{{- if or (not $v.delivery.smsProvider) (eq $v.delivery.smsProvider "log") -}}
+{{- fail "delivery.mode=production needs a real SMS provider (smsc), never log" -}}
+{{- end -}}
+{{- end -}}
+{{- if eq $v.staff.mfaAmr "dev" -}}
+{{- fail "staff.mfaAmr=dev is the compose development login only; never deploy it" -}}
+{{- end -}}
+{{- if and $v.ingress.enabled $v.ingress.admin.enabled -}}
+{{- if not $v.ingress.traefik.enabled -}}
+{{- fail "ingress.admin needs ingress.traefik.enabled for its source allow-list (ADR-0008: admin only through the VPN)" -}}
+{{- end -}}
+{{- if not $v.ingress.admin.sourceRange -}}
+{{- fail "ingress.admin.sourceRange must list the staff VPN ranges (ADR-0008)" -}}
+{{- end -}}
+{{- if not $v.web.admin.enabled -}}
+{{- fail "ingress.admin.enabled needs web.admin.enabled" -}}
+{{- end -}}
+{{- end -}}
+{{- if and $v.ingress.enabled (not $v.web.member.enabled) -}}
+{{- fail "ingress.enabled routes / to the member web app: enable web.member" -}}
+{{- end -}}
+{{- if and $v.ingress.certManager.enabled (not $v.ingress.certManager.clusterIssuer) -}}
+{{- fail "ingress.certManager.clusterIssuer is required with cert-manager" -}}
+{{- end -}}
+{{- if not (hasPrefix "https://" $v.config.publicUrl) -}}
+{{- fail "config.publicUrl must be an https:// origin (plan and SOS links go out by SMS)" -}}
+{{- end -}}

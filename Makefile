@@ -19,7 +19,7 @@ GO_PKGS = $(shell $(GO) list -f '{{.Dir}}' ./... | grep -v /node_modules/)
 # API area -> generated file; one oapi-codegen config per area in contracts/codegen/.
 API_AREAS := meta:internal/platform/meta/api.gen.go membership:internal/domains/membership/api/api.gen.go privacy:internal/domains/privacy/api/api.gen.go notify:internal/domains/notify/api/api.gen.go safety:internal/domains/safety/api/api.gen.go wellbeing:internal/domains/wellbeing/api/api.gen.go emergency:internal/domains/emergency/api/api.gen.go assistant:internal/domains/assistant/api/api.gen.go knowledge:internal/domains/knowledge/api/api.gen.go circle:internal/domains/circle/api/api.gen.go chat:internal/domains/chat/api/api.gen.go sharing:internal/domains/sharing/api/api.gen.go directory:internal/domains/directory/api/api.gen.go moderation:internal/domains/moderation/api/api.gen.go analytics:internal/domains/analytics/api/api.gen.go staff:internal/platform/staffdir/api/api.gen.go
 
-.PHONY: check secrets lint api-gen api-check psqldef migration db-check go-check go-fmt-check go-vet go-test go-build eval sqlc sqlc-check kb-export app-check \
+.PHONY: check helm-check secrets lint api-gen api-check psqldef migration db-check go-check go-fmt-check go-vet go-test go-build eval sqlc sqlc-check kb-export app-check \
 	vuln contract-diff coverage-check coverage-floor workflow-lint image sbom image-sign helm-lint
 
 check: secrets go-check
@@ -94,7 +94,7 @@ IMAGE ?= birge:dev
 DOCKER_BUILD ?= docker build
 SBOM_OUT ?= $(CURDIR)/bin/sbom.spdx.json
 image:
-	$(DOCKER_BUILD) -f deploy/compose/Dockerfile -t $(IMAGE) .
+	$(DOCKER_BUILD) -f deploy/compose/Dockerfile --target release -t $(IMAGE) .
 
 # syft reads a saved archive with no network: no Docker socket, no update check.
 sbom:
@@ -121,14 +121,12 @@ image-sign:
 	$(COSIGN_RUN) sign $(COSIGN_KEY_FLAGS) $(IMAGE_REF)
 	$(COSIGN_RUN) attest $(COSIGN_KEY_FLAGS) --type spdxjson --predicate /sbom/$(notdir $(SBOM_OUT)) $(IMAGE_REF)
 
-# Helm charts under deploy/helm (ADR-0011). Nothing to lint until they land;
-# the target and the CI job then start checking them without a change here.
-HELM ?= helm
+# Helm charts under deploy/helm (ADR-0011): CI's helm job. It runs the full
+# helm-check (pinned helm and kubeconform from bin/), and passes while there
+# is no chart.
 helm-lint:
 	@if [ ! -d deploy/helm ]; then echo "helm-lint: no deploy/helm yet, skipped"; exit 0; fi; \
-	  found=0; for c in $$(find deploy/helm -name Chart.yaml -exec dirname {} \;); do found=1; \
-	  $(HELM) lint --strict $$c || exit 1; done; \
-	  [ $$found = 1 ] || { echo "helm-lint: deploy/helm has no Chart.yaml"; exit 1; }
+	  $(MAKE) --no-print-directory helm-check
 
 go-build:
 	CGO_ENABLED=0 $(GO) build -trimpath -o /dev/null ./cmd/birge
@@ -184,3 +182,63 @@ db-check: psqldef
 # generated API client and the web build. Needs Node and `npm ci` first.
 app-check:
 	npm run check
+
+# Helm chart checks (deploy/helm/birge): helm lint and helm template with the
+# default, pilot and all-features values; the rendered manifests validated by
+# kubeconform against pinned Kubernetes and CRD schemas; and guards for the
+# chart's own rules: no Secret object (secrets are references only, AGENTS.md
+# non-negotiable 4), no Ingress backend on a metrics or internal port, and the
+# PrometheusRule copy of the alerts equal to deploy/prometheus/alerts.yml.
+# helm (Apache-2.0) and kubeconform (Apache-2.0) are release binaries
+# downloaded into bin/ and checked against the SHA-256 pinned here; schemas
+# are fetched from pinned commits. Needs curl and network on first run.
+HELM_VERSION := v4.3.1
+HELM_SHA256_linux-amd64 := 0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b
+HELM_SHA256_linux-arm64 := 8cf8f66ecbc252ac8f7f06cca68aba88508ddfde3a6a34feb1678ad1694b4f88
+HELM_SHA256_darwin-arm64 := 6b4e61c8cd27d99e5a801e63ff25dd5c70b36875c2cd659d3e9ce6b76fc23198
+KUBECONFORM_VERSION := v0.8.0
+KUBECONFORM_SHA256_linux-amd64 := 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+KUBECONFORM_SHA256_linux-arm64 := 1f53fc8e81258197a35e8603054162a5af1de8c5af13746c71ab680d9534ed87
+KUBECONFORM_SHA256_darwin-arm64 := f84f4dfbebf4a6b0b230385fa065a39ea35e02608c2b50d025dcf64775a69d67
+# Kubernetes of current k3s; schemas from yannh/kubernetes-json-schema and
+# datreeio/CRDs-catalog (Traefik, cert-manager, Prometheus Operator) at fixed commits.
+HELM_KUBE_VERSION := 1.34.0
+K8S_SCHEMAS := https://raw.githubusercontent.com/yannh/kubernetes-json-schema/89a35a5e9a1412a692a2603d79c3786f602238a4/{{.NormalizedKubernetesVersion}}-standalone-strict/{{.ResourceKind}}{{.KindSuffix}}.json
+CRD_SCHEMAS := https://raw.githubusercontent.com/datreeio/CRDs-catalog/3eb90d47aba8d61919d4419dd38301536e32a94b/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json
+TOOLS_PLATFORM := $(shell uname -s | tr A-Z a-z)-$(shell uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+HELM := $(CURDIR)/bin/helm-$(HELM_VERSION)
+KUBECONFORM := $(CURDIR)/bin/kubeconform-$(KUBECONFORM_VERSION)
+HELM_CHART := deploy/helm/birge
+HELM_VALUES := default: pilot:$(HELM_CHART)/values-pilot.yaml all:$(HELM_CHART)/ci/all-features-values.yaml
+# helm keeps no state outside bin/.
+HELM_ENV := HELM_CACHE_HOME=$(CURDIR)/bin/helm-home/cache HELM_CONFIG_HOME=$(CURDIR)/bin/helm-home/config HELM_DATA_HOME=$(CURDIR)/bin/helm-home/data
+
+# fetch-verified <url> <sha256> <archive member> <target>
+define fetch-verified
+	@test -n "$(2)" || { echo "no pinned checksum for $(TOOLS_PLATFORM)"; exit 1; }
+	@mkdir -p $(CURDIR)/bin
+	@d=$$(mktemp -d) && trap 'rm -rf "$$d"' EXIT && \
+	curl -fsSL -o "$$d/a.tgz" "$(1)" && \
+	if command -v sha256sum >/dev/null; then got=$$(sha256sum "$$d/a.tgz"); else got=$$(shasum -a 256 "$$d/a.tgz"); fi && \
+	test "$${got%% *}" = "$(2)" || { echo "checksum mismatch for $(1)"; exit 1; }; \
+	tar -xzf "$$d/a.tgz" -C "$$d" "$(3)" && mv "$$d/$(3)" "$(4)" && chmod 0755 "$(4)"
+endef
+
+$(HELM):
+	$(call fetch-verified,https://get.helm.sh/helm-$(HELM_VERSION)-$(TOOLS_PLATFORM).tar.gz,$(HELM_SHA256_$(TOOLS_PLATFORM)),$(TOOLS_PLATFORM)/helm,$@)
+
+$(KUBECONFORM):
+	$(call fetch-verified,https://github.com/yannh/kubeconform/releases/download/$(KUBECONFORM_VERSION)/kubeconform-$(TOOLS_PLATFORM).tar.gz,$(KUBECONFORM_SHA256_$(TOOLS_PLATFORM)),kubeconform,$@)
+
+helm-check: $(HELM) $(KUBECONFORM)
+	@cmp -s deploy/prometheus/alerts.yml $(HELM_CHART)/files/alerts.yml || { echo "$(HELM_CHART)/files/alerts.yml differs from deploy/prometheus/alerts.yml: copy it"; exit 1; }
+	@set -e; out=$$(mktemp -d); trap 'rm -rf "$$out"' EXIT; \
+	for v in $(HELM_VALUES); do n=$${v%%:*}; f=$${v#*:}; \
+	  echo "== $$n values"; \
+	  $(HELM_ENV) $(HELM) lint --strict $(HELM_CHART) $${f:+-f $$f}; \
+	  $(HELM_ENV) $(HELM) template birge $(HELM_CHART) --namespace birge --kube-version $(HELM_KUBE_VERSION) $${f:+-f $$f} >"$$out/$$n.yaml"; \
+	  if grep -Eq '^kind: Secret$$' "$$out/$$n.yaml"; then echo "$$n: the chart renders a Secret; secrets must be references"; exit 1; fi; \
+	  awk '/^---/{if(k&&b)bad=1;k=0;b=0;next} /^kind: Ingress$$/{k=1} /name: [a-z0-9-]*(-metrics|-worker-internal|metrics|internal)$$/{b=1} END{if(k&&b)bad=1;exit bad}' "$$out/$$n.yaml" || { echo "$$n: an Ingress routes a metrics or internal port"; exit 1; }; \
+	  $(KUBECONFORM) -strict -summary -kubernetes-version $(HELM_KUBE_VERSION) \
+	    -schema-location '$(K8S_SCHEMAS)' -schema-location '$(CRD_SCHEMAS)' "$$out/$$n.yaml"; \
+	done

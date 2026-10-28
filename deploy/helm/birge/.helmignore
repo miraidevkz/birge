@@ -1,0 +1,4 @@
+# Test values for make helm-check, not part of the packaged chart.
+ci/
+*.swp
+.DS_Store

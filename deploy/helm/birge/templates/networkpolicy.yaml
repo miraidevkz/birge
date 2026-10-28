@@ -1,0 +1,134 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- /*
+Deny by default: one policy selects every pod of this release and allows
+nothing; the policies below each open one path. NetworkPolicies add up, so
+a pod may do only what some policy allows. Kubelet probes come from the
+node and are not affected on k3s.
+*/ -}}
+{{- $np := .Values.networkPolicy -}}
+{{- $full := include "birge.fullname" . -}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $full }}-default-deny
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "networkpolicy") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "birge.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress, Egress]
+---
+# The ingress controller reaches the API's http port.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $full }}-api-ingress
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "networkpolicy") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "birge.selectorLabels" (dict "root" $ "component" "api") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- toYaml $np.ingressController | nindent 8 }}
+      ports:
+        - {port: http, protocol: TCP}
+{{- range $app := list "member" "admin" }}
+{{- if (index $.Values.web $app).enabled }}
+---
+# The ingress controller reaches the {{ $app }} web server; it needs no egress.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $full }}-web-{{ $app }}-ingress
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "networkpolicy") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "birge.selectorLabels" (dict "root" $ "component" (printf "web-%s" $app)) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- toYaml $np.ingressController | nindent 8 }}
+      ports:
+        - {port: http, protocol: TCP}
+{{- end }}
+{{- end }}
+{{- if .Values.courierHook.enabled }}
+---
+# Only Kratos reaches the worker's courier hook.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $full }}-worker-internal
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "networkpolicy") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "birge.selectorLabels" (dict "root" $ "component" "worker") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- toYaml (required "networkPolicy.kratos" $np.kratos) | nindent 8 }}
+      ports:
+        - {port: internal, protocol: TCP}
+{{- end }}
+{{- if .Values.metrics.enabled }}
+{{- range $c := list "api" "worker" }}
+---
+# Only Prometheus reaches the {{ $c }} metrics port.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $full }}-{{ $c }}-metrics
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "networkpolicy") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "birge.selectorLabels" (dict "root" $ "component" $c) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- toYaml $np.prometheus | nindent 8 }}
+      ports:
+        - {port: metrics, protocol: TCP}
+{{- end }}
+{{- end }}
+{{- range $c := list "api" "worker" "migrate" }}
+---
+# Egress of the {{ $c }}: DNS and the dependencies listed for it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $full }}-{{ $c }}-egress
+  labels:
+    {{- include "birge.labels" (dict "root" $ "component" "networkpolicy") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "birge.selectorLabels" (dict "root" $ "component" $c) | nindent 6 }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        {{- toYaml $np.dns.to | nindent 8 }}
+      ports:
+        {{- toYaml $np.dns.ports | nindent 8 }}
+    {{- range $name := keys $np.egress | sortAlpha }}
+    {{- $e := index $np.egress $name }}
+    {{- if and $e.enabled (has $c $e.components) }}
+    # {{ $name }}
+    - to:
+        {{- toYaml $e.to | nindent 8 }}
+      ports:
+        {{- toYaml $e.ports | nindent 8 }}
+    {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}

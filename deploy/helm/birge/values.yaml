@@ -1,0 +1,372 @@
+# Default values of the Birge chart. Production-shaped: real delivery,
+# shared rate limits, deny-by-default network policies. Hosts and URLs are
+# example.invalid placeholders; values-pilot.yaml shows a full single-node
+# pilot. Configuration variables are documented in docs/development.md
+# ("Configuration"); this file names which value sets which variable.
+#
+# Non-negotiable 4: this file and every values file hold no secret values,
+# not even samples. Secrets are referenced by Secret name and key (see
+# `secrets` below) and mounted as files under /secrets.
+
+nameOverride: ""
+fullnameOverride: ""
+
+# The birge binary (api, worker, migrate): the `release` target of
+# deploy/compose/Dockerfile (distroless, birge only; never the default `dev`
+# target, which carries the development login app and SMS relay).
+image:
+  repository: registry.example.invalid/birge/birge
+  # Defaults to the chart's appVersion. Prefer `digest` in production.
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# UID/GID of the birge user in deploy/compose/Dockerfile; the web servers
+# run as the same unprivileged IDs.
+securityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+
+# Non-secret configuration shared by the API and the worker.
+config:
+  # BIRGE_KEK_ID: id of the KEK in secrets.kek. Operator-chosen and never
+  # reused for other key material (docs/development.md, "KEK rotation").
+  kekId: kek-1
+  # NATS_URL: NATS with JetStream (README.md, "NATS").
+  natsUrl: nats://nats:4222
+  # KRATOS_PUBLIC_URL / KRATOS_ADMIN_URL: cluster-internal Kratos services
+  # (the Ory chart's <release>-public and <release>-admin).
+  kratosPublicUrl: http://kratos-public
+  kratosAdminUrl: http://kratos-admin
+  # BIRGE_PUBLIC_URL: origin of the member web app, the base of plan and SOS
+  # SMS links (<this>/plan#<token>, <this>/sos-link#<token>).
+  publicUrl: https://birge.example.invalid
+  # BIRGE_SMS_ALLOWED_PREFIXES: allowed E.164 mobile prefixes.
+  smsAllowedPrefixes: "+77"
+  # BIRGE_TIME_ZONE.
+  timeZone: Asia/Almaty
+  # BIRGE_PRACTICES_BASE_URL: in-jurisdiction object storage of practice audio.
+  practicesBaseUrl: https://objects.example.invalid
+  # BIRGE_RATE_LIMIT_STORE: `postgres` is required with more than one API
+  # or worker replica; the chart refuses `memory` in that case.
+  rateLimitStore: postgres
+  # BIRGE_TRUSTED_PROXY_HEADER: Traefik appends the client address to
+  # X-Forwarded-For. Empty: the connection address.
+  trustedProxyHeader: X-Forwarded-For
+  # BIRGE_CHAT_WS_ORIGINS. Empty: the member ingress host when the ingress
+  # is enabled, otherwise unset (native clients only).
+  chatWsOrigins: ""
+  # OTEL_EXPORTER_OTLP_ENDPOINT: in-jurisdiction collector (ADR-0021).
+  # Empty: tracing off.
+  otlpEndpoint: ""
+  # Retrieval (ADR-0010): BIRGE_TEI_URL, BIRGE_QDRANT_URL,
+  # BIRGE_EMBEDDING_MODEL_ID. Any empty: retrieval off (Warn RetrievalDisabled).
+  retrieval:
+    teiUrl: ""
+    qdrantUrl: ""
+    embeddingModelId: ""
+  # Object storage for item photos (ADR-0015): BIRGE_S3_*. The keys come
+  # from secrets.s3AccessKey and secrets.s3SecretKey.
+  s3:
+    enabled: false
+    endpoint: ""
+    bucket: ""
+    region: garage
+    publicBaseUrl: ""
+  # Any other non-secret variable for both processes (for example
+  # BIRGE_CRISIS_PHONES, BIRGE_CONSENT_VERSIONS). Never a secret: variables
+  # that hold secrets are *_FILE variables fed from `secrets`.
+  env: {}
+
+# Staff sign-in (ADR-0008): token introspection at the staff OIDC provider
+# (Hydra). Disabled: every /v1/staff/* request answers 503.
+staff:
+  enabled: false
+  introspectionUrl: ""   # BIRGE_STAFF_INTROSPECTION_URL
+  clientId: ""           # BIRGE_STAFF_CLIENT_ID; secret: secrets.staffClientSecret
+  issuer: ""             # BIRGE_STAFF_ISSUER
+  audience: ""           # BIRGE_STAFF_AUDIENCE
+  rolesClaim: ""         # BIRGE_STAFF_ROLES_CLAIM
+  roleMap: ""            # BIRGE_STAFF_ROLE_MAP
+  mfaAcr: ""             # BIRGE_STAFF_MFA_ACR
+  mfaAmr: ""             # BIRGE_STAFF_MFA_AMR (never `dev` outside compose)
+
+# Notification delivery of the worker.
+delivery:
+  # BIRGE_DELIVERY_MODE: `production` refuses the log-only senders.
+  mode: production
+  # BIRGE_PUSH_PROVIDER: comma list of fcm, apns (or `log` in dev mode).
+  pushProvider: fcm
+  # BIRGE_SMS_PROVIDER: smsc (or `log` in dev mode).
+  smsProvider: smsc
+  # BIRGE_SMSC_SENDER: registered sender ID; empty uses the account default.
+  smscSender: ""
+  # Used when pushProvider includes apns. The key is secrets.apnsKey.
+  apns:
+    keyId: ""
+    teamId: ""
+    topic: ""
+    environment: production
+
+# Kratos courier hook (ADR-0008): the worker's internal listener
+# (BIRGE_INTERNAL_ADDR) that receives sign-in codes from Kratos. Kratos
+# must be configured with the same secret (secrets.courierHook); see
+# README.md, "Kratos".
+courierHook:
+  enabled: true
+
+# Prometheus listener of both processes (BIRGE_METRICS_ADDR). Exposed only
+# on ClusterIP Services; never routed by the ingress.
+metrics:
+  enabled: true
+  # prometheus.io/* annotations on the metrics Services.
+  scrapeAnnotations: true
+  # Prometheus Operator objects (monitoring.coreos.com CRDs needed).
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+  prometheusRule:
+    enabled: false
+    labels: {}
+
+# References to Secrets the operator creates (README.md, "Secrets"). Only
+# names and keys; each file is mounted at /secrets/<file> in the pods that
+# need it, and the matching *_FILE variable points there. A missing Secret
+# keeps the pod from starting, so a forgotten key is noticed at deploy time.
+secrets:
+  # DATABASE_URL of the API and the worker (role birge_app).
+  database: {name: birge-db-app, key: uri}
+  # DATABASE_URL of the migrate job (role birge_migrator).
+  migratorDatabase: {name: birge-db-migrator, key: uri}
+  # `birge keygen` output; one Secret made from its directory.
+  kek: {name: birge-keys, key: kek.json}
+  pow: {name: birge-keys, key: pow.key}
+  hash: {name: birge-keys, key: hash.key}
+  planLink: {name: birge-keys, key: plan-link.key}
+  analytics: {name: birge-keys, key: analytics.key}
+  # Optional (BIRGE_BLIND_INDEX_KEY_FILE, not used by any context yet).
+  blindIndex: {name: "", key: blind-index.key}
+  # Retired KEKs (BIRGE_KEK_PREVIOUS_KEYSET_FILES), for a rotation:
+  # - {id: kek-0, name: birge-kek-0, key: kek.json}
+  previousKeks: []
+  # Shared with Kratos' courier config (BIRGE_COURIER_SECRET_FILE).
+  courierHook: {name: birge-courier-hook, key: secret}
+  # BIRGE_STAFF_CLIENT_SECRET_FILE, with staff.enabled.
+  staffClientSecret: {name: birge-staff-oidc, key: client-secret}
+  # BIRGE_LLM_API_KEY_FILE. Empty name: the assistant answers degraded.
+  llmApiKey: {name: "", key: api-key}
+  # BIRGE_S3_ACCESS_KEY_FILE / BIRGE_S3_SECRET_KEY_FILE, with config.s3.enabled.
+  s3AccessKey: {name: birge-s3, key: access-key}
+  s3SecretKey: {name: birge-s3, key: secret-key}
+  # BIRGE_FCM_SERVICE_ACCOUNT_FILE, with pushProvider fcm.
+  fcmServiceAccount: {name: birge-push, key: fcm-service-account.json}
+  # BIRGE_APNS_KEY_FILE, with pushProvider apns.
+  apnsKey: {name: birge-push, key: apns-key.p8}
+  # BIRGE_SMSC_LOGIN_FILE / BIRGE_SMSC_PASSWORD_FILE, with smsProvider smsc.
+  smscLogin: {name: birge-smsc, key: login}
+  smscPassword: {name: birge-smsc, key: password}
+
+api:
+  replicas: 2
+  # Extra non-secret variables of the API only.
+  env: {}
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  pdb:
+    enabled: true
+    minAvailable: 1
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # Extra volumes, for example ConfigMaps with the crisis lexicon or the
+  # questionnaire (BIRGE_CRISIS_LEXICON_DIR, BIRGE_QUESTIONNAIRE_FILE).
+  extraVolumes: []
+  extraVolumeMounts: []
+
+worker:
+  replicas: 1
+  env: {}
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  extraVolumes: []
+  extraVolumeMounts: []
+
+# `birge migrate` as a pre-install/pre-upgrade hook: Helm waits for it to
+# succeed before the API and the worker roll. It also applies db/roles.sql
+# (BIRGE_APPLY_ROLES=1) and syncs the reference sets.
+migrate:
+  # BIRGE_REFERENCE_PRESETS. Empty: the binary default (demo,kz). A real
+  # deployment sets `kz`.
+  referencePresets: ""
+  applyRoles: true
+  env: {}
+  backoffLimit: 3
+  activeDeadlineSeconds: 900
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  nodeSelector: {}
+  tolerations: []
+
+# Static web clients (Expo web exports) served by Caddy with the headers of
+# deploy/compose/Caddyfile. The image holds the export at /srv and Caddy 2 at
+# /usr/bin/caddy (README.md, "Web images"); the chart supplies the Caddyfile.
+web:
+  member:
+    enabled: true
+    replicas: 1
+    image:
+      repository: registry.example.invalid/birge/member-web
+      tag: ""
+      digest: ""
+      pullPolicy: IfNotPresent
+  admin:
+    enabled: true
+    replicas: 1
+    image:
+      repository: registry.example.invalid/birge/admin-web
+      tag: ""
+      digest: ""
+      pullPolicy: IfNotPresent
+  resources:
+    requests: {cpu: 20m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 128Mi}
+  nodeSelector: {}
+  tolerations: []
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations: {}
+  # Traefik CRDs (traefik.io/v1alpha1 Middleware): the no-store and
+  # no-referrer headers for /plan and /sos-link at the ingress, and the
+  # admin source allow-list. Off: the web server still sets the headers.
+  traefik:
+    enabled: true
+    entrypoints: websecure
+  member:
+    # /v1 and /auth go to the API, everything else to the member web app.
+    host: birge.example.invalid
+  admin:
+    # The admin is reachable only from the staff VPN (ADR-0008): enabling it
+    # requires the Traefik middleware and a non-empty sourceRange.
+    enabled: false
+    host: admin.birge.example.invalid
+    sourceRange: []
+  tls:
+    enabled: true
+    # Existing kubernetes.io/tls Secrets, or the ones cert-manager fills.
+    memberSecretName: birge-member-tls
+    adminSecretName: birge-admin-tls
+  certManager:
+    enabled: false
+    clusterIssuer: ""
+
+# Deny-by-default NetworkPolicies for every pod of this release, plus the
+# allow rules below. Peers are NetworkPolicyPeer lists; without a
+# namespaceSelector they match pods in the release namespace.
+networkPolicy:
+  enabled: true
+  dns:
+    to:
+      - namespaceSelector:
+          matchLabels: {kubernetes.io/metadata.name: kube-system}
+        podSelector:
+          matchLabels: {k8s-app: kube-dns}
+    ports:
+      - {port: 53, protocol: UDP}
+      - {port: 53, protocol: TCP}
+  # Who may reach the API and the web servers (k3s Traefik).
+  ingressController:
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: kube-system}
+      podSelector:
+        matchLabels: {app.kubernetes.io/name: traefik}
+  # Who may scrape the metrics port.
+  prometheus:
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: monitoring}
+      podSelector:
+        matchLabels: {app.kubernetes.io/name: prometheus}
+  # Who may reach the worker's courier hook port: Kratos only.
+  kratos:
+    - podSelector:
+        matchLabels: {app.kubernetes.io/name: kratos}
+  # Egress of the birge pods. `components` picks api, worker, migrate.
+  egress:
+    postgres:
+      enabled: true
+      components: [api, worker, migrate]
+      ports: [{port: 5432, protocol: TCP}]
+      to:
+        - podSelector:
+            matchLabels: {cnpg.io/cluster: birge-db}
+    nats:
+      enabled: true
+      components: [api, worker]
+      ports: [{port: 4222, protocol: TCP}]
+      to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: nats}
+    kratos:
+      enabled: true
+      components: [api, worker]
+      ports: [{port: 4433, protocol: TCP}, {port: 4434, protocol: TCP}]
+      to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: kratos}
+    hydra:
+      enabled: true
+      components: [api]
+      ports: [{port: 4445, protocol: TCP}]
+      to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: hydra}
+    tei:
+      enabled: false
+      components: [api, worker]
+      ports: [{port: 80, protocol: TCP}]
+      to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: text-embeddings-inference}
+    qdrant:
+      enabled: false
+      components: [api, worker]
+      ports: [{port: 6333, protocol: TCP}]
+      to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: qdrant}
+    objectStorage:
+      enabled: false
+      components: [api, worker]
+      ports: [{port: 3900, protocol: TCP}]
+      to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: garage}
+    otel:
+      enabled: false
+      components: [api, worker]
+      ports: [{port: 4318, protocol: TCP}]
+      to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: opentelemetry-collector}
+    # Outside the cluster over HTTPS: the LLM (API, anonymized text only,
+    # with consent), FCM, APNs and the SMS provider (worker). Narrow the
+    # CIDRs to the providers' ranges where they are stable.
+    external:
+      enabled: true
+      components: [api, worker]
+      ports: [{port: 443, protocol: TCP}]
+      to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
