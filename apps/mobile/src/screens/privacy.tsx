@@ -1,4 +1,5 @@
-// Privacy: consents list/change and account deletion request with a confirm Sheet.
+// Privacy: consents list/change and account deletion request with a confirm
+// Sheet; a successful request signs out and ends on `/account-deleted`.
 import { unwrap, type Schemas } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
 import { Banner, Button, Heading, List, ListItem, Screen, Sheet, Text } from '@birge/ui';
@@ -41,8 +42,15 @@ export function PrivacyScreen() {
     mutationFn: () => unwrap(api.POST('/me/deletion-request', { body: { confirm: 'DELETE' } })),
     onSuccess: async () => {
       setSheetOpen(false);
-      await session.signOut();
-      router.replace('/sign-in');
+      // The request is accepted: whatever sign-out does, she sees the final
+      // screen and never the "could not schedule" banner. Sign-out drops the
+      // local token before its best-effort steps (push, server revoke).
+      try {
+        await session.signOut();
+      } catch {
+        // Nothing more to do here: the deletion is scheduled either way.
+      }
+      router.replace('/account-deleted');
     },
     onError: () => {
       setDeletionFailed(true);

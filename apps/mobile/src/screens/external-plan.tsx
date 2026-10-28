@@ -9,13 +9,14 @@
 // not stored, not logged and not part of a React Query key (the request is a
 // plain call, not a cached query), so nothing can persist or expose it.
 import { ApiError, unwrap, type Schemas } from '@birge/api';
-import { i18n, useTranslation } from '@birge/i18n';
-import { Card, ErrorState, Heading, LoadingState, Screen, Text } from '@birge/ui';
+import { useTranslation } from '@birge/i18n';
+import { ErrorState, LoadingState, Screen } from '@birge/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { publicApi } from '@/lib/api';
-import { formatDateTime } from '@/lib/format';
 import { takePlanToken } from '@/lib/plan-link';
+
+import { SharedPlanCard } from './shared-plan-card';
 
 type SharedPlan = Schemas['SharedPlan'];
 
@@ -86,18 +87,7 @@ export function ExternalPlanScreen() {
   return (
     <Screen title={title} variant="crisis" testID="external-plan">
       {state.kind === 'loading' ? <LoadingState /> : null}
-      {state.kind === 'plan' ? (
-        <>
-          <Text>{t('external.intro', { name: state.plan.ownerDisplayName })}</Text>
-          <Card>
-            <Heading>{t('external.cardHeading')}</Heading>
-            <Text>{state.plan.childCard}</Text>
-            <Text variant="caption" tone="muted">
-              {t('external.sentAt', { when: formatDateTime(state.plan.sentAt, i18n.language) })}
-            </Text>
-          </Card>
-        </>
-      ) : null}
+      {state.kind === 'plan' ? <SharedPlanCard plan={state.plan} /> : null}
       {state.kind === 'expired' ? (
         <ErrorState title={t('external.expiredTitle')} description={t('external.expiredDescription')} />
       ) : null}

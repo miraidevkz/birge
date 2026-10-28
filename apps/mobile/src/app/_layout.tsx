@@ -98,6 +98,11 @@ export default function RootLayout() {
                 <Stack.Screen name="checkin-history" />
                 <Stack.Screen name="emergency-plan" />
                 <Stack.Screen name="inbox" />
+                <Stack.Screen name="trusted-invitation/[contactId]" />
+                {/* Crisis-adjacent: the child card a contact may read while helping. */}
+                <Stack.Screen name="shared-plan/[ownerId]" options={{ animation: 'none' }} />
+                {/* After account deletion: no session, no Back. */}
+                <Stack.Screen name="account-deleted" />
                 {/* Crisis / SOS: no transition animation (ADR-0014). */}
                 <Stack.Screen name="sos" options={{ animation: 'none', presentation: 'fullScreenModal' }} />
                 {/* External plan page (web): no session gate, no Back, no animation. */}

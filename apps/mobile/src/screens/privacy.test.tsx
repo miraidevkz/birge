@@ -50,6 +50,7 @@ const renderPrivacy = () =>
 describe('PrivacyScreen', () => {
   beforeEach(async () => {
     mockFetch.mockReset();
+    jest.clearAllMocks();
     await storage.set('birge.session', 'session-token');
   });
 
@@ -88,6 +89,25 @@ describe('PrivacyScreen', () => {
     await fireEvent.press(screen.getByTestId('privacy-delete-open'));
     expect(await screen.findByText(/Once deleted, your data cannot be restored/)).toBeTruthy();
     await fireEvent.press(screen.getByTestId('privacy-delete-confirm'));
-    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/sign-in'));
+    // Success: signed out first, then the calm final screen, never the failure banner.
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/account-deleted'));
+    expect(await storage.get('birge.session')).toBeNull();
+    expect(screen.queryByText('Could not schedule deletion. Try again.')).toBeNull();
+  });
+
+  it('keeps her on the sheet with a retry when the deletion request fails', async () => {
+    const { router } = require('expo-router');
+    mockFetch.mockImplementation(async (input) => {
+      const req = input as Request;
+      if (String(req.url).includes('/me/deletion-request')) return json({ code: 'unknown', title: 'error' }, 500);
+      return json(consents);
+    });
+    await renderPrivacy();
+    await screen.findByText('Processing of personal data');
+    await fireEvent.press(screen.getByTestId('privacy-delete-open'));
+    await fireEvent.press(screen.getByTestId('privacy-delete-confirm'));
+    expect(await screen.findByText('Could not schedule deletion. Try again.')).toBeTruthy();
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(await storage.get('birge.session')).toBe('session-token');
   });
 });

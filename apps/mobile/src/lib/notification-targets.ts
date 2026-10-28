@@ -1,9 +1,11 @@
 // Where opening an inbox item leads: one table from template to an in-app
 // route. The params come from the server but are still untrusted input: an ID
 // is used only when it is a UUID, so it can never change the route's shape.
-// A template without a place in this app (the trusted-contact side of an SOS
-// or plan has no screen yet, staff templates never reach a member) and an
-// unknown template open nothing; the item is still marked read.
+// A template without a place in this app and an unknown template open
+// nothing; the item is still marked read. Without a place today: staff
+// templates (they never reach a member) and `emergency.sos_raised_contact`,
+// because the contract has no operation for a trusted contact to read
+// another member's SOS (internal/domains/emergency/README.md, open questions).
 
 /** NotificationLike is what the table needs from an inbox item. */
 export interface NotificationLike {
@@ -13,7 +15,18 @@ export interface NotificationLike {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** isUuid says whether a value from outside (a param, a route segment) is a UUID. */
+export function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID.test(value);
+}
+
 type Target = (params: Record<string, string>) => string | null;
+
+// byId opens a screen of one object: without a valid id there is nothing to open.
+const byId =
+  (param: string, route: string): Target =>
+  (p) =>
+    isUuid(p[param]) ? `${route}/${p[param]}` : null;
 
 /**
  * NOTIFICATION_TARGETS maps a template (internal/domains/<context>/model
@@ -27,6 +40,11 @@ export const NOTIFICATION_TARGETS: Readonly<Record<string, Target>> = {
   // Her own SOS: the SOS screen shows it with the responses.
   'emergency.sos_responded': () => '/sos',
   'emergency.sos_shared': () => '/sos',
+  // Another member invited her to be a trusted contact; params {contact_id}.
+  'emergency.trusted_invitation': byId('contact_id', '/trusted-invitation'),
+  // A member sent her plan to her as a member contact; params {owner_id}.
+  // External contacts get an SMS link instead, never an inbox item.
+  'emergency.plan_sent': byId('owner_id', '/shared-plan'),
   'sharing.contact_request': () => '/listings',
   'sharing.listing_decided': () => '/listings',
   'wellbeing.checkin_reminder': () => '/checkin',
@@ -42,5 +60,5 @@ export function notificationTarget(n: NotificationLike): string | null {
 
 /** isNotificationId checks an ID from a push payload before it is used. */
 export function isNotificationId(id: unknown): id is string {
-  return typeof id === 'string' && UUID.test(id);
+  return isUuid(id);
 }

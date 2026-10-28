@@ -80,6 +80,18 @@ describe('notificationTarget', () => {
     expect(notificationTarget(n('wellbeing.checkin_reminder'))).toBe('/checkin');
   });
 
+  it('opens the trusted-contact side of the emergency plan by its id', () => {
+    const id = '01900000-0000-7000-8000-0000000000c1';
+    expect(notificationTarget(n('emergency.trusted_invitation', { contact_id: id }))).toBe(`/trusted-invitation/${id}`);
+    expect(notificationTarget(n('emergency.plan_sent', { owner_id: id }))).toBe(`/shared-plan/${id}`);
+    // Without a valid id there is no invitation or plan to open.
+    expect(notificationTarget(n('emergency.trusted_invitation'))).toBeNull();
+    expect(notificationTarget(n('emergency.trusted_invitation', { contact_id: '../sos' }))).toBeNull();
+    expect(notificationTarget(n('emergency.plan_sent', { owner_id: `${id}/x` }))).toBeNull();
+    // The id must come from the template's own param.
+    expect(notificationTarget(n('emergency.plan_sent', { contact_id: id }))).toBeNull();
+  });
+
   it('never builds a route from a param that is not a UUID', () => {
     expect(notificationTarget(n('chat.new_message', { room_id: '../../sos' }))).toBe('/chat');
     expect(notificationTarget(n('chat.new_message'))).toBe('/chat');
@@ -87,7 +99,8 @@ describe('notificationTarget', () => {
 
   it('opens nothing for unknown templates and those without a screen', () => {
     expect(notificationTarget(n('future.thing'))).toBeNull();
-    expect(notificationTarget(n('emergency.trusted_invitation'))).toBeNull();
+    // No contract operation lets a contact read another member's SOS yet.
+    expect(notificationTarget(n('emergency.sos_raised_contact', { sos_id: room }))).toBeNull();
     expect(notificationTarget(n('constructor'))).toBeNull();
     expect(notificationTarget(n('toString'))).toBeNull();
   });

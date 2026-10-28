@@ -23,5 +23,14 @@
     "sheetBody": "Once deleted, your data cannot be restored. Your account and all data will be deleted within 24 hours.",
     "confirm": "Yes, delete everything",
     "failed": "Could not schedule deletion. Try again."
+  },
+  "deleted": {
+    "title": "Your request is received",
+    "lead": "You have been signed out on this phone. Your account and data will be deleted within 24 hours.",
+    "nextHeading": "What happens next",
+    "what": "Everything you added is deleted: your profile, check-ins, messages, emergency plan and trusted contacts.",
+    "keys": "The keys that protect your data are destroyed, so it cannot be read or restored.",
+    "thanks": "Thank you for the time you spent with us.",
+    "action": "Back to the start"
   }
 }

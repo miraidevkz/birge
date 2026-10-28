@@ -47,12 +47,34 @@
   "loadError": "Could not load the plan. Please try again in a moment.",
   "external": {
     "title": "Information shared with you",
-    "intro": "{{name}} shared this with you in case she needs your help with her child.",
-    "cardHeading": "About the child",
-    "sentAt": "Sent {{when}}",
     "expiredTitle": "This link has expired",
     "expiredDescription": "You can ask her to send the plan again.",
     "busyTitle": "Let us take a short pause",
     "busyDescription": "You can open the link again in a few minutes."
+  },
+  "planCard": {
+    "intro": "{{name}} shared this with you in case she needs your help with her child.",
+    "heading": "About the child",
+    "sentAt": "Sent {{when}}"
+  },
+  "shared": {
+    "title": "Plan shared with you",
+    "unavailableTitle": "This plan is not available now",
+    "unavailableDescription": "If you need it, you can ask her to send the plan again."
+  },
+  "invitation": {
+    "title": "Trusted contact invitation",
+    "intro": "A member you have met in person invited you to be her trusted contact.",
+    "meaning": "If she raises an SOS, you will get an alert. When she sends her emergency plan, you can read the card about her child in the app.",
+    "laterHint": "If you are not ready yet, you can come back to this later. The invitation stays open.",
+    "accept": "Accept",
+    "later": "Not now",
+    "accepted": "Thank you. You are now her trusted contact. If she needs help, you will get an alert.",
+    "done": "Done",
+    "failed": "Could not accept the invitation. Check your connection and try again.",
+    "goneTitle": "This invitation is no longer active",
+    "goneDescription": "Nothing more is needed from you.",
+    "unmetTitle": "First, a meeting in person",
+    "unmetDescription": "You can accept this invitation once your meeting in person is confirmed in the app."
   }
 }
