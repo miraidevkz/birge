@@ -1,0 +1,61 @@
+{
+  "_comment": "DEMO only — synthetic specialist cards for a fresh deployment, so the Specialists screen is not empty. Every name and phone is invented (phones in the unassigned +7 000 000 00 0x range). Seeded by birge migrate as already approved, only into the DEMO districts of reference.json and only when directory.specialists is empty; never overwrites. A real deployment starts with an empty directory: members suggest specialists and moderation approves them.",
+  "specialists": [
+    {
+      "slug": "speech_therapist_a",
+      "name": "DEMO Aigerim Testova",
+      "profession": "speech_therapist",
+      "district": "demo_district_a",
+      "needs": ["autism", "hearing"],
+      "contacts": "+70000000001 (DEMO)"
+    },
+    {
+      "slug": "neuropsychologist_a",
+      "name": "DEMO Daniyar Primerov",
+      "profession": "neuropsychologist",
+      "district": "demo_district_a",
+      "needs": ["autism"],
+      "contacts": "+70000000002 (DEMO)"
+    },
+    {
+      "slug": "aba_therapist_b",
+      "name": "DEMO Madina Obraztsova",
+      "profession": "aba_therapist",
+      "district": "demo_district_b",
+      "needs": ["autism"],
+      "contacts": "+70000000003 (DEMO)"
+    },
+    {
+      "slug": "defectologist_b",
+      "name": "DEMO Saule Shablonova",
+      "profession": "defectologist",
+      "district": "demo_district_b",
+      "needs": ["autism", "hearing"],
+      "contacts": "+70000000004 (DEMO)"
+    },
+    {
+      "slug": "psychologist_c",
+      "name": "DEMO Arman Vymyslov",
+      "profession": "psychologist",
+      "district": "demo_district_c",
+      "needs": [],
+      "contacts": "+70000000005 (DEMO)"
+    },
+    {
+      "slug": "massage_therapist_c",
+      "name": "DEMO Gulnara Makety",
+      "profession": "massage_therapist",
+      "district": "demo_district_c",
+      "needs": ["autism"],
+      "contacts": "+70000000006 (DEMO)"
+    },
+    {
+      "slug": "audiologist_a",
+      "name": "DEMO Erlan Probnyi",
+      "profession": "audiologist",
+      "district": "demo_district_a",
+      "needs": ["hearing"],
+      "contacts": "+70000000007 (DEMO)"
+    }
+  ]
+}

@@ -613,3 +613,15 @@ func (q *Queries) SetListingPhotoObjectKey(ctx context.Context, arg SetListingPh
 	)
 	return i, err
 }
+
+const sharingListingsEmpty = `-- name: SharingListingsEmpty :one
+SELECT NOT EXISTS (SELECT 1 FROM sharing.listings) AS empty
+`
+
+// DEMO seed guard (birge migrate): seed only into an empty feed.
+func (q *Queries) SharingListingsEmpty(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, sharingListingsEmpty)
+	var empty bool
+	err := row.Scan(&empty)
+	return empty, err
+}

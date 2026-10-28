@@ -108,3 +108,58 @@ func TestKnowledgeDemoMarked(t *testing.T) {
 		}
 	}
 }
+
+func TestDirectoryAndListingsDemoMarked(t *testing.T) {
+	ref, err := presets.LoadReference()
+	if err != nil {
+		t.Fatal(err)
+	}
+	districts := map[string]bool{}
+	for _, c := range ref.Cities {
+		for _, d := range c.Districts {
+			districts[d] = true
+		}
+	}
+	needs := map[string]bool{}
+	for _, n := range ref.Needs {
+		needs[n] = true
+	}
+	dir, err := presets.LoadDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(dir.Specialists); n < 6 || n > 8 {
+		t.Fatalf("specialists = %d, want 6..8", n)
+	}
+	for _, s := range dir.Specialists {
+		if !strings.Contains(s.Name, "DEMO") || !strings.Contains(s.Contacts, "DEMO") {
+			t.Errorf("specialist %s missing DEMO mark", s.Slug)
+		}
+		if !strings.HasPrefix(s.Contacts, "+7000000000") {
+			t.Errorf("specialist %s phone is not in the synthetic range: %q", s.Slug, s.Contacts)
+		}
+		if !districts[s.District] {
+			t.Errorf("specialist %s district %q not in DEMO reference", s.Slug, s.District)
+		}
+		for _, n := range s.Needs {
+			if !needs[n] {
+				t.Errorf("specialist %s need %q not in DEMO reference", s.Slug, n)
+			}
+		}
+	}
+	ls, err := presets.LoadListings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(ls.Listings); n < 5 || n > 6 {
+		t.Fatalf("listings = %d, want 5..6", n)
+	}
+	for _, l := range ls.Listings {
+		if !strings.Contains(l.Title, "DEMO") || !strings.Contains(l.Description, "DEMO") {
+			t.Errorf("listing %s missing DEMO mark", l.Slug)
+		}
+		if !districts[l.District] {
+			t.Errorf("listing %s district %q not in DEMO reference", l.Slug, l.District)
+		}
+	}
+}

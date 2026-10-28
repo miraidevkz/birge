@@ -40,6 +40,18 @@ func (q *Queries) ApproveSpecialist(ctx context.Context, id uuid.UUID) (Director
 	return i, err
 }
 
+const directorySpecialistsEmpty = `-- name: DirectorySpecialistsEmpty :one
+SELECT NOT EXISTS (SELECT 1 FROM directory.specialists) AS empty
+`
+
+// DEMO seed guard (birge migrate): seed only into an empty directory.
+func (q *Queries) DirectorySpecialistsEmpty(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, directorySpecialistsEmpty)
+	var empty bool
+	err := row.Scan(&empty)
+	return empty, err
+}
+
 const getSpecialist = `-- name: GetSpecialist :one
 SELECT id, added_by, idempotency_key, name, profession, district_id, needs, contacts,
        status, reject_reason, created_at

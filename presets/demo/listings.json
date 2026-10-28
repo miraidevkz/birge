@@ -1,0 +1,53 @@
+{
+  "_comment": "DEMO only — synthetic item listings for a fresh deployment, so the Listings screen is not empty. Every text is invented and contains DEMO; no photos, no contacts. Seeded by birge migrate as already approved and active, only into the DEMO districts of reference.json and only when sharing.listings is empty; never overwrites. The author is a fixed DEMO id with no member behind it. A real deployment starts with an empty feed.",
+  "listings": [
+    {
+      "slug": "give_stroller",
+      "type": "give",
+      "category": "stroller",
+      "district": "demo_district_a",
+      "title": "DEMO: отдам прогулочную коляску",
+      "description": "DEMO-объявление. Лёгкая прогулочная коляска, складывается одной рукой. Заберите сами."
+    },
+    {
+      "slug": "swap_therapy_books",
+      "type": "swap",
+      "category": "books",
+      "district": "demo_district_b",
+      "title": "DEMO: обменяю книги по развитию речи",
+      "description": "DEMO-объявление. Три книги с упражнениями для занятий дома, поменяю на карточки PECS или книги по сенсорике."
+    },
+    {
+      "slug": "need_carpool_rehab",
+      "type": "need",
+      "category": "transport",
+      "district": "demo_district_c",
+      "title": "DEMO: ищу попутчиков до реабилитационного центра",
+      "description": "DEMO-объявление. Езжу с ребёнком на занятия по вторникам и четвергам утром, готова делить дорогу и расходы."
+    },
+    {
+      "slug": "give_sensory_toys",
+      "type": "give",
+      "category": "toys",
+      "district": "demo_district_a",
+      "title": "DEMO: отдам сенсорные игрушки",
+      "description": "DEMO-объявление. Мячики с шипами, утяжелённая игрушка и набор для пальчиковых игр, всё чистое."
+    },
+    {
+      "slug": "need_hearing_aid_batteries",
+      "type": "need",
+      "category": "equipment",
+      "district": "demo_district_b",
+      "title": "DEMO: нужны батарейки для слухового аппарата",
+      "description": "DEMO-объявление. Ищу батарейки размера 13, могу обменять на детскую одежду 110–116."
+    },
+    {
+      "slug": "swap_clothes",
+      "type": "swap",
+      "category": "clothes",
+      "district": "demo_district_c",
+      "title": "DEMO: обменяю детскую одежду 98–104",
+      "description": "DEMO-объявление. Пакет одежды на мальчика, хочу обменять на одежду на размер больше."
+    }
+  ]
+}

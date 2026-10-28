@@ -44,6 +44,10 @@ Ports used by this context (wired later): `MemberInfo` (verification + first nam
 
 None beyond platform defaults.
 
+## DEMO seed
+
+`birge migrate` inserts the DEMO specialist cards of `presets/demo/directory.json` (synthetic names marked `DEMO`, phones `+7000000000x`) through `adapter.SeedDemoIfEmpty`, only when `directory.specialists` is empty and the DEMO reference (`presets/demo/reference.json`: DEMO city, districts and needs) is in the database. Cards are inserted pending and approved in the same transaction, so search returns them; no event is published and they never reach the moderation queue. `added_by` is the fixed DEMO id `00000000-0000-4000-8000-0000000de300`, which no member has. Idempotency keys come from the preset slugs, so concurrent migrations insert each card once. No reviews are seeded. Logs `event=DemoPreset name=directory` when it inserts.
+
 ## Invariants
 
 - Verified members only suggest specialists and put reviews (service; 403).

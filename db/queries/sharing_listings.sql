@@ -136,3 +136,7 @@ WHERE id = @id
 RETURNING id, author_id, idempotency_key, type, category, title, description,
           district_id, photo_upload_id, photo_object_key, status, reject_reason,
           approved_at, closes_at, closed_at, created_at;
+
+-- name: SharingListingsEmpty :one
+-- DEMO seed guard (birge migrate): seed only into an empty feed.
+SELECT NOT EXISTS (SELECT 1 FROM sharing.listings) AS empty;

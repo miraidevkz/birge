@@ -58,3 +58,7 @@ WHERE id = @id
   AND status = 'pending'
 RETURNING id, added_by, idempotency_key, name, profession, district_id, needs, contacts,
           status, reject_reason, created_at;
+
+-- name: DirectorySpecialistsEmpty :one
+-- DEMO seed guard (birge migrate): seed only into an empty directory.
+SELECT NOT EXISTS (SELECT 1 FROM directory.specialists) AS empty;

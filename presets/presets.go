@@ -25,6 +25,8 @@ const (
 	NameReference       = "reference"
 	NameKnowledge       = "knowledge"
 	NameAssistantPrompt = "assistant_prompt"
+	NameDirectory       = "directory"
+	NameListings        = "listings"
 )
 
 //go:embed demo
@@ -203,4 +205,90 @@ func LoadKnowledge() (Knowledge, error) {
 		}
 	}
 	return out, nil
+}
+
+// DemoSpecialist is one DEMO specialist card. Slug is a stable key that makes
+// the seed idempotent; District and Needs are reference codes (no UUIDs;
+// resolved on seed).
+type DemoSpecialist struct {
+	Slug       string   `json:"slug"`
+	Name       string   `json:"name"`
+	Profession string   `json:"profession"`
+	District   string   `json:"district"`
+	Needs      []string `json:"needs"`
+	Contacts   string   `json:"contacts"`
+}
+
+// Directory is the DEMO specialist directory.
+type Directory struct {
+	Specialists []DemoSpecialist `json:"specialists"`
+}
+
+// LoadDirectory reads the DEMO specialists (names and contacts are synthetic
+// and contain DEMO).
+func LoadDirectory() (Directory, error) {
+	b, err := demoFS.ReadFile("demo/directory.json")
+	if err != nil {
+		return Directory{}, fmt.Errorf("presets: directory: %w", err)
+	}
+	var raw Directory
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return Directory{}, fmt.Errorf("presets: directory: %w", err)
+	}
+	if len(raw.Specialists) == 0 {
+		return Directory{}, fmt.Errorf("presets: directory: specialists required")
+	}
+	seen := map[string]bool{}
+	for _, s := range raw.Specialists {
+		if s.Slug == "" || s.Name == "" || s.Profession == "" || s.District == "" {
+			return Directory{}, fmt.Errorf("presets: directory: each specialist needs slug, name, profession and district")
+		}
+		if seen[s.Slug] {
+			return Directory{}, fmt.Errorf("presets: directory: duplicate slug %s", s.Slug)
+		}
+		seen[s.Slug] = true
+	}
+	return raw, nil
+}
+
+// DemoListing is one DEMO item listing. Slug is a stable key that makes the
+// seed idempotent; District is a reference code (resolved on seed).
+type DemoListing struct {
+	Slug        string `json:"slug"`
+	Type        string `json:"type"`
+	Category    string `json:"category"`
+	District    string `json:"district"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+// Listings is the DEMO sharing feed.
+type Listings struct {
+	Listings []DemoListing `json:"listings"`
+}
+
+// LoadListings reads the DEMO listings (texts are synthetic and contain DEMO).
+func LoadListings() (Listings, error) {
+	b, err := demoFS.ReadFile("demo/listings.json")
+	if err != nil {
+		return Listings{}, fmt.Errorf("presets: listings: %w", err)
+	}
+	var raw Listings
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return Listings{}, fmt.Errorf("presets: listings: %w", err)
+	}
+	if len(raw.Listings) == 0 {
+		return Listings{}, fmt.Errorf("presets: listings: listings required")
+	}
+	seen := map[string]bool{}
+	for _, l := range raw.Listings {
+		if l.Slug == "" || l.Type == "" || l.Category == "" || l.District == "" || l.Title == "" || l.Description == "" {
+			return Listings{}, fmt.Errorf("presets: listings: each listing needs slug, type, category, district, title and description")
+		}
+		if seen[l.Slug] {
+			return Listings{}, fmt.Errorf("presets: listings: duplicate slug %s", l.Slug)
+		}
+		seen[l.Slug] = true
+	}
+	return raw, nil
 }

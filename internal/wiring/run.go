@@ -82,6 +82,9 @@ const rolesHeader = "SET lock_timeout = '5s';\nSET statement_timeout = '60s';\n"
 // lock serializes concurrent runs (several migration jobs starting at once).
 // After migrations, membership reference tables are seeded from the DEMO
 // preset only when they are empty (never overwrites; logs event=DemoPreset).
+// DEMO chat rooms, specialists, listings and knowledge follow, each only into
+// its own empty tables; specialists and listings only while the DEMO
+// reference is in use.
 func Migrate(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	sqlDB, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {
@@ -124,6 +127,12 @@ func Migrate(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		return err
 	}
 	if err := seedDemoChat(ctx, logger, cfg.DatabaseURL); err != nil {
+		return err
+	}
+	if err := seedDemoDirectory(ctx, logger, cfg.DatabaseURL); err != nil {
+		return err
+	}
+	if err := seedDemoSharing(ctx, logger, cfg.DatabaseURL); err != nil {
 		return err
 	}
 	return seedDemoKnowledge(ctx, logger, cfg.DatabaseURL)

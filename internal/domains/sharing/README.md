@@ -58,6 +58,10 @@ Ports used by this context: `MemberInfo`, `Blocks`, `ObjectStore` (`internal/pla
 |---|---|---|
 | `service.Settings.ListingTTL` | 30d | Active listing lifetime before auto-close |
 
+## DEMO seed
+
+`birge migrate` inserts the DEMO listings of `presets/demo/listings.json` (synthetic texts marked `DEMO`, no photos, no contacts) through `adapter.SeedDemoIfEmpty`, only when `sharing.listings` is empty and the DEMO reference (`presets/demo/reference.json`) is in the database. Each listing goes through the normal lifecycle in one transaction: inserted pending, approved, activated with `closes_at` = now + 365 days (longer than `ListingTTL`, so a demo stand keeps its feed) and a `sharing.AutoClose` timer at that time. No event or notification is published. `author_id` is the fixed DEMO id `00000000-0000-4000-8000-0000000de300`, which no member has: a contact request on a DEMO listing stays pending and its notification has no device to reach. Idempotency keys come from the preset slugs, so concurrent migrations insert each listing once. Logs `event=DemoPreset name=listings` when it inserts.
+
 ## Invariants
 
 - Verified members only create listings and photo uploads (service; 403).
