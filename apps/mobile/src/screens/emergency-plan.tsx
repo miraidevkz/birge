@@ -20,18 +20,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { api } from '@/lib/api';
+import { formatDateTime } from '@/lib/format';
 
 type TrustedContact = Schemas['TrustedContact'];
-
-function formatWhen(iso: string, lang: string): string {
-  return new Intl.DateTimeFormat(lang, {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(iso));
-}
 
 /** EmergencyPlanScreen lets the member view and edit her plan and contacts. */
 export function EmergencyPlanScreen() {
@@ -228,7 +219,7 @@ export function EmergencyPlanScreen() {
               <Banner tone="danger">{t('saveError')}</Banner>
             ) : null}
             {plan.data?.lastSentAt ? (
-              <Text tone="muted">{t('lastSent', { when: formatWhen(plan.data.lastSentAt, i18n.language) })}</Text>
+              <Text tone="muted">{t('lastSent', { when: formatDateTime(plan.data.lastSentAt, i18n.language) })}</Text>
             ) : null}
             <Heading>{t('childCard.heading')}</Heading>
             <TextField

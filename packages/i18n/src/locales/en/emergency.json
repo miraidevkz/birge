@@ -44,5 +44,15 @@
   },
   "lastSent": "Last sent {{when}}",
   "saveError": "Could not save. Check your connection and try again.",
-  "loadError": "Could not load the plan. Please try again in a moment."
+  "loadError": "Could not load the plan. Please try again in a moment.",
+  "external": {
+    "title": "Information shared with you",
+    "intro": "{{name}} shared this with you in case she needs your help with her child.",
+    "cardHeading": "About the child",
+    "sentAt": "Sent {{when}}",
+    "expiredTitle": "This link has expired",
+    "expiredDescription": "You can ask her to send the plan again.",
+    "busyTitle": "Let us take a short pause",
+    "busyDescription": "You can open the link again in a few minutes."
+  }
 }

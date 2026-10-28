@@ -19,12 +19,10 @@ import { flushOutbox, startOutboxReplay } from '@/lib/help-outbox';
 import { loadSavedLanguage } from '@/lib/language';
 import { goBack } from '@/lib/nav';
 import { createQueryClient, syncFocusWithAppState } from '@/lib/query';
+import { ROOT_ROUTES } from '@/lib/routes';
 import { SessionProvider, useSession } from '@/lib/session';
 
 // Synchronous: texts are bundled, so the first frame is already translated.
-// Routes that are roots: everything else is stacked above them and gets Back.
-const ROOTS = new Set(['(tabs)', 'sign-in', 'onboarding', 'setup']);
-
 initI18n(getLocales().map((l) => l.languageTag));
 
 const openHelp = () => router.push('/sos');
@@ -70,7 +68,11 @@ export default function RootLayout() {
               <Stack
                 screenOptions={{ headerShown: false }}
                 screenLayout={({ children, route }) =>
-                  ROOTS.has(route.name) ? children : <ScreenBackProvider onBack={goBack}>{children}</ScreenBackProvider>
+                  ROOT_ROUTES.has(route.name) ? (
+                    children
+                  ) : (
+                    <ScreenBackProvider onBack={goBack}>{children}</ScreenBackProvider>
+                  )
                 }
               >
                 <Stack.Screen name="(tabs)" />
@@ -87,6 +89,8 @@ export default function RootLayout() {
                 <Stack.Screen name="emergency-plan" />
                 {/* Crisis / SOS: no transition animation (ADR-0014). */}
                 <Stack.Screen name="sos" options={{ animation: 'none', presentation: 'fullScreenModal' }} />
+                {/* External plan page (web): no session gate, no Back, no animation. */}
+                <Stack.Screen name="plan" options={{ animation: 'none' }} />
               </Stack>
             </SosProvider>
           </SessionProvider>
