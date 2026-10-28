@@ -1,12 +1,15 @@
 // Rooms: group chat rooms (district and topic) with their member counts and
 // mentors (staffListRooms), and mentor assignment. "Add mentor" turns the
 // screen into a picker over verified members (the Members list, one query
-// shared with that screen); a tap assigns. Removal is confirmed. Mentor and
-// member names stay on screen only: never logged, never in a query key.
+// shared with that screen); a tap assigns. Only a member with the mentor role
+// can be assigned, so the picker says so and links to Members, where the role
+// is given. Removal is confirmed. Mentor and member names stay on screen
+// only: never logged, never in a query key.
 import { ApiError, unwrap, type Schemas } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
 import { Banner, Button, Card, ConfirmSheet, List, ListItem, Screen, Text } from '@birge/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { router } from 'expo-router';
 import { Fragment, useState } from 'react';
 
 import { api } from '@/lib/api';
@@ -112,6 +115,18 @@ export function RoomsScreen() {
           header={
             <>
               <Text>{t('rooms.pick.intro', { room: roomTitle(picking.title) })}</Text>
+              <Text tone="muted">{t('rooms.pick.mentorsOnly')}</Text>
+              <Button
+                title={t('rooms.pick.openMembers')}
+                variant="secondary"
+                size="sm"
+                onPress={() => {
+                  setPicking(null);
+                  setNotice(null);
+                  router.navigate('/members');
+                }}
+                testID="picker-open-members"
+              />
               <Button
                 title={t('rooms.pick.back')}
                 variant="secondary"

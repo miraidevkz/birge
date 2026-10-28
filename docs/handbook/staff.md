@@ -6,12 +6,12 @@ Phone examples below use the synthetic shape `+70000000000`. Never put real numb
 
 ## Roles at a glance
 
-| Role | Escalations | Duty roster | Moderation queue | Members and rooms | Knowledge |
-| --- | --- | --- | --- | --- | --- |
-| Psychologist | List, take, reveal, close | View; alerts use psychologist / backup phones | No | No | Self-help: draft, review, publish |
-| Moderator | Same as psychologist | View | Approve / reject (and verification); legal hold | View members; assign / remove room mentors | No |
-| Lawyer | No | No | No | No | Rights: draft, review, publish |
-| Admin | Same queue roles as above where granted | Add / cancel shifts | Same as moderator | Same as moderator; lift suspensions | Topics of either kind; review-due for both |
+| Role | Escalations | Duty roster | Moderation queue | Members and rooms | Knowledge | Audit log |
+| --- | --- | --- | --- | --- | --- | --- |
+| Psychologist | List, take, reveal, close | View; alerts use psychologist / backup phones | No | No | Self-help: draft, review, publish | No |
+| Moderator | Same as psychologist | View | Approve / reject (and verification); legal hold | View members; give / take the mentor role; assign / remove room mentors | No | No |
+| Lawyer | No | No | No | No | Rights: draft, review, publish | No |
+| Admin | Same queue roles as above where granted | Add / cancel shifts | Same as moderator | Same as moderator; lift suspensions | Topics of either kind; review-due for both | Read the log; staff list and cards |
 
 The API enforces roles and MFA. If you see “MFA required”, complete the second factor and sign in again. Deny by default: wrong role → 403.
 
@@ -92,14 +92,18 @@ Who: **moderator** or **admin**, with MFA. Every time the list is read, the serv
 2. Each row shows her first name, district and when she was verified or suspended. Nothing else (no phone, children, needs or check-ins) is available here, by design.
 3. **Lift suspension** (suspended list, **admin** only): confirm, and she can post and write in chats again. A moderator who tries gets the message that only an admin can do it.
 
-If the screen says "This list is not available on this server yet", the server has not been updated with this feature; nothing is wrong with your account.
+4. **Mentor role** (verified members who are not suspended): **Make mentor** gives her the mentor role, so she can then be assigned to a room in **Rooms**. **Remove mentor role** takes it away, and she stops being a mentor in every room she mentors. Both ask for a confirmation. The list does not show whether she already has the role, so choose the action you need; both are safe to repeat. If the screen says the role can be given only to a verified member who is not suspended, check her status first.
+
+If the screen says "This list is not available on this server yet" (or that the mentor role cannot be changed on this server yet), the server has not been updated with this feature; nothing is wrong with your account.
+
+Audited: mentor role given / removed (the code appears in the audit log once the server serves it).
 
 ## Rooms and mentors
 
 Who: **moderator** or **admin**, with MFA.
 
 1. Open **Rooms**. It lists the district and topic group rooms (never private conversations) with the number of members and the current mentors.
-2. **Add mentor** opens the list of verified members. Tap one to make her a mentor of that room. Only a member who already holds the mentor role can be assigned; otherwise the screen explains it and nothing changes. **Back to rooms** leaves without a change.
+2. **Add mentor** opens the list of verified members. Tap one to make her a mentor of that room. Only a member who already holds the mentor role can be assigned; otherwise the screen explains it and nothing changes. The picker says so and has **Open Members**, where the role is given (see Members, step 4). **Back to rooms** leaves without a change.
 3. **Remove** next to a mentor's name, then confirm, takes the mentor role in that room away from her.
 
 Audited: `chat.room.mentor_assign`, `chat.room.mentor_remove`. As with Members, "not available on this server yet" means the server has not been updated yet.
@@ -125,6 +129,21 @@ Audited: publish and reject (reviewer and time recorded on the version).
 - Do not put personal data about real members into articles.
 - Do not invent clinical or legal advice the reviewer has not signed off.
 
+## Audit log and staff cards
+
+Who: **admin** only, with MFA. Other roles do not see the **Audit** tab; if someone opens it anyway, the server refuses and the screen says that only an admin can see it. Reading the log is itself audited (`audit.read`).
+
+1. Open **Audit**. Staff actions are listed newest first: time, who (name, or the first characters of their ID when the IdP sends no name), their role, the action, the object with the first characters of its ID, and the reason when there is one. **Show more** loads older entries.
+2. Filter by **Person**, **Action** and **Object**, or by a date range in UTC (`YYYY-MM-DD`; both days are included). Entries never contain message text, names of members or phones, only codes and IDs.
+3. An action or object the console does not know yet shows as "Other action" / "Other object" with its code underneath; that is normal after a server update that added a new action.
+4. Tap the person's name to open their **staff card**: roles, when they were first and last seen, and how many times they did each action in the last 30 days. **Show their actions** goes back to the log filtered to that person. **Back** returns to where you were.
+5. Where the console has a screen for the object, the entry has **Open in …** (Escalations, Moderation, Members, Rooms, Duty, Knowledge). Members cannot be filtered by one person there, so you get the list.
+6. **Staff** (button at the top of the log) lists everyone who has signed in to this deployment, most recently active first. The IdP still decides who is staff; this list is only for reading the log.
+
+Entries by members (for example a trusted contact opening a shared plan) and by the system (account deletion) are not in this log.
+
+If the log or a card says "not available on this server yet", the server has not been updated with this feature.
+
 ## Profile
 
 Shows your subject and roles. Use **Sign out** when you leave a shared machine.
@@ -139,6 +158,8 @@ Shows your subject and roles. Use **Sign out** when you leave a shared machine.
 | Legal hold on a message | Who put or released the hold |
 | Members list read, suspension lifted | Who looked at the list; who lifted whose suspension |
 | Mentor assigned / removed | Who changed a room's mentors |
+| Mentor role given / removed | Who changed whether a member can be a mentor |
+| Audit log read | Which admin read the log and when |
 | Knowledge publish / reject | Who reviewed what version |
 | Shared emergency plan view (member side) | Separate member audit when a trusted contact opens a sent plan |
 | Account deletion | System actors per context after `privacy.DataDeletionRequested` |

@@ -64,6 +64,7 @@ const SUSPENDED = {
 };
 
 const membersRoute = (respond: (req: Request) => Response) => ({ path: '/staff/members', respond });
+const mentorRolePath = (memberId: string) => `/staff/members/${memberId}/roles/mentor`;
 const districtsRoute = { path: '/reference/districts', respond: () => json(200, DISTRICTS) };
 
 const page = (req: Request) =>
@@ -145,6 +146,86 @@ describe('MembersScreen', () => {
     await fireEvent.press(screen.getByTestId('lift-confirm-confirm'));
     expect(await screen.findByText('The suspension is lifted.')).toBeTruthy();
     expect(calls().some((r) => r.method === 'DELETE')).toBe(true);
+  });
+
+  it('offers the mentor role actions only on verified, not suspended members', async () => {
+    mockFetch.mockImplementation(router([districtsRoute, membersRoute(page)]));
+    await renderScreen();
+    expect(await screen.findByTestId(`mentor-grant-${VERIFIED.id}`)).toBeTruthy();
+    expect(screen.getByTestId(`mentor-revoke-${VERIFIED.id}`)).toBeTruthy();
+    expect(screen.getByText(/Whether she already has the mentor role is not shown here/)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('members-status-suspended'));
+    expect(await screen.findByText('Suspended 2026-10-25')).toBeTruthy();
+    expect(screen.queryByTestId(`mentor-grant-${SUSPENDED.id}`)).toBeNull();
+  });
+
+  it('gives the mentor role after a confirmation', async () => {
+    mockFetch.mockImplementation(
+      router([
+        districtsRoute,
+        membersRoute(page),
+        { method: 'PUT', path: mentorRolePath(VERIFIED.id), respond: () => json(204) },
+      ]),
+    );
+    await renderScreen();
+    await fireEvent.press(await screen.findByTestId(`mentor-grant-${VERIFIED.id}`));
+    expect(screen.getByText(/Example Aigerim gets the mentor role/)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('mentor-confirm-confirm'));
+    expect(await screen.findByText(/She now has the mentor role/)).toBeTruthy();
+    expect(calls().some((r) => r.method === 'PUT' && r.url.endsWith(mentorRolePath(VERIFIED.id)))).toBe(true);
+  });
+
+  it('takes the mentor role away after a confirmation', async () => {
+    mockFetch.mockImplementation(
+      router([
+        districtsRoute,
+        membersRoute(page),
+        { method: 'DELETE', path: mentorRolePath(VERIFIED.id), respond: () => json(204) },
+      ]),
+    );
+    await renderScreen();
+    await fireEvent.press(await screen.findByTestId(`mentor-revoke-${VERIFIED.id}`));
+    expect(screen.getByText(/stops being a mentor in every room she mentors/)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('mentor-confirm-confirm'));
+    expect(await screen.findByText('The mentor role is removed.')).toBeTruthy();
+    expect(calls().some((r) => r.method === 'DELETE' && r.url.endsWith(mentorRolePath(VERIFIED.id)))).toBe(true);
+  });
+
+  it('explains a 409 when she is not verified or is suspended', async () => {
+    mockFetch.mockImplementation(
+      router([
+        districtsRoute,
+        membersRoute(page),
+        {
+          method: 'PUT',
+          path: mentorRolePath(VERIFIED.id),
+          respond: () => json(409, { title: 'conflict', code: 'conflict' }),
+        },
+      ]),
+    );
+    await renderScreen();
+    await fireEvent.press(await screen.findByTestId(`mentor-grant-${VERIFIED.id}`));
+    await fireEvent.press(screen.getByTestId('mentor-confirm-confirm'));
+    expect(await screen.findByText(/only to a verified member who is not suspended/)).toBeTruthy();
+  });
+
+  it('says the mentor role is not available yet while the server answers 501', async () => {
+    mockFetch.mockImplementation(
+      router([
+        districtsRoute,
+        membersRoute(page),
+        {
+          method: 'DELETE',
+          path: mentorRolePath(VERIFIED.id),
+          respond: () => json(501, { title: 'Not implemented', code: 'not_implemented' }),
+        },
+      ]),
+    );
+    await renderScreen();
+    await fireEvent.press(await screen.findByTestId(`mentor-revoke-${VERIFIED.id}`));
+    await fireEvent.press(screen.getByTestId('mentor-confirm-confirm'));
+    expect(await screen.findByText(/cannot be changed on this server yet/)).toBeTruthy();
+    expect(screen.queryByText('The request did not go through. Try again.')).toBeNull();
   });
 
   it('explains that only an admin can lift a suspension on 403', async () => {

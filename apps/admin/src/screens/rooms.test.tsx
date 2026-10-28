@@ -18,6 +18,9 @@ jest.mock('expo-auth-session', () => ({
   fetchDiscoveryAsync: jest.fn(),
   makeRedirectUri: jest.fn(() => 'https://admin.example.invalid/'),
 }));
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn(), navigate: jest.fn(), back: jest.fn() },
+}));
 
 const mockFetch = jest.fn<typeof fetch>();
 jest.mock('@/lib/api', () => {
@@ -139,6 +142,18 @@ describe('RoomsScreen', () => {
     await fireEvent.press(await screen.findByTestId(`add-mentor-${ROOM.id}`));
     await fireEvent.press(await screen.findByTestId(`pick-${MEMBER.id}`));
     expect(await screen.findByText(/Only a verified member with the mentor role/)).toBeTruthy();
+  });
+
+  it('explains in the picker that only mentors can be assigned and links to Members', async () => {
+    mockFetch.mockImplementation(
+      router([districtsRoute, membersRoute, roomsRoute(() => json(200, { items: [ROOM] }))]),
+    );
+    await renderScreen();
+    await fireEvent.press(await screen.findByTestId(`add-mentor-${ROOM.id}`));
+    expect(await screen.findByText(/Only a member with the mentor role can be assigned/)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('picker-open-members'));
+    const { router: nav } = require('expo-router') as { router: { navigate: jest.Mock } };
+    expect(nav.navigate).toHaveBeenCalledWith('/members');
   });
 
   it('shows the 501 state in the picker too', async () => {

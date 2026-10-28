@@ -6,7 +6,8 @@
     "knowledge": "Knowledge",
     "profile": "Profile",
     "members": "Members",
-    "rooms": "Rooms"
+    "rooms": "Rooms",
+    "audit": "Audit"
   },
   "signIn": {
     "title": "Staff sign-in",
@@ -337,7 +338,20 @@
     "liftTitle": "Lift the suspension?",
     "liftMessage": "She will be able to post and write in chats again.",
     "liftDone": "The suspension is lifted.",
-    "liftForbidden": "Only an admin can lift a suspension. Ask an admin of this deployment."
+    "liftForbidden": "Only an admin can lift a suspension. Ask an admin of this deployment.",
+    "mentor": {
+      "grant": "Make mentor",
+      "revoke": "Remove mentor role",
+      "grantTitle": "Make her a mentor?",
+      "grantMessage": "{{name}} gets the mentor role. Then you can assign her to a room in Rooms.",
+      "revokeTitle": "Remove the mentor role?",
+      "revokeMessage": "{{name}} loses the mentor role and stops being a mentor in every room she mentors.",
+      "granted": "She now has the mentor role. Assign her to a room in Rooms.",
+      "revoked": "The mentor role is removed.",
+      "conflict": "The mentor role can be given only to a verified member who is not suspended.",
+      "notAvailable": "The mentor role cannot be changed on this server yet. It will work after the next server update.",
+      "stateUnknown": "Whether she already has the mentor role is not shown here. Choose the action you need; both are safe to repeat."
+    }
   },
   "rooms": {
     "title": "Rooms",
@@ -362,7 +376,122 @@
       "title": "Choose a mentor",
       "intro": "Verified members. Tap one to make her a mentor of {{room}}.",
       "back": "Back to rooms",
-      "already": "Already a mentor here"
+      "already": "Already a mentor here",
+      "mentorsOnly": "Only a member with the mentor role can be assigned. Give the role in Members.",
+      "openMembers": "Open Members"
     }
+  },
+  "audit": {
+    "title": "Audit log",
+    "openStaff": "Staff",
+    "emptyTitle": "No entries",
+    "emptyDescription": "No staff actions match these filters. Change a filter or the dates.",
+    "forbiddenTitle": "Only an admin can see this",
+    "forbiddenDescription": "The audit log and staff cards are open to the admins of this deployment.",
+    "filter": {
+      "person": "Person",
+      "allPeople": "Everyone",
+      "action": "Action",
+      "object": "Object",
+      "all": "All",
+      "from": "From (UTC)",
+      "to": "To (UTC)",
+      "dayHint": "Date as YYYY-MM-DD, for example 2026-10-28",
+      "dayInvalid": "Enter a real date as YYYY-MM-DD.",
+      "rangeInvalid": "The end date is before the start date."
+    },
+    "row": {
+      "objectWithId": "{{object}} · {{id}}",
+      "reason": "Reason: {{reason}}",
+      "role": "Role: {{role}}",
+      "openCard": "Opens the staff card",
+      "openObject": "Open in {{screen}}"
+    },
+    "unknown": {
+      "action": "Other action",
+      "object": "Other object",
+      "reason": "Other reason"
+    },
+    "role": {
+      "psychologist": "Psychologist",
+      "moderator": "Moderator",
+      "lawyer": "Lawyer",
+      "admin": "Admin"
+    },
+    "action": {
+      "escalation_take": "Took an escalation",
+      "escalation_reveal_contact": "Viewed contact details",
+      "escalation_close": "Closed an escalation",
+      "duty_shift_add": "Added a duty shift",
+      "duty_shift_cancel": "Cancelled a duty shift",
+      "moderation_approve": "Approved an item",
+      "moderation_reject": "Rejected an item",
+      "moderation_block_author": "Suspended the author",
+      "moderation_legal_hold": "Kept for legal review",
+      "chat_message_hide": "Hid a message",
+      "chat_message_restore": "Restored a message",
+      "chat_message_reports_close": "Closed message reports",
+      "chat_message_legal_hold_on": "Put a message on legal hold",
+      "chat_message_legal_hold_off": "Released a legal hold",
+      "chat_member_mute": "Muted a member in a room",
+      "chat_member_ban": "Banned a member from a room",
+      "chat_member_unban": "Let a member back into a room",
+      "chat_room_slow_mode": "Changed slow mode",
+      "chat_room_mentor_assign": "Assigned a room mentor",
+      "chat_room_mentor_remove": "Removed a room mentor",
+      "membership_member_suspend": "Suspended a member",
+      "membership_member_lift_suspension": "Lifted a suspension",
+      "membership_verification_approve": "Approved a verification",
+      "membership_verification_reject": "Rejected a verification",
+      "article_publish": "Published an article",
+      "article_reject": "Rejected an article",
+      "topic_create": "Created a topic",
+      "emergency_plan_view_shared": "Viewed a shared emergency plan",
+      "audit_read": "Read the audit log"
+    },
+    "object": {
+      "safety_escalation": "Escalation",
+      "safety_duty_shift": "Duty shift",
+      "moderation_item": "Moderation item",
+      "chat_message": "Chat message",
+      "chat_member": "Room member",
+      "chat_room": "Room",
+      "membership_member": "Member",
+      "membership_verification_request": "Verification request",
+      "knowledge_version": "Article version",
+      "knowledge_topic": "Knowledge topic",
+      "emergency_child_card": "Child card",
+      "member": "Member account"
+    },
+    "reason": {
+      "rules_medicine": "Medical advice",
+      "rules_money": "Money request",
+      "person_in_photo": "Person in photo",
+      "unsafe": "Unsafe",
+      "spam": "Spam",
+      "inaccurate": "Inaccurate",
+      "duplicate": "Duplicate",
+      "outdated_law": "Outdated law",
+      "unclear": "Unclear",
+      "unsafe_advice": "Unsafe advice",
+      "missing_source": "Missing source",
+      "other": "Other"
+    }
+  },
+  "staff": {
+    "title": "Staff",
+    "emptyTitle": "No staff accounts yet",
+    "emptyDescription": "A staff member appears here after their first sign-in to this deployment.",
+    "cardTitle": "Staff card",
+    "roles": "Roles",
+    "noRoles": "No roles recorded",
+    "firstSeen": "First seen {{time}}",
+    "lastSeen": "Last seen {{time}}",
+    "showActions": "Show their actions",
+    "actions30d": "Actions in the last 30 days",
+    "noActionsTitle": "No actions in 30 days",
+    "noActionsDescription": "Older entries are in the audit log.",
+    "notFoundTitle": "No such staff account",
+    "notFoundDescription": "Go back to the staff list and choose the person again."
   }
 }

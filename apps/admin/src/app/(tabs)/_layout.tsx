@@ -7,6 +7,7 @@ import { Redirect, Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 
 import { useSession } from '@/lib/session';
+import { isAdmin } from '@/lib/staff';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -19,7 +20,7 @@ function icon(name: IconName) {
 export default function TabsLayout() {
   const { t } = useTranslation('admin');
   const colors = useThemeColors();
-  const { hydrated, signedIn, mfaRequired } = useSession();
+  const { hydrated, signedIn, mfaRequired, profile } = useSession();
   if (!hydrated) return null;
   if (!signedIn || mfaRequired) return <Redirect href="/sign-in" />;
   return (
@@ -42,6 +43,15 @@ export default function TabsLayout() {
       <Tabs.Screen name="rooms" options={{ title: t('tabs.rooms'), tabBarIcon: icon('chatbubbles-outline') }} />
       <Tabs.Screen name="duty" options={{ title: t('tabs.duty'), tabBarIcon: icon('calendar-outline') }} />
       <Tabs.Screen name="knowledge" options={{ title: t('tabs.knowledge'), tabBarIcon: icon('library-outline') }} />
+      {/* Admin only in the tab bar; the API still decides (403 shows "only an admin can see this"). */}
+      <Tabs.Screen
+        name="audit"
+        options={{
+          title: t('tabs.audit'),
+          tabBarIcon: icon('reader-outline'),
+          href: isAdmin(profile?.roles) ? undefined : null,
+        }}
+      />
       <Tabs.Screen name="profile" options={{ title: t('tabs.profile'), tabBarIcon: icon('person-outline') }} />
     </Tabs>
   );
