@@ -10,6 +10,7 @@ import { getLocales } from 'expo-localization';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { kratos } from '@/lib/api';
@@ -56,28 +57,30 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <SessionProvider revoke={kratos.signOut}>
-          <SosProvider onPress={openHelp}>
-            <StatusBar style="auto" />
-            <FlushOnSignIn />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="onboarding" />
-              <Stack.Screen name="sign-in" />
-              <Stack.Screen name="privacy" />
-              <Stack.Screen name="knowledge" />
-              <Stack.Screen name="knowledge-article/[articleId]" />
-              <Stack.Screen name="assistant" />
-              <Stack.Screen name="checkin" />
-              <Stack.Screen name="checkin-history" />
-              <Stack.Screen name="emergency-plan" />
-              {/* Crisis / SOS: no transition animation (ADR-0014). */}
-              <Stack.Screen name="sos" options={{ animation: 'none', presentation: 'fullScreenModal' }} />
-            </Stack>
-          </SosProvider>
-        </SessionProvider>
-      </QueryClientProvider>
+      <KeyboardProvider>
+        <QueryClientProvider client={queryClient}>
+          <SessionProvider revoke={kratos.signOut}>
+            <SosProvider onPress={openHelp}>
+              <StatusBar style="auto" />
+              <FlushOnSignIn />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="onboarding" />
+                <Stack.Screen name="sign-in" />
+                <Stack.Screen name="privacy" />
+                <Stack.Screen name="knowledge" />
+                <Stack.Screen name="knowledge-article/[articleId]" />
+                <Stack.Screen name="assistant" />
+                <Stack.Screen name="checkin" />
+                <Stack.Screen name="checkin-history" />
+                <Stack.Screen name="emergency-plan" />
+                {/* Crisis / SOS: no transition animation (ADR-0014). */}
+                <Stack.Screen name="sos" options={{ animation: 'none', presentation: 'fullScreenModal' }} />
+              </Stack>
+            </SosProvider>
+          </SessionProvider>
+        </QueryClientProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

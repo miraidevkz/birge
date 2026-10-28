@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cn } from './cn';
@@ -69,25 +70,22 @@ export function Screen({
     </View>
   );
 
+  // KeyboardAwareScrollView keeps the focused field and the action above the
+  // keyboard on both platforms. KeyboardAvoidingView did not: with
+  // edge-to-edge (Expo SDK 58) Android no longer resizes the window, and the
+  // phone and code fields stayed under the keyboard (Nokia 7.2).
   const formBody = (
-    <KeyboardAvoidingView
+    <KeyboardAwareScrollView
       className="flex-1"
-      // Android too: with edge-to-edge (Expo SDK 58) the window no longer
-      // resizes for the keyboard, so without a behaviour the keyboard covered
-      // the phone and code fields (seen on a Nokia 7.2).
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={insets.top}
+      contentContainerClassName="flex-grow justify-center gap-5 px-5 py-6"
+      keyboardShouldPersistTaps="handled"
+      // Room under the focused field for its hint and the primary button.
+      bottomOffset={tokens.touchTarget + tokens.spacing[16]}
     >
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="flex-grow justify-center gap-5 px-5 py-6"
-        keyboardShouldPersistTaps="handled"
-      >
-        {title ? <Heading level={1}>{title}</Heading> : null}
-        {children}
-        {footer ? <View className="gap-2 pt-2">{footer}</View> : null}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      {title ? <Heading level={1}>{title}</Heading> : null}
+      {children}
+      {footer ? <View className="gap-2 pt-2">{footer}</View> : null}
+    </KeyboardAwareScrollView>
   );
 
   const defaultContent = scroll ? (
