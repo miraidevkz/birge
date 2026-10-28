@@ -39,10 +39,31 @@ export interface SessionProviderProps {
   children: ReactNode;
   /** revoke ends the session on the server after sign-out (best effort; the local token is gone first). */
   revoke?: (token: string) => Promise<void>;
+  /**
+   * beforeSignOut runs while the session is still valid, before the token is
+   * dropped (the push device is unregistered here). Best effort: it never
+   * blocks sign-out for longer than BEFORE_SIGN_OUT_MS, and a failure is ignored.
+   */
+  beforeSignOut?: () => Promise<void>;
+}
+
+/** BEFORE_SIGN_OUT_MS bounds beforeSignOut: offline, sign-out must still be quick. */
+const BEFORE_SIGN_OUT_MS = 5_000;
+
+async function bounded(fn: () => Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, BEFORE_SIGN_OUT_MS);
+  });
+  try {
+    await Promise.race([fn().catch(() => undefined), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** SessionProvider loads the stored token once and owns sign-in and sign-out. */
-export function SessionProvider({ children, revoke }: SessionProviderProps) {
+export function SessionProvider({ children, revoke, beforeSignOut }: SessionProviderProps) {
   const [hydrated, setHydrated] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
@@ -85,12 +106,13 @@ export function SessionProvider({ children, revoke }: SessionProviderProps) {
         setToken(session.token);
       },
       async signOut() {
+        if (beforeSignOut) await bounded(beforeSignOut);
         const old = current;
         await clear();
         if (old && revoke) await revoke(old);
       },
     }),
-    [hydrated, token, clear, revoke],
+    [hydrated, token, clear, revoke, beforeSignOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

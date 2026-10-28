@@ -17,6 +17,12 @@ const withDevCleartext: ConfigPlugin = (cfg) =>
     return mod;
   });
 
+// Firebase config of the Android app (google-services.json), needed for FCM
+// push tokens. It belongs to the operator of a deployment, so it is never in
+// the repository: the build points at it by path. Without it the app works
+// as before, only without push on Android (src/lib/push.ts skips quietly).
+const googleServicesFile = env.BIRGE_GOOGLE_SERVICES_FILE || undefined;
+
 const appConfig = (config: ConfigContext['config']): ExpoConfig => ({
   ...config,
   name: 'Birge',
@@ -34,6 +40,7 @@ const appConfig = (config: ConfigContext['config']): ExpoConfig => ({
   },
   android: {
     package: env.BIRGE_APP_ID ?? 'invalid.example.birge',
+    ...(googleServicesFile ? { googleServicesFile } : {}),
     adaptiveIcon: {
       foregroundImage: './assets/brand/adaptive-foreground.png',
       monochromeImage: './assets/brand/adaptive-monochrome.png',
@@ -51,7 +58,16 @@ const appConfig = (config: ConfigContext['config']): ExpoConfig => ({
     name: 'Birge',
     shortName: 'Birge',
   },
-  plugins: ['expo-router', 'expo-secure-store', 'expo-localization', 'expo-font'],
+  plugins: [
+    'expo-router',
+    'expo-secure-store',
+    'expo-localization',
+    'expo-font',
+    // Native push tokens only (FCM, APNs); no Expo push service. The default
+    // channel is the one src/lib/push.ts creates, so pushes shown by the
+    // system while the app is closed use it too.
+    ['expo-notifications', { defaultChannel: 'default' }],
+  ],
   extra: {
     // Read by src/lib/config.ts, which validates them.
     apiUrl: env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8080/v1',
@@ -62,6 +78,8 @@ const appConfig = (config: ConfigContext['config']): ExpoConfig => ({
     // Demo builds only: where the dev stack serves sign-in codes of its
     // synthetic demo numbers (cmd/birge-devsms). Empty = no demo codes.
     demoCodesUrl: env.EXPO_PUBLIC_DEMO_CODES_URL ?? '',
+    // '1' when the Android build has a Firebase config (see above); not a secret.
+    androidPush: googleServicesFile ? '1' : '',
   },
 });
 

@@ -4,7 +4,7 @@ import '../../global.css';
 
 import { initI18n } from '@birge/i18n';
 import { fonts, ScreenBackProvider, SosProvider } from '@birge/ui';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { getLocales } from 'expo-localization';
 import { router, Stack } from 'expo-router';
@@ -18,6 +18,7 @@ import { loadCrisisPhones, refreshCrisisPhones } from '@/lib/crisis-phones';
 import { flushOutbox, startOutboxReplay } from '@/lib/help-outbox';
 import { loadSavedLanguage } from '@/lib/language';
 import { goBack } from '@/lib/nav';
+import { unregisterPush, usePushBridge } from '@/lib/push';
 import { createQueryClient, syncFocusWithAppState } from '@/lib/query';
 import { ROOT_ROUTES } from '@/lib/routes';
 import { SessionProvider, useSession } from '@/lib/session';
@@ -34,6 +35,14 @@ function FlushOnSignIn() {
   useEffect(() => {
     if (signedIn) void flushOutbox();
   }, [signedIn]);
+  return null;
+}
+
+// Push while signed in (iOS and Android only): re-register, open tapped
+// pushes, refresh the inbox when one arrives. Does nothing on the web.
+function PushBridge() {
+  const { signedIn, hydrated } = useSession();
+  usePushBridge(signedIn, hydrated, useQueryClient());
   return null;
 }
 
@@ -61,10 +70,11 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
-          <SessionProvider revoke={kratos.signOut}>
+          <SessionProvider revoke={kratos.signOut} beforeSignOut={unregisterPush}>
             <SosProvider onPress={openHelp}>
               <StatusBar style="auto" />
               <FlushOnSignIn />
+              <PushBridge />
               <Stack
                 screenOptions={{ headerShown: false }}
                 screenLayout={({ children, route }) =>
@@ -87,6 +97,7 @@ export default function RootLayout() {
                 <Stack.Screen name="checkin" />
                 <Stack.Screen name="checkin-history" />
                 <Stack.Screen name="emergency-plan" />
+                <Stack.Screen name="inbox" />
                 {/* Crisis / SOS: no transition animation (ADR-0014). */}
                 <Stack.Screen name="sos" options={{ animation: 'none', presentation: 'fullScreenModal' }} />
                 {/* External plan page (web): no session gate, no Back, no animation. */}

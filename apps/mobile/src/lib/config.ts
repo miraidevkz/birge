@@ -20,6 +20,12 @@ export interface AppConfig {
    * is connected. Undefined everywhere else.
    */
   demoCodesUrl?: string;
+  /**
+   * androidPush is true when the Android build carries a Firebase config
+   * (BIRGE_GOOGLE_SERVICES_FILE). Without it there is no FCM token, so the
+   * app never asks for the notification permission on Android.
+   */
+  androidPush: boolean;
   appVersion: string;
   platform: AppPlatform;
 }
@@ -66,6 +72,7 @@ export function parseConfig(
       typeof extra?.demoCodesUrl === 'string' && extra.demoCodesUrl !== ''
         ? url('demoCodesUrl', extra.demoCodesUrl)
         : undefined,
+    androidPush: extra?.androidPush === '1',
     appVersion: version && /^\d+\.\d+\.\d+$/.test(version) ? version : '0.0.0',
     platform,
   };

@@ -8,7 +8,10 @@ import { HomeScreen } from './home';
 jest.mock('expo-constants', () => require('@/test-mocks').expoConstants());
 jest.mock('@/lib/storage', () => require('@/test-mocks').memoryStorage());
 jest.mock('@/lib/platform-crypto', () => require('@/test-mocks').platformCrypto());
-jest.mock('expo-router', () => ({ router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() },
+  useFocusEffect: jest.fn(),
+}));
 
 const mockFetch = jest.fn<typeof fetch>();
 jest.mock('@/lib/api', () => {
@@ -96,6 +99,29 @@ describe('HomeScreen', () => {
     });
     await renderHome();
     expect(await screen.findByText('Tea with Dana is agreed. The chat is open.')).toBeTruthy();
+  });
+
+  it('shows the latest items, opens one, and leads to all of them with the unread count', async () => {
+    const { router } = require('expo-router');
+    const unread = (n: number) => ({
+      id: `01900000-0000-7000-8000-00000000030${n}`,
+      template: 'wellbeing.checkin_reminder',
+      params: {},
+      class: 'reminder',
+      createdAt: '2026-10-28T10:00:00Z',
+    });
+    serve({
+      '/me/inbox': {
+        items: [unread(1), unread(2), { ...unread(3), template: 'circle.ask_met', readAt: '2026-10-28T11:00:00Z' }],
+      },
+    });
+    await renderHome();
+    const all = await screen.findByTestId('home-inbox-open');
+    expect(await screen.findByText('All notifications, new: 2')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId(`inbox-item-${unread(3).id}`));
+    expect(router.push).toHaveBeenCalledWith('/circle');
+    await fireEvent.press(all);
+    expect(router.push).toHaveBeenCalledWith('/inbox');
   });
 
   it('still shows the screen when a card fails to load', async () => {

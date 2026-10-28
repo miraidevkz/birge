@@ -1,19 +1,26 @@
 // Home: a greeting, "how are you today" (routes on; stores nothing), the next
 // weekly check-in as the one thing to do, the member's Circle, a gentle tip
-// of the day and the latest inbox items (ADR-0025: warm, personal, one action).
+// of the day and the latest inbox items with the way to all of them
+// (ADR-0025: warm, personal, one action).
 // "Hard" goes to Help: the crisis path is one tap from the first screen.
-import { unwrap, type Schemas } from '@birge/api';
+import { unwrap } from '@birge/api';
 import { i18n, useTranslation } from '@birge/i18n';
-import { Button, Card, ChoiceGroup, Heading, List, ListItem, Screen, Text } from '@birge/ui';
-import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { Button, Card, ChoiceGroup, Heading, List, Screen, Text } from '@birge/ui';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 import { router } from 'expo-router';
 
 import { api } from '@/lib/api';
+import {
+  openNotification,
+  useInboxPreview,
+  useRefreshInboxOnFocus,
+  useUnreadCount,
+  type Notification,
+} from '@/lib/inbox';
 import { nextCheckin } from '@/lib/next-checkin';
-import { notificationKey } from '@/lib/notification-text';
 
-type Notification = Schemas['Notification'];
+import { NotificationRow } from './notification-row';
 
 /** INBOX_PREVIEW is how many inbox items Home shows. */
 const INBOX_PREVIEW = 5;
@@ -154,13 +161,14 @@ function TipCard() {
 export function HomeScreen() {
   const { t } = useTranslation('home');
   const { t: tInbox } = useTranslation('inbox');
-  const inbox = useQuery({
-    queryKey: ['inbox', { limit: INBOX_PREVIEW }],
-    queryFn: () => unwrap(api.GET('/me/inbox', { params: { query: { limit: INBOX_PREVIEW } } })),
-  });
+  const client = useQueryClient();
+  const inbox = useInboxPreview(INBOX_PREVIEW);
+  const unread = useUnreadCount();
+  useRefreshInboxOnFocus();
   const me = useQuery({ queryKey: ['me'], queryFn: () => unwrap(api.GET('/me')) });
-  const exists = (key: string) => i18n.exists(key, { ns: 'inbox' });
   const name = me.data?.displayName?.trim();
+  const open = useCallback((n: Notification) => void openNotification(client, n), [client]);
+  const hasItems = (inbox.data?.items.length ?? 0) > 0;
 
   return (
     <Screen title={name ? t('greeting', { name }) : t('greetingNoName')} scroll={false}>
@@ -170,17 +178,18 @@ export function HomeScreen() {
         error={inbox.error}
         onRetry={() => void inbox.refetch()}
         keyExtractor={(n) => n.id}
-        renderItem={({ item }) => (
-          <ListItem
-            title={tInbox(notificationKey(item.template, exists))}
-            subtitle={formatDateTime(new Date(item.createdAt), i18n.language, false)}
-            emphasis={!item.readAt}
-            accessibilityLabel={
-              item.readAt ? undefined : `${tInbox(notificationKey(item.template, exists))}, ${tInbox('unread')}`
-            }
-          />
-        )}
+        renderItem={({ item }) => <NotificationRow item={item} onOpen={open} />}
         empty={{ title: t('inbox.emptyTitle'), description: t('inbox.emptyDescription') }}
+        footer={
+          hasItems ? (
+            <Button
+              title={unread > 0 ? tInbox('openUnread', { n: unread }) : tInbox('open')}
+              variant="secondary"
+              onPress={() => router.push('/inbox')}
+              testID="home-inbox-open"
+            />
+          ) : undefined
+        }
         header={
           <>
             <Text tone="muted">{t('howAreYou')}</Text>

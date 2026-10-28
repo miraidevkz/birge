@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
+import * as Notifications from 'expo-notifications';
+
+import { DEVICE_KEY, PUSH_KEY, unregisterPush } from '@/lib/push';
 import { storage } from '@/lib/storage';
 import { Providers } from '@/test-utils';
 
@@ -9,6 +12,7 @@ import { ProfileScreen } from './profile';
 jest.mock('expo-constants', () => require('@/test-mocks').expoConstants());
 jest.mock('@/lib/storage', () => require('@/test-mocks').memoryStorage());
 jest.mock('@/lib/platform-crypto', () => require('@/test-mocks').platformCrypto());
+jest.mock('expo-notifications', () => require('@/test-mocks').expoNotifications());
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn(), back: jest.fn() },
 }));
@@ -45,15 +49,27 @@ function json(data: unknown, status = 200) {
 
 const renderProfile = () =>
   render(
-    <Providers>
+    <Providers beforeSignOut={unregisterPush}>
       <ProfileScreen />
     </Providers>,
   );
 
+/** serveMember answers every GET with the member and every write with 204. */
+function serveMember() {
+  mockFetch.mockImplementation(async (input) =>
+    (input as Request).method === 'GET' ? json(member) : new Response(null, { status: 204 }),
+  );
+}
+
+const writes = () => mockFetch.mock.calls.map(([i]) => i as Request).filter((r) => r.method !== 'GET');
+
 describe('ProfileScreen', () => {
   beforeEach(async () => {
     mockFetch.mockReset();
+    jest.clearAllMocks();
     await storage.set('birge.session', 'session-token');
+    await storage.remove(DEVICE_KEY);
+    await storage.remove(PUSH_KEY);
   });
 
   it('renders the member profile', async () => {
@@ -106,6 +122,64 @@ describe('ProfileScreen', () => {
     await screen.findByDisplayValue('Example Mom');
     await fireEvent.press(screen.getByTestId('profile-sign-out'));
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/sign-in'));
+    expect(await storage.get('birge.session')).toBeNull();
+  });
+
+  it('turns push on with the toggle and off again', async () => {
+    serveMember();
+    await renderProfile();
+    const toggle = await screen.findByRole('checkbox', { name: 'Notifications on this phone' });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    await fireEvent.press(toggle);
+    await waitFor(() => expect(toggle).toBeChecked());
+    expect(writes().map((r) => r.method)).toEqual(['PUT']);
+    expect(new URL(writes()[0]!.url).pathname).toMatch(/^\/v1\/me\/devices\//);
+    await fireEvent.press(toggle);
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    expect(writes().map((r) => r.method)).toEqual(['PUT', 'DELETE']);
+  });
+
+  it('explains a refused permission and stays off', async () => {
+    jest
+      .mocked(Notifications.requestPermissionsAsync)
+      .mockResolvedValueOnce({ granted: false, canAskAgain: false, status: 'denied' } as never);
+    serveMember();
+    await renderProfile();
+    const toggle = await screen.findByRole('checkbox', { name: 'Notifications on this phone' });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    await fireEvent.press(toggle);
+    expect(await screen.findByText(/turned off in the phone settings/)).toBeTruthy();
+    expect(toggle).not.toBeChecked();
+    expect(writes()).toHaveLength(0);
+  });
+
+  it('stays off without a message when there is no push token', async () => {
+    jest.mocked(Notifications.getDevicePushTokenAsync).mockRejectedValueOnce(new Error('no token'));
+    serveMember();
+    await renderProfile();
+    const toggle = await screen.findByRole('checkbox', { name: 'Notifications on this phone' });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    await fireEvent.press(toggle);
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).not.toBeChecked();
+    expect(screen.queryByText(/phone settings/)).toBeNull();
+    expect(writes()).toHaveLength(0);
+  });
+
+  it('unregisters the device with the session still valid when she signs out', async () => {
+    const { router } = require('expo-router');
+    serveMember();
+    await renderProfile();
+    const toggle = await screen.findByRole('checkbox', { name: 'Notifications on this phone' });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    await fireEvent.press(toggle);
+    await waitFor(() => expect(toggle).toBeChecked());
+    await fireEvent.press(screen.getByTestId('profile-sign-out'));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/sign-in'));
+    const del = writes().find((r) => r.method === 'DELETE');
+    expect(new URL(del!.url).pathname).toBe(new URL(writes()[0]!.url).pathname);
+    expect(del!.headers.get('Authorization')).toBe('Bearer session-token');
+    expect(await storage.get(DEVICE_KEY)).toBeNull();
     expect(await storage.get('birge.session')).toBeNull();
   });
 });

@@ -10,3 +10,18 @@ export function formatDateTime(iso: string, lang: string): string {
     minute: '2-digit',
   }).format(new Date(iso));
 }
+
+/**
+ * formatWhen formats a timestamp for a list row: the time for today, the day
+ * and month for this year, and the full date otherwise. `now` is passed in so
+ * rendering stays pure and testable.
+ */
+export function formatWhen(iso: string, lang: string, now: Date): string {
+  const d = new Date(iso);
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const today = sameYear && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  const options: Intl.DateTimeFormatOptions = today
+    ? { hour: '2-digit', minute: '2-digit' }
+    : { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) };
+  return new Intl.DateTimeFormat(lang, options).format(d);
+}

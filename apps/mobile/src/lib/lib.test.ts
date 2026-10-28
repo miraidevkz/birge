@@ -4,6 +4,8 @@ import { isCrisisPhone, parseConfig } from './config';
 import { fetchDemoCode } from './demo-code';
 import { categoryLabel, professionLabel, roomTitle } from './reference';
 import { nextCheckin } from './next-checkin';
+import { formatWhen } from './format';
+import { isNotificationId, notificationTarget } from './notification-targets';
 import { notificationKey } from './notification-text';
 
 jest.mock('expo-constants', () => require('@/test-mocks').expoConstants());
@@ -54,13 +56,56 @@ describe('nextCheckin', () => {
 });
 
 describe('notificationKey', () => {
-  const known = new Set(['templates.chat.new_message']);
+  const known = new Set(['templates.chat.new_message.title', 'templates.chat.new_message.body']);
   const exists = (k: string) => known.has(k);
 
   it('renders known templates and falls back for unknown or malformed ones', () => {
     expect(notificationKey('chat.new_message', exists)).toBe('templates.chat.new_message');
     expect(notificationKey('chat.unknown', exists)).toBe('fallback');
     expect(notificationKey('help:intro', () => true)).toBe('fallback');
+    // A title without a body is not rendered half-way.
+    expect(notificationKey('chat.new_message', (k) => k.endsWith('.title'))).toBe('fallback');
+  });
+});
+
+describe('notificationTarget', () => {
+  const room = '01900000-0000-7000-8000-000000000077';
+  const n = (template: string, params: Record<string, string> = {}) => ({ template, params });
+
+  it('maps known templates to their place in the app', () => {
+    expect(notificationTarget(n('chat.new_message', { room_id: room }))).toBe(`/chat/${room}`);
+    expect(notificationTarget(n('circle.match_proposed'))).toBe('/circle');
+    expect(notificationTarget(n('emergency.sos_responded'))).toBe('/sos');
+    expect(notificationTarget(n('sharing.contact_request'))).toBe('/listings');
+    expect(notificationTarget(n('wellbeing.checkin_reminder'))).toBe('/checkin');
+  });
+
+  it('never builds a route from a param that is not a UUID', () => {
+    expect(notificationTarget(n('chat.new_message', { room_id: '../../sos' }))).toBe('/chat');
+    expect(notificationTarget(n('chat.new_message'))).toBe('/chat');
+  });
+
+  it('opens nothing for unknown templates and those without a screen', () => {
+    expect(notificationTarget(n('future.thing'))).toBeNull();
+    expect(notificationTarget(n('emergency.trusted_invitation'))).toBeNull();
+    expect(notificationTarget(n('constructor'))).toBeNull();
+    expect(notificationTarget(n('toString'))).toBeNull();
+  });
+
+  it('accepts only UUIDs as push notification IDs', () => {
+    expect(isNotificationId(room)).toBe(true);
+    expect(isNotificationId('1; DROP')).toBe(false);
+    expect(isNotificationId(42)).toBe(false);
+  });
+});
+
+describe('formatWhen', () => {
+  const now = new Date(2026, 9, 28, 15, 0);
+
+  it('shows the time today, the day this year and the full date before', () => {
+    expect(formatWhen(new Date(2026, 9, 28, 9, 5).toISOString(), 'en', now)).toMatch(/09:05|9:05/);
+    expect(formatWhen(new Date(2026, 9, 2, 9, 5).toISOString(), 'en', now)).toBe('Oct 2');
+    expect(formatWhen(new Date(2025, 0, 2, 9, 5).toISOString(), 'en', now)).toBe('Jan 2, 2025');
   });
 });
 

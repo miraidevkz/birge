@@ -1,10 +1,12 @@
-// Profile: view and edit the member, switch language, open related screens, sign out.
+// Profile: view and edit the member, switch language, turn push on or off
+// (iOS and Android), open related screens, sign out.
 import { unwrap, type Schemas } from '@birge/api';
 import { useTranslation, type Language } from '@birge/i18n';
 import {
   Banner,
   Button,
   Card,
+  CheckItem,
   LanguagePicker,
   ErrorState,
   Heading,
@@ -16,13 +18,69 @@ import {
 } from '@birge/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { api } from '@/lib/api';
 import { chooseLanguage, currentLanguage } from '@/lib/language';
+import { disablePush, enablePush, isPushOn, pushSupported } from '@/lib/push';
 import { useSession } from '@/lib/session';
 
 type Member = Schemas['Member'];
+
+/**
+ * PushToggle turns push on or off for this phone: on asks for the permission
+ * if needed and registers the device, off unregisters it. Only where the
+ * build can receive push (lib/push.ts). A refused permission is explained
+ * once; any other failure leaves the toggle off without a message (the inbox
+ * works without push).
+ */
+function PushToggle() {
+  const { t } = useTranslation('inbox');
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [denied, setDenied] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void isPushOn().then((v) => {
+      if (active) setOn(v);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function change(next: boolean) {
+    setBusy(true);
+    setDenied(false);
+    try {
+      if (next) {
+        const result = await enablePush();
+        setOn(result === 'registered');
+        setDenied(result === 'denied');
+      } else {
+        await disablePush();
+        setOn(false);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card testID="profile-push">
+      <CheckItem
+        title={t('push.label')}
+        checked={on === true}
+        onChange={(next) => void change(next)}
+        disabled={busy || on === null}
+        testID="profile-push-toggle"
+      />
+      <Text tone="muted">{t('push.hint')}</Text>
+      {denied ? <Banner tone="info">{t('push.denied')}</Banner> : null}
+    </Card>
+  );
+}
 
 /** ProfileScreen shows and edits the signed-in member. */
 export function ProfileScreen() {
@@ -133,6 +191,8 @@ export function ProfileScreen() {
         disabled={saveLang.isPending}
         testID="profile-language"
       />
+
+      {pushSupported() ? <PushToggle /> : null}
 
       <Card testID="profile-verification">
         <Heading>{t('verification.heading')}</Heading>

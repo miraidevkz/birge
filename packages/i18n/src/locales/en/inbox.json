@@ -1,27 +1,75 @@
 {
+  "title": "Notifications",
   "templates": {
     "circle": {
-      "match_proposed": "Someone who understands is ready to meet you for tea.",
-      "ask_met": "Did you meet? Let us know."
+      "match_proposed": {
+        "title": "Tea together",
+        "body": "Someone who understands is ready to meet you for tea."
+      },
+      "ask_met": {
+        "title": "Did you meet?",
+        "body": "Let us know how it went."
+      }
     },
     "chat": {
-      "new_message": "New message in your chat room."
+      "new_message": {
+        "title": "New message",
+        "body": "New message in your chat room."
+      }
     },
     "emergency": {
-      "sos_raised_contact": "A person who trusts you is asking for help.",
-      "sos_responded": "Someone responded to your SOS.",
-      "sos_shared": "Your SOS was shown to mothers in your district.",
-      "trusted_invitation": "You were invited to be a trusted contact.",
-      "plan_sent": "An emergency plan was sent to you."
+      "sos_raised_contact": {
+        "title": "A request for help",
+        "body": "A person who trusts you is asking for help."
+      },
+      "sos_responded": {
+        "title": "A reply to your SOS",
+        "body": "Someone responded to your SOS."
+      },
+      "sos_shared": {
+        "title": "Your SOS is shared",
+        "body": "Your SOS was shown to mothers in your district."
+      },
+      "trusted_invitation": {
+        "title": "An invitation",
+        "body": "You were invited to be a trusted contact."
+      },
+      "plan_sent": {
+        "title": "An emergency plan",
+        "body": "An emergency plan was sent to you."
+      }
     },
     "sharing": {
-      "contact_request": "Someone wants to contact you about your listing.",
-      "listing_decided": "Your listing was reviewed."
+      "contact_request": {
+        "title": "About your listing",
+        "body": "Someone wants to contact you about your listing."
+      },
+      "listing_decided": {
+        "title": "Listing reviewed",
+        "body": "Your listing was reviewed."
+      }
     },
     "wellbeing": {
-      "checkin_reminder": "Time for your weekly check-in."
+      "checkin_reminder": {
+        "title": "Weekly check-in",
+        "body": "Time for your weekly check-in."
+      }
     }
   },
-  "fallback": "You have a new notification.",
-  "unread": "Unread"
+  "fallback": {
+    "title": "New notification",
+    "body": "There is something new for you."
+  },
+  "unread": "Unread",
+  "emptyTitle": "All quiet for now",
+  "emptyDescription": "Replies, reminders and news from the Circle will appear here. Meanwhile, you can look in on the Circle.",
+  "emptyAction": "Open the Circle",
+  "open": "All notifications",
+  "openUnread": "All notifications, new: {{n}}",
+  "badgeLabel": "Unread notifications: {{n}}",
+  "push": {
+    "label": "Notifications on this phone",
+    "hint": "A notification only says that something new is waiting. The text stays in the app.",
+    "denied": "Notifications are turned off in the phone settings. You can turn them on there."
+  }
 }

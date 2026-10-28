@@ -26,12 +26,13 @@ Native builds (`expo prebuild`, then Gradle or Xcode) are not part of `npm run c
 
 All configuration comes from the environment at build time ([`app.config.ts`](app.config.ts)); the values are public and embedded in the bundle, so nothing secret belongs there.
 
-| Variable                    | Meaning                                                                      | Default                      |
-| --------------------------- | ---------------------------------------------------------------------------- | ---------------------------- |
-| `EXPO_PUBLIC_API_URL`       | API root with version, e.g. `https://api.example.invalid/v1`                 | `http://localhost:8080/v1`   |
-| `EXPO_PUBLIC_KRATOS_URL`    | the auth gateway in front of Kratos, e.g. `https://api.example.invalid/auth` | `http://localhost:8080/auth` |
-| `EXPO_PUBLIC_CRISIS_PHONES` | JSON `[{"number","label"}]` shown before the app has ever reached the server | `[]`                         |
-| `BIRGE_APP_ID`              | store identifier for native builds                                           | `invalid.example.birge`      |
+| Variable                     | Meaning                                                                                     | Default                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------- |
+| `EXPO_PUBLIC_API_URL`        | API root with version, e.g. `https://api.example.invalid/v1`                                | `http://localhost:8080/v1`   |
+| `EXPO_PUBLIC_KRATOS_URL`     | the auth gateway in front of Kratos, e.g. `https://api.example.invalid/auth`                | `http://localhost:8080/auth` |
+| `EXPO_PUBLIC_CRISIS_PHONES`  | JSON `[{"number","label"}]` shown before the app has ever reached the server                | `[]`                         |
+| `BIRGE_APP_ID`               | store identifier for native builds                                                          | `invalid.example.birge`      |
+| `BIRGE_GOOGLE_SERVICES_FILE` | path to the deployment's `google-services.json` (Android FCM push); never in the repository | unset: no push on Android    |
 
 `src/lib/config.ts` validates them at startup.
 
@@ -40,12 +41,15 @@ All configuration comes from the environment at build time ([`app.config.ts`](ap
 ```
 src/app/            routes only (Expo Router): _layout, (tabs)/{index,circle,help,profile},
                     chat/{index,[roomId]}, listings, specialists, privacy, knowledge, assistant,
-                    sign-in, sos, checkin, checkin-history, emergency-plan, plan (web, external contact)
+                    sign-in, sos, checkin, checkin-history, emergency-plan, inbox,
+                    plan (web, external contact)
 src/screens/        screen bodies: sign-in, home, help (crisis), circle, chat-rooms, listings,
                     specialists, profile, privacy, knowledge, assistant, sos, checkin,
-                    checkin-history, emergency-plan, external-plan, placeholder, signed-in gate
+                    checkin-history, emergency-plan, inbox, notification-row, external-plan,
+                    placeholder, signed-in gate
 src/lib/            app services: config, session, api, storage (.web), crisis-phones, help-outbox,
-                    query, routes, plan-link, format, wellbeing-text
+                    query, routes, plan-link, format, wellbeing-text, inbox, notification-text,
+                    notification-targets, push (.web)
 public/             web shell: index.html (links the manifest), manifest.webmanifest, icon
 scripts/            check-web-build.mjs
 ```
@@ -56,5 +60,7 @@ scripts/            check-web-build.mjs
 - **Sign-in.** Uses `Screen layout="form"` so the title, explanation, fields and primary button are one vertically centred, keyboard-aware group.
 - **Check-in / emergency plan.** Home opens `/checkin`; history is `/checkin-history`. Profile opens `/emergency-plan` (child card, trusted contacts, send).
 - **External plan page.** `/plan#<token>` is the link in the plan SMS for an external trusted contact (no account). Web only (native redirects home), outside the signed-in flow: no `SignedIn` gate, no onboarding redirect, no tabs, a root of the stack (`ROOT_ROUTES`, no Back) and `Screen variant="crisis"` (no SOS entry, no animation). On mount `takePlanToken` reads the fragment, removes it with `history.replaceState` and checks the 43-character base64url shape; the page posts it to `viewExternalPlan` through `publicApi`, the client that never sends the member session (a shared browser may hold one). The token stays in memory only for a retry after a network error: never stored, logged or used as a query key. 404 (also a missing or malformed token) says the link has expired, 429 asks for a pause, a network or server error offers a retry. The tab title is the same neutral title.
+- **Inbox.** `/inbox` lists `listInbox` newest first with "Show more" cursor paging; Home shows the newest five and a button to all of them with the unread count, and the Home tab carries the unread badge (the tab bar is full, so the inbox has no tab of its own). Title and body come from the `inbox` locale namespace by template (`templates.<template>.title|body`); an unknown template gets the generic `fallback`, never the raw code. Opening an item calls `markRead` (the cache updates at once, then the inbox is refetched) and goes to the item's place from the one table in `lib/notification-targets.ts`; params are used only when they are UUIDs, and a template without a screen opens nothing. Every inbox query lives under the `['inbox']` key with `staleTime: 0`, so screen focus, the app returning to the foreground and a push received in the foreground refresh all of them.
+- **Push** (iOS and Android; `push.web.ts` does nothing on the web). `expo-notifications` (MIT, the Expo SDK module; pinned to the version SDK 58 bundles) is used only for the permission, the **native** device token (`getDevicePushTokenAsync`: FCM on Android, APNs on iOS; no Expo push service) and tap handling. The permission is asked after the first-run setup (once per phone) or from the Profile toggle, never at first launch. The device is registered with `registerDevice` under a random device ID made per sign-in, again on every start while push is on (tokens rotate), and removed with `unregisterDevice` before sign-out and account deletion (`SessionProvider beforeSignOut`, bounded to 5 s); the ID is forgotten when a session expires. Android without `BIRGE_GOOGLE_SERVICES_FILE` never asks; a refused permission, a missing token or a failed registration skip quietly and the inbox still works. A push carries only `notification_id` (FCM `data`, APNs top level) and a neutral title; a tap fetches the newest items and opens that item's place, or the inbox. A push in the foreground shows its neutral title and refreshes the inbox; the app never schedules a local notification. iOS builds need the Push Notifications capability (the config plugin adds the `aps-environment` entitlement).
 - **Data.** React Query for reads; retries only what can succeed; a 401 ends the session.
 - **UI.** Only `@birge/ui` components and tokens in screens; texts only from `@birge/i18n`.
