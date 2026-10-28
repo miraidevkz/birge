@@ -85,11 +85,3 @@ RETURNING id;
 UPDATE chat.reports
 SET closed_at = @closed_at
 WHERE message_id = @message_id AND closed_at IS NULL;
-
--- name: ChatSchemaExists :one
-SELECT EXISTS (
-    SELECT 1 FROM information_schema.schemata WHERE schema_name = 'chat'
-) AS present;
-
--- name: ChatRoomsEmpty :one
-SELECT NOT EXISTS (SELECT 1 FROM chat.rooms) AS empty;

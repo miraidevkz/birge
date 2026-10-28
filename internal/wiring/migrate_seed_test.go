@@ -47,6 +47,31 @@ func referenceIDs(t *testing.T, pool *pgxpool.Pool) map[string]string {
 	return out
 }
 
+// groupRoomIDs returns "district/<district id>" and "topic/<code>" -> room id
+// for every chat group room.
+func groupRoomIDs(t *testing.T, pool *pgxpool.Pool) map[string]string {
+	t.Helper()
+	rows, err := pool.Query(context.Background(), `
+		SELECT CASE kind WHEN 'district' THEN 'district/' || district_id::text ELSE 'topic/' || topic_code END, id::text
+		FROM chat.rooms WHERE kind IN ('district', 'topic')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			t.Fatal(err)
+		}
+		out[k] = v
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
 func selectableCities(t *testing.T, pool *pgxpool.Pool) map[string]bool {
 	t.Helper()
 	var cities []membershipmodel.City
@@ -120,13 +145,51 @@ func TestReferenceSyncOnMigrate(t *testing.T) {
 	if got, wantID := first["city/astana"], membershipmodel.CityID("astana").String()+":true"; got != wantID {
 		t.Errorf("astana = %s, want the stable %s", got, wantID)
 	}
-	// A fresh database gets one DEMO chat room per district, the new ones included.
-	var districtRooms int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM chat.rooms WHERE kind = 'district'`).Scan(&districtRooms); err != nil {
+	// A fresh database gets one chat room per active district and needs code.
+	var districtRooms, topicRooms int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE kind = 'district'), count(*) FILTER (WHERE kind = 'topic') FROM chat.rooms`).Scan(&districtRooms, &topicRooms); err != nil {
 		t.Fatal(err)
 	}
-	if districtRooms != wantDistricts {
-		t.Errorf("district rooms = %d, want %d", districtRooms, wantDistricts)
+	if districtRooms != wantDistricts || topicRooms != len(want.Needs) {
+		t.Errorf("district rooms = %d, topic rooms = %d; want %d, %d", districtRooms, topicRooms, wantDistricts, len(want.Needs))
+	}
+	if !strings.Contains(buf.String(), fmt.Sprintf(`"districts_created":%d`, wantDistricts)) {
+		t.Errorf("first migrate missing the created district rooms count: %s", buf.String())
+	}
+	var almatyTitle string
+	if err := pool.QueryRow(ctx, `SELECT title_key FROM chat.rooms WHERE kind = 'district' AND district_id = $1`,
+		membershipmodel.DistrictID("almaty", "almaty_bostandyk")).Scan(&almatyTitle); err != nil || almatyTitle != "chat.room.district.almaty_bostandyk" {
+		t.Errorf("almaty_bostandyk room title = %q, %v", almatyTitle, err)
+	}
+
+	// An older stand: the DEMO seed ran before the Kazakhstan districts
+	// existed, so only the DEMO districts have rooms. The next migrate adds
+	// the missing rooms and keeps the DEMO ones with their ids.
+	tag, err := pool.Exec(ctx, `DELETE FROM chat.rooms WHERE kind = 'district'
+		AND district_id NOT IN (SELECT id FROM membership.districts WHERE code LIKE 'demo\_%')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing := int(tag.RowsAffected())
+	if missing == 0 || missing == wantDistricts {
+		t.Fatalf("older stand setup removed %d of %d district rooms", missing, wantDistricts)
+	}
+	demoRooms := groupRoomIDs(t, pool)
+	buf.Reset()
+	if err := Migrate(ctx, logger, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), fmt.Sprintf(`"districts_created":%d`, missing)) || !strings.Contains(buf.String(), `"topics_created":0`) {
+		t.Errorf("older stand migrate created the wrong rooms: %s", buf.String())
+	}
+	rooms := groupRoomIDs(t, pool)
+	if len(rooms) != wantDistricts+len(want.Needs) {
+		t.Errorf("group rooms after the older stand migrate = %d, want %d", len(rooms), wantDistricts+len(want.Needs))
+	}
+	for k, v := range demoRooms {
+		if rooms[k] != v {
+			t.Errorf("existing room %s changed its id: %s -> %s", k, v, rooms[k])
+		}
 	}
 
 	// A member on a DEMO district, as on the demo stand.
@@ -152,6 +215,12 @@ func TestReferenceSyncOnMigrate(t *testing.T) {
 	}
 	if again := referenceIDs(t, pool); fmt.Sprint(again) != fmt.Sprint(first) {
 		t.Fatal("second migrate changed reference IDs or flags")
+	}
+	if !strings.Contains(buf.String(), `"districts_created":0`) || !strings.Contains(buf.String(), `"topics_created":0`) {
+		t.Errorf("repeated migrate created chat rooms: %s", buf.String())
+	}
+	if again := groupRoomIDs(t, pool); fmt.Sprint(again) != fmt.Sprint(rooms) {
+		t.Error("repeated migrate changed chat room ids")
 	}
 
 	// The deployment drops the DEMO set: its rows stay, inactive.
@@ -179,9 +248,9 @@ func TestReferenceSyncOnMigrate(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT district_id FROM membership.members WHERE id = $1`, memberID).Scan(&kept); err != nil || kept != demoDistrict {
 		t.Fatalf("member district = %v, %v; want the kept %v", kept, err, demoDistrict)
 	}
-	var roomsAfter int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM chat.rooms WHERE kind = 'district'`).Scan(&roomsAfter); err != nil || roomsAfter != districtRooms {
-		t.Errorf("district rooms after deactivation = %d, %v; want %d", roomsAfter, err, districtRooms)
+	// The deactivated DEMO districts keep their rooms (history), same ids.
+	if after := groupRoomIDs(t, pool); fmt.Sprint(after) != fmt.Sprint(rooms) {
+		t.Errorf("chat rooms after deactivation changed: %d rooms, want the same %d", len(after), len(rooms))
 	}
 
 	// Bringing the set back reactivates the same rows.
@@ -191,6 +260,9 @@ func TestReferenceSyncOnMigrate(t *testing.T) {
 	}
 	if back := referenceIDs(t, pool); fmt.Sprint(back) != fmt.Sprint(first) {
 		t.Fatal("restoring the DEMO set did not reactivate the same rows")
+	}
+	if back := groupRoomIDs(t, pool); fmt.Sprint(back) != fmt.Sprint(rooms) {
+		t.Error("restoring the DEMO set changed chat rooms")
 	}
 	if !strings.Contains(buf.String(), `"name":"reference"`) {
 		t.Errorf("reactivating the DEMO set must log DemoPreset: %s", buf.String())

@@ -867,22 +867,94 @@ func TestDirectRoomFromEachOriginOncePostgres(t *testing.T) {
 	}
 }
 
-func TestDemoSeedPostgres(t *testing.T) {
-	pool := testinfra.Postgres(t)
-	d := uuid.New()
-	rooms := []adapter.DemoRoom{{DistrictID: &d, TitleKey: "chat.room.district.demo_district_a"}, {TopicCode: "autism", TitleKey: "chat.room.topic.autism"}}
-	now := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
-	seeded, err := adapter.SeedDemoIfEmpty(context.Background(), pool, rooms, now)
-	if err != nil || !seeded {
-		t.Fatalf("seed %v %v", seeded, err)
+// TestEnsureGroupRoomsPostgres: concurrent ensures of one district make one
+// room; EnsureGroupRooms creates only what is missing, keeps existing ids and
+// titles, and leaves the room of a district it is no longer given.
+func TestEnsureGroupRoomsPostgres(t *testing.T) {
+	e := newEnv(t, service.Settings{})
+	d1, d2, d3 := uuid.New(), uuid.New(), uuid.New()
+
+	const workers = 16
+	ids := make([]uuid.UUID, workers)
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r, err := e.svc.EnsureDistrictRoom(e.ctx, d1, "chat.room.district.demo_district_a")
+			if err != nil {
+				errs <- err
+				return
+			}
+			ids[i] = r.ID
+		}()
 	}
-	seeded, err = adapter.SeedDemoIfEmpty(context.Background(), pool, rooms, now)
-	if err != nil || seeded {
-		t.Fatalf("second seed %v %v", seeded, err)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent ensure: %v", err)
 	}
-	var n int
-	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM chat.rooms`).Scan(&n); err != nil || n != 2 {
-		t.Fatalf("rooms %d %v", n, err)
+	for _, id := range ids {
+		if id != ids[0] {
+			t.Fatalf("concurrent ensures returned different rooms: %v", ids)
+		}
+	}
+	countDistrict := func(d uuid.UUID) int {
+		var n int
+		if err := e.pool.QueryRow(e.ctx, `SELECT count(*) FROM chat.rooms WHERE kind = 'district' AND district_id = $1`, d).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := countDistrict(d1); n != 1 {
+		t.Fatalf("district rooms after concurrent ensures = %d, want 1", n)
+	}
+
+	refs := []service.DistrictRoomRef{
+		{DistrictID: d1, TitleKey: "chat.room.district.other_title"},
+		{DistrictID: d2, TitleKey: "chat.room.district.demo_district_b"},
+		{DistrictID: d3, TitleKey: "chat.room.district.demo_district_c"},
+	}
+	topics := []service.TopicRoomRef{{Code: "autism", TitleKey: "chat.room.topic.autism"}}
+	res, err := e.svc.EnsureGroupRooms(e.ctx, refs, topics)
+	if err != nil || res != (service.EnsureGroupRoomsResult{DistrictsCreated: 2, TopicsCreated: 1}) {
+		t.Fatalf("first ensure = %+v, %v", res, err)
+	}
+	kept, err := e.svc.EnsureDistrictRoom(e.ctx, d1, "chat.room.district.demo_district_a")
+	if err != nil || kept.ID != ids[0] || kept.TitleKey != "chat.room.district.demo_district_a" {
+		t.Fatalf("existing room changed: %+v, %v", kept, err)
+	}
+	// Concurrent runs of the whole step (two migrate jobs) create nothing twice.
+	var wg2 sync.WaitGroup
+	results := make([]service.EnsureGroupRoomsResult, 4)
+	runErrs := make([]error, 4)
+	for i := range results {
+		wg2.Add(1)
+		go func() {
+			defer wg2.Done()
+			results[i], runErrs[i] = e.svc.EnsureGroupRooms(e.ctx, refs, topics)
+		}()
+	}
+	wg2.Wait()
+	for i := range results {
+		if runErrs[i] != nil || results[i] != (service.EnsureGroupRoomsResult{}) {
+			t.Fatalf("repeated ensure %d = %+v, %v; want nothing created", i, results[i], runErrs[i])
+		}
+	}
+	// d3 is deactivated: no longer passed, its room stays.
+	if res, err := e.svc.EnsureGroupRooms(e.ctx, refs[:2], topics); err != nil || res != (service.EnsureGroupRoomsResult{}) {
+		t.Fatalf("ensure without d3 = %+v, %v", res, err)
+	}
+	if n := countDistrict(d3); n != 1 {
+		t.Fatalf("deactivated district rooms = %d, want 1", n)
+	}
+	// Invalid input fails the step instead of skipping a room silently.
+	if _, err := e.svc.EnsureGroupRooms(e.ctx, []service.DistrictRoomRef{{DistrictID: uuid.Nil, TitleKey: "chat.room.district.x"}}, nil); !errors.Is(err, model.ErrInvalidInput) {
+		t.Fatalf("nil district: %v", err)
+	}
+	if _, err := e.svc.EnsureGroupRooms(e.ctx, nil, []service.TopicRoomRef{{Code: "Bad-Code", TitleKey: "chat.room.topic.x"}}); !errors.Is(err, model.ErrInvalidInput) {
+		t.Fatalf("bad topic code: %v", err)
 	}
 }
 

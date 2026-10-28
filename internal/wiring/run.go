@@ -89,9 +89,11 @@ const rolesHeader = "SET lock_timeout = '5s';\nSET statement_timeout = '60s';\n"
 // After migrations, the membership reference tables are synced with the
 // reference sets in cfg.ReferencePresets (syncReference: missing entries
 // added, removed ones deactivated, nothing deleted; logs event=DemoPreset when
-// the DEMO set adds rows). DEMO chat rooms, specialists, listings and
-// knowledge follow, each only into its own empty tables; specialists and
-// listings only while the DEMO reference is in use.
+// the DEMO set adds rows). Then every active district and needs code gets
+// its chat group room (ensureChatRooms: only adds, existing rooms keep their
+// ids). DEMO specialists, listings and knowledge follow, each only into its
+// own empty tables; specialists and listings only while the DEMO reference
+// is in use.
 func Migrate(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	sqlDB, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {
@@ -133,7 +135,7 @@ func Migrate(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	if err := syncReference(ctx, logger, cfg.DatabaseURL, cfg.ReferencePresets); err != nil {
 		return err
 	}
-	if err := seedDemoChat(ctx, logger, cfg.DatabaseURL); err != nil {
+	if err := ensureChatRooms(ctx, logger, cfg.DatabaseURL); err != nil {
 		return err
 	}
 	if err := seedDemoDirectory(ctx, logger, cfg.DatabaseURL); err != nil {

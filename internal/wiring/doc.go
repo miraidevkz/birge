@@ -33,8 +33,10 @@
 //     stopped together on shutdown or on the first failure.
 //   - Migrate: the migrations embedded in the binary (package birge/db),
 //     applied with goose under a PostgreSQL session lock, then db/roles.sql
-//     when asked (ADR-0006), then DEMO membership reference and knowledge
-//     seed when those tables are empty (presets; never overwrites).
+//     when asked (ADR-0006), then the membership reference sync, a chat group
+//     room for every active district and needs code (only adds), and the
+//     DEMO directory, sharing and knowledge seed when those tables are empty
+//     (presets; never overwrites).
 //   - kb-reindex: rebuilds the Qdrant collection from PublishedFragments
 //     (ADR-0010); requires TEI, Qdrant and BIRGE_EMBEDDING_MODEL_ID.
 //   - kb-export: writes published knowledge markdown under --out (ADR-0022);

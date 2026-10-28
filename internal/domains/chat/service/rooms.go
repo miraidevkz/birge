@@ -24,44 +24,114 @@ func secondsDur(n int) time.Duration { return time.Duration(n) * time.Second }
 // EnsureDistrictRoom returns the district's room, creating it on first use
 // (reference data seeding). Idempotent, also under concurrency.
 func (s *Service) EnsureDistrictRoom(ctx context.Context, districtID uuid.UUID, titleKey string) (model.Room, error) {
+	r, _, err := s.ensureDistrictRoom(ctx, districtID, titleKey)
+	return r, err
+}
+
+// EnsureTopicRoom returns the topic room of a needs code, creating it on
+// first use. Idempotent, also under concurrency.
+func (s *Service) EnsureTopicRoom(ctx context.Context, code, titleKey string) (model.Room, error) {
+	r, _, err := s.ensureTopicRoom(ctx, code, titleKey)
+	return r, err
+}
+
+// DistrictRoomRef names the room of one active membership district for
+// EnsureGroupRooms: the district id and the room title locale key.
+type DistrictRoomRef struct {
+	DistrictID uuid.UUID
+	TitleKey   string
+}
+
+// TopicRoomRef names the room of one active needs code for EnsureGroupRooms.
+type TopicRoomRef struct {
+	Code     string
+	TitleKey string
+}
+
+// EnsureGroupRoomsResult counts the rooms one EnsureGroupRooms call created.
+type EnsureGroupRoomsResult struct {
+	DistrictsCreated int
+	TopicsCreated    int
+}
+
+// EnsureGroupRooms makes sure every given district and needs code has its
+// group room (birge migrate passes the active reference data after the
+// membership sync). It only adds: an existing room keeps its id and title,
+// and a room whose district or code is not passed (deactivated reference
+// data) is left as it is, with its members and history. Idempotent, also
+// under concurrent runs: the partial unique indexes on chat.rooms make the
+// insert a no-op for a room that already exists. Each room is its own
+// transaction, so a failure leaves the rooms created so far, and the next
+// run adds the rest.
+func (s *Service) EnsureGroupRooms(ctx context.Context, districts []DistrictRoomRef, topics []TopicRoomRef) (EnsureGroupRoomsResult, error) {
+	var res EnsureGroupRoomsResult
+	for _, d := range districts {
+		_, created, err := s.ensureDistrictRoom(ctx, d.DistrictID, d.TitleKey)
+		if err != nil {
+			return res, fmt.Errorf("chat: district room %s: %w", d.DistrictID, err)
+		}
+		if created {
+			res.DistrictsCreated++
+		}
+	}
+	for _, t := range topics {
+		_, created, err := s.ensureTopicRoom(ctx, t.Code, t.TitleKey)
+		if err != nil {
+			return res, fmt.Errorf("chat: topic room %s: %w", t.Code, err)
+		}
+		if created {
+			res.TopicsCreated++
+		}
+	}
+	return res, nil
+}
+
+func (s *Service) ensureDistrictRoom(ctx context.Context, districtID uuid.UUID, titleKey string) (model.Room, bool, error) {
 	if districtID == uuid.Nil || !titleKeyRe.MatchString(titleKey) {
-		return model.Room{}, model.ErrInvalidInput
+		return model.Room{}, false, model.ErrInvalidInput
 	}
 	d := districtID
 	return s.ensureGroupRoom(ctx, model.Room{Kind: model.KindDistrict, DistrictID: &d, TitleKey: titleKey},
 		func(tx port.Tx) (model.Room, error) { return tx.GetDistrictRoom(ctx, districtID) })
 }
 
-// EnsureTopicRoom returns the topic room of a needs code, creating it on
-// first use. Idempotent, also under concurrency.
-func (s *Service) EnsureTopicRoom(ctx context.Context, code, titleKey string) (model.Room, error) {
+func (s *Service) ensureTopicRoom(ctx context.Context, code, titleKey string) (model.Room, bool, error) {
 	if !topicCodeRe.MatchString(code) || !titleKeyRe.MatchString(titleKey) {
-		return model.Room{}, model.ErrInvalidInput
+		return model.Room{}, false, model.ErrInvalidInput
 	}
 	return s.ensureGroupRoom(ctx, model.Room{Kind: model.KindTopic, TopicCode: code, TitleKey: titleKey},
 		func(tx port.Tx) (model.Room, error) { return tx.GetTopicRoom(ctx, code) })
 }
 
-func (s *Service) ensureGroupRoom(ctx context.Context, r model.Room, get func(port.Tx) (model.Room, error)) (model.Room, error) {
+// ensureGroupRoom inserts r unless its district or topic already has a room
+// (ON CONFLICT DO NOTHING on the partial unique index), and then reads the
+// existing one. Under READ COMMITTED the losing insert waits for the
+// winner's commit, so the read that follows sees its row. created reports
+// whether this call inserted the room.
+func (s *Service) ensureGroupRoom(ctx context.Context, r model.Room, get func(port.Tx) (model.Room, error)) (model.Room, bool, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
-		return model.Room{}, fmt.Errorf("chat: room id: %w", err)
+		return model.Room{}, false, fmt.Errorf("chat: room id: %w", err)
 	}
 	r.ID, r.CreatedAt = id, s.now()
 	var out model.Room
+	var created bool
 	err = s.Store.InTx(ctx, func(tx port.Tx) error {
-		created, inserted, err := tx.InsertGroupRoom(ctx, r)
+		room, inserted, err := tx.InsertGroupRoom(ctx, r)
 		if err != nil {
 			return err
 		}
 		if inserted {
-			out = created
+			out, created = room, true
 			return nil
 		}
 		out, err = get(tx)
 		return err
 	})
-	return out, err
+	if err != nil {
+		return model.Room{}, false, err
+	}
+	return out, created, nil
 }
 
 // OpenDirectRoom opens the private room of a and b for an origin event

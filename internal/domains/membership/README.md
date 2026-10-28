@@ -96,7 +96,7 @@ Cities, districts and needs come from versioned files in `presets/`: `demo` (the
 
 The files own the reference tables: a row added by hand that is in no selected set is deactivated by the next migrate. District codes carry their city prefix and are unique across all sets, because clients label districts and district rooms by code alone (`district.<code>`, `chat.room.district.<code>`).
 
-A deactivated entry is hidden from `GET /reference/*` and refused as a new choice (`unknown_district`, `unknown_need`). A member keeps her deactivated district (a profile update that resends it is not a new choice) and a child card keeps its deactivated needs on edit. Side effects: the sync creates no chat rooms. The DEMO chat seed runs only on an empty `chat.rooms`, so a fresh database gets a district room for every active district (the Kazakhstan ones included) and an existing stand gets none for new districts; deactivation leaves rooms as they are.
+A deactivated entry is hidden from `GET /reference/*` and refused as a new choice (`unknown_district`, `unknown_need`). A member keeps her deactivated district (a profile update that resends it is not a new choice) and a child card keeps its deactivated needs on edit. Side effects: the sync itself creates no chat rooms; `birge migrate` runs a wiring step right after it that passes the active districts and needs codes to chat (`EnsureGroupRooms`), so every active district has its room on fresh and existing databases; deactivation leaves rooms as they are.
 
 ## Invariants
 

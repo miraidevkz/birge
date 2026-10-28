@@ -7,8 +7,9 @@
 //
 // Other contexts and the wiring may rely on:
 //
-//   - EnsureDistrictRoom / EnsureTopicRoom: idempotent group-room creation
-//     from reference data;
+//   - EnsureDistrictRoom / EnsureTopicRoom / EnsureGroupRooms: idempotent
+//     group-room creation from reference data (birge migrate passes the
+//     active districts and needs codes on every run);
 //   - HandleRoomEvent / OpenDirectRoom: one direct room per origin and pair,
 //     each event handled once (platform.processed_events);
 //   - HandleCrisisEscalation, HandlePush, HandleRetention, EnsureRetentionTimer:

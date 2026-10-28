@@ -12,30 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const chatRoomsEmpty = `-- name: ChatRoomsEmpty :one
-SELECT NOT EXISTS (SELECT 1 FROM chat.rooms) AS empty
-`
-
-func (q *Queries) ChatRoomsEmpty(ctx context.Context) (bool, error) {
-	row := q.db.QueryRow(ctx, chatRoomsEmpty)
-	var empty bool
-	err := row.Scan(&empty)
-	return empty, err
-}
-
-const chatSchemaExists = `-- name: ChatSchemaExists :one
-SELECT EXISTS (
-    SELECT 1 FROM information_schema.schemata WHERE schema_name = 'chat'
-) AS present
-`
-
-func (q *Queries) ChatSchemaExists(ctx context.Context) (bool, error) {
-	row := q.db.QueryRow(ctx, chatSchemaExists)
-	var present bool
-	err := row.Scan(&present)
-	return present, err
-}
-
 const closeReports = `-- name: CloseReports :execrows
 UPDATE chat.reports
 SET closed_at = $1
