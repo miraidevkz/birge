@@ -1,6 +1,7 @@
 package wiring
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
+	analyticsmodel "birge/internal/domains/analytics/model"
 	membershipadapter "birge/internal/domains/membership/adapter"
 	membershipservice "birge/internal/domains/membership/service"
 	privacyadapter "birge/internal/domains/privacy/adapter"
@@ -107,6 +109,12 @@ var deletionPolicy = map[string]struct {
 	"directory.reviews":     {"", []string{"author_id"}},
 
 	"moderation.items": {"", []string{"decided_by"}},
+
+	// Analytics keeps no member ID at all: facts name pseudonyms
+	// (HMAC-SHA256, bytea), which checkTombstonesAndOthers checks directly.
+	"analytics.facts":          {"", nil},
+	"analytics.weekly_rollups": {"", nil},
+	"analytics.erased_actors":  {"her pseudonym, so her late events are not counted (ADR-0024)", nil},
 }
 
 // memberColumnPattern matches column names that can hold a member (or
@@ -194,6 +202,7 @@ type deletionSeed struct {
 	heldMessage, otherListing, otherSos uuid.UUID
 	keptSpecialist, otherReview, match  uuid.UUID
 	directRoom, herUpload, herListing   uuid.UUID
+	analyticsKey                        []byte
 }
 
 func seedEveryContext(t *testing.T, ctx context.Context, pool *pgxpool.Pool, her uuid.UUID) deletionSeed {
@@ -339,6 +348,17 @@ func seedEveryContext(t *testing.T, ctx context.Context, pool *pgxpool.Pool, her
 	// moderation: an item about her review holds only IDs and codes
 	exec(`INSERT INTO moderation.items (id, kind, object_id, created_at) VALUES ($1, 'review', $2, now())`, id(), herReview)
 
+	// analytics: her active day, her SOS and its closing (no actor), and the
+	// other member's active day
+	s.analyticsKey = bytes.Repeat([]byte{0x5a}, 32)
+	herActor, otherActor := analyticsmodel.Pseudonym(s.analyticsKey, her), analyticsmodel.Pseudonym(s.analyticsKey, s.other)
+	herSosSubject := analyticsmodel.SubjectPseudonym(s.analyticsKey, herSos)
+	exec(`INSERT INTO analytics.facts (id, event_type, occurred_at, actor) VALUES ($1, 'membership.MemberActiveDay', now(), $2), ($3, 'membership.MemberActiveDay', now(), $4)`,
+		id(), herActor, id(), otherActor)
+	exec(`INSERT INTO analytics.facts (id, event_type, occurred_at, code, actor, subject) VALUES ($1, 'emergency.SosRaised', now(), 'other', $2, $3)`,
+		id(), herActor, herSosSubject)
+	exec(`INSERT INTO analytics.facts (id, event_type, occurred_at, subject) VALUES ($1, 'emergency.SosClosed', now(), $2)`, id(), herSosSubject)
+
 	// Pending timers of her and her records (far in the future: only cancelling may end them).
 	for _, tm := range []struct {
 		kind    string
@@ -394,7 +414,7 @@ func TestAccountDeletionEveryContext(t *testing.T) {
 		t.Fatalf("POST /v1/me/deletion-request: %d %s", rec.Code, rec.Body)
 	}
 
-	// The worker side: relay, the ten deletion consumers and the timers
+	// The worker side: relay, the eleven deletion consumers and the timers
 	// (privacy shred, membership identity, sharing objects), as RunWorker wires them.
 	kratos, kratosDeletes := fakeKratosWithDelete(t, e.identity)
 	identities, err := NewKratosIdentities(kratos.URL, "phone", nil)
@@ -415,10 +435,10 @@ func TestAccountDeletionEveryContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	clk := clock.System{}
-	deleters := NewDeleters(e.pool, objects, identities, clk, logger)
+	deleters := NewDeleters(e.pool, objects, identities, seed.analyticsKey, clk, logger)
 	consumers := deleters.Consumers(js, e.pool, logger)
-	if len(consumers) != 10 {
-		t.Fatalf("consumers = %d, want 10", len(consumers))
+	if len(consumers) != 11 {
+		t.Fatalf("consumers = %d, want 11", len(consumers))
 	}
 	privacy := &privacyservice.Service{
 		Store: &privacyadapter.PostgresStore{Pool: e.pool}, Shredder: e.envelope, Clock: clk, Logger: logger,
@@ -648,10 +668,15 @@ func checkTombstonesAndOthers(t *testing.T, ctx context.Context, pool *pgxpool.P
 	expect("other member's sos", `SELECT count(*) FROM emergency.sos_requests WHERE id = $1`, 1, s.otherSos)
 	expect("other member", `SELECT count(*) FROM membership.members WHERE id = $1 AND cardinality(roles) > 0`, 1, s.other)
 	expect("pending timers of her records", `SELECT count(*) FROM platform.timers WHERE subject_id = ANY($1) AND done_at IS NULL`, 0, s.herTimerSubjects)
+	herActor := analyticsmodel.Pseudonym(s.analyticsKey, her)
+	expect("her analytics facts", `SELECT count(*) FROM analytics.facts WHERE actor = $1`, 0, herActor)
+	expect("her closed SOS fact", `SELECT count(*) FROM analytics.facts WHERE event_type = 'emergency.SosClosed'`, 0)
+	expect("other member's analytics fact", `SELECT count(*) FROM analytics.facts WHERE actor = $1`, 1, analyticsmodel.Pseudonym(s.analyticsKey, s.other))
+	expect("her erased pseudonym", `SELECT count(*) FROM analytics.erased_actors WHERE actor = $1`, 1, herActor)
 	expect("audit entries", `SELECT count(DISTINCT action) FROM platform.audit_log
-		WHERE object_type = 'member' AND object_id = $1 AND action LIKE '%.member_deleted' AND actor_role = 'system'`, 11, her)
+		WHERE object_type = 'member' AND object_id = $1 AND action LIKE '%.member_deleted' AND actor_role = 'system'`, 12, her)
 	expect("one audit entry per context", `SELECT count(*) FROM platform.audit_log
-		WHERE object_type = 'member' AND object_id = $1 AND action LIKE '%.member_deleted'`, 11, her)
+		WHERE object_type = 'member' AND object_id = $1 AND action LIKE '%.member_deleted'`, 12, her)
 }
 
 // databaseSnapshot returns an md5 of every table's rows, by table.

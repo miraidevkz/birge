@@ -17,19 +17,20 @@
 //     everywhere else; chat WebSocket authenticates in its first frame) →
 //     request validation → generated handlers (meta, membership, privacy,
 //     notify, safety, wellbeing, emergency, assistant, knowledge, circle,
-//     chat, sharing, directory, moderation) and GET /v1/chat/ws.
+//     chat, sharing, directory, moderation, analytics) and GET /v1/chat/ws.
 //   - The worker (RunWorker): outbox relay to JetStream, the notify
 //     DeliveryRequested consumer, the emergency.SosShared district-push
 //     consumer, chat.RoomOpenerConsumer, chat.MentorRoleConsumer
 //     (membership.MentorRoleChanged), moderation.QueueConsumer (five
-//     submission events), sharing/directory/chat/membership
+//     submission events), analytics.FactsConsumer (the metric events of
+//     ADR-0024), sharing/directory/chat/membership
 //     moderation.Decided consumers, the knowledge retrieval indexer (when
 //     TEI+Qdrant are set) and the timers worker with notify, privacy,
 //     safety.EscalationBackup, wellbeing.Reminder, emergency.SosAutoClose,
 //     assistant.RetentionPurge, knowledge review/expire, circle
-//     match/expire/ask-met, chat crisis/push/retention and sharing
-//     ProcessPhoto/AutoClose (ADR-0007, ADR-0020), stopped together on
-//     shutdown or on the first failure.
+//     match/expire/ask-met, chat crisis/push/retention, sharing
+//     ProcessPhoto/AutoClose and analytics.Retention (ADR-0007, ADR-0020),
+//     stopped together on shutdown or on the first failure.
 //   - Migrate: the migrations embedded in the binary (package birge/db),
 //     applied with goose under a PostgreSQL session lock, then db/roles.sql
 //     when asked (ADR-0006), then DEMO membership reference and knowledge
@@ -46,7 +47,8 @@
 //     (membership role mentor), AuthorSuspender (membership.SuspendAuthor) and
 //     Crisis (safety Detect + CrisisPhones + OpenEscalation source chat),
 //     moderation ContentSources (chat/sharing/directory/membership summaries),
-//     CircleMet Acquaintances (circle.Met), assistant
+//     CircleMet Acquaintances (circle.Met), analytics Cohorts
+//     (wellbeing.CohortAggregates: counts, means and medians only), assistant
 //     consent/lexicon/profiles/retrieval/LLM, wellbeing/assistant CrisisOpener
 //     → safety.OpenEscalation, sharing ObjectStore (platform/objectstore;
 //     Disabled when BIRGE_S3_* unset), the notify Recipients (membership,

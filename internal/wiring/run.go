@@ -18,6 +18,8 @@ import (
 	"github.com/pressly/goose/v3/lock"
 
 	birgedb "birge/db"
+	analyticsadapter "birge/internal/domains/analytics/adapter"
+	analyticsservice "birge/internal/domains/analytics/service"
 	assistantadapter "birge/internal/domains/assistant/adapter"
 	assistantservice "birge/internal/domains/assistant/service"
 	chatadapter "birge/internal/domains/chat/adapter"
@@ -252,9 +254,10 @@ func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
 
 // RunWorker runs the background loops until ctx is cancelled: the outbox
 // relay to JetStream, the notify DeliveryRequested consumer, the emergency
-// SosShared district-push consumer, one privacy.DataDeletionRequested
-// consumer per context (Deleters) and the timers worker with the notify,
-// privacy, safety, wellbeing and emergency handlers, plus /healthz and
+// SosShared district-push consumer, the analytics facts consumer, one
+// privacy.DataDeletionRequested consumer per context (Deleters) and the
+// timers worker with every context's handlers (analytics retention among
+// them), plus /healthz and
 // /readyz (database and NATS) on the HTTP address. When one loop fails, the
 // others are stopped and the error is returned, so the orchestrator restarts
 // the process instead of running it half-working.
@@ -411,7 +414,16 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		Clock:   clk,
 		Logger:  logger,
 	}
-	deleters := NewDeleters(pool, objects, identities, clk, logger)
+	analytics := &analyticsservice.Service{
+		Store:    &analyticsadapter.PostgresStore{Pool: pool},
+		Clock:    clk,
+		Logger:   logger,
+		Settings: analyticsservice.Settings{TimeZone: cfg.TimeZone, Key: cfg.AnalyticsKey},
+	}
+	if err := analytics.EnsureRetentionTimer(ctx); err != nil {
+		return fmt.Errorf("worker: analytics retention: %w", err)
+	}
+	deleters := NewDeleters(pool, objects, identities, cfg.AnalyticsKey, clk, logger)
 	handlers, err := mergeHandlers(
 		deleters.TimerHandlers(),
 		(&notifyadapter.TimerHandlers{Service: notify}).Handlers(),
@@ -424,6 +436,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		(&circleadapter.TimerHandlers{Service: circle}).Handlers(),
 		(&chatadapter.TimerHandlers{Service: chat}).Handlers(),
 		(&sharingadapter.TimerHandlers{Service: sharing}).Handlers(),
+		(&analyticsadapter.TimerHandlers{Service: analytics}).Handlers(),
 	)
 	if err != nil {
 		return err
@@ -444,6 +457,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	chatMentors := &chatadapter.MentorRoleConsumer{JS: js, Stream: StreamName, Service: chat, Logger: logger}
 	membershipMod := &membershipadapter.ModerationConsumer{JS: js, Service: members, Logger: logger}
 	moderationQueue := &moderationadapter.QueueConsumer{JS: js, Stream: StreamName, Service: moderation, Logger: logger}
+	analyticsFacts := &analyticsadapter.FactsConsumer{JS: js, Stream: StreamName, Service: analytics, Logger: logger}
 	timerWorker := &timers.Worker{Pool: pool, Clock: clk, Logger: logger, Handlers: handlers, Interval: timersInterval}
 
 	health := http.NewServeMux()
@@ -456,6 +470,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		"sos shared":            sosShared.Run,
 		"chat room opener":      roomOpener.Run,
 		"moderation queue":      moderationQueue.Run,
+		"analytics facts":       analyticsFacts.Run,
 		"sharing moderation":    sharingMod.Run,
 		"directory moderation":  directoryMod.Run,
 		"chat moderation":       chatMod.Run,

@@ -9,6 +9,10 @@ import (
 func TestValidateEventPayloadAccepts(t *testing.T) {
 	testinfra.ValidateEventPayload(t, "assistant.QuestionAnswered.v1.json",
 		[]byte(`{"message_id":"019a2f00-0000-7000-8000-00000000000a","scope":"rights","source":"knowledge"}`))
+	testinfra.ValidateEventPayload(t, "assistant.ReplyRated.v1.json",
+		[]byte(`{"message_id":"019a2f00-0000-7000-8000-00000000000a","helped":false}`))
+	testinfra.ValidateEventPayload(t, "membership.MemberActiveDay.v1.json",
+		[]byte(`{"member_id":"019a2f00-0000-7000-8000-00000000000a","day":"2026-03-02"}`))
 }
 
 func TestValidateEventPayloadRejects(t *testing.T) {
@@ -21,6 +25,8 @@ func TestValidateEventPayloadRejects(t *testing.T) {
 		"bad uuid":       {"assistant.QuestionAnswered.v1.json", `{"message_id":"42","scope":"rights","source":"crisis"}`},
 		"not a string":   {"assistant.QuestionAnswered.v1.json", `{"message_id":"019a2f00-0000-7000-8000-00000000000a","scope":1,"source":"crisis"}`},
 		"not an object":  {"assistant.QuestionAnswered.v1.json", `[]`},
+		"not a boolean":  {"assistant.ReplyRated.v1.json", `{"message_id":"019a2f00-0000-7000-8000-00000000000a","helped":"yes"}`},
+		"bad date":       {"membership.MemberActiveDay.v1.json", `{"member_id":"019a2f00-0000-7000-8000-00000000000a","day":"02.03.2026"}`},
 		"no such file":   {"does.not.Exist.v1.json", `{}`},
 	} {
 		rec := &failRecorder{TB: t}

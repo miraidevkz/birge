@@ -13,7 +13,7 @@ func TestWriteDevKeys(t *testing.T) {
 	if err := writeDevKeys(dir); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"kek.json", "pow.key", "hash.key", "blind-index.key", "plan-link.key"} {
+	for _, name := range []string{"kek.json", "pow.key", "hash.key", "blind-index.key", "plan-link.key", "analytics.key"} {
 		path := filepath.Join(dir, name)
 		info, err := os.Stat(path)
 		if err != nil {

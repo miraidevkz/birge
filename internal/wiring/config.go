@@ -8,12 +8,14 @@ import (
 	"log/slog"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	analyticsmodel "birge/internal/domains/analytics/model"
 	"birge/internal/domains/assistant/anonymize"
 	assistantservice "birge/internal/domains/assistant/service"
 	"birge/internal/domains/knowledge/retrieval"
@@ -117,6 +119,14 @@ type Config struct {
 	// (BIRGE_PLAN_LINK_KEY_FILE): the API looks links up with it, the worker
 	// mints them when it sends the plan SMS.
 	PlanLinkKey []byte
+	// AnalyticsKey is the pseudonym key of analytics facts
+	// (BIRGE_ANALYTICS_KEY_FILE, worker): HMAC-SHA256(key, member_id). Its
+	// own key, never another one: whoever holds it can test whether a known
+	// member ID has facts (ADR-0024).
+	AnalyticsKey []byte
+	// AnalyticsK is the small-cell threshold of the metrics (BIRGE_ANALYTICS_K,
+	// API): default 5; 1 on the DEMO settings preset (ADR-0024).
+	AnalyticsK int
 	// PublicURL is the public origin of the member web app
 	// (BIRGE_PUBLIC_URL, worker): plan SMS links are PublicURL + "/plan#" + token.
 	PublicURL string
@@ -290,6 +300,7 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		cfg.APIPerIP = l.rate("BIRGE_API_RATE_PER_IP", "300/100ms")
 		cfg.PlanLinkPerIP = l.rate("BIRGE_PLAN_LINK_RATE_PER_IP", "10/1m")
 		cfg.ConsentVersions = l.consentVersionsOrDemo(&cfg)
+		cfg.AnalyticsK = l.analyticsK(&cfg)
 		cfg.QuestionnaireFile = strings.TrimSpace(getenv("BIRGE_QUESTIONNAIRE_FILE"))
 		cfg.Wellbeing = l.questionnaireOrDemo(&cfg)
 		cfg.PracticesBaseURL = l.httpURL("BIRGE_PRACTICES_BASE_URL", true)
@@ -305,6 +316,10 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 	if worker {
 		cfg.NATSURL = l.natsURL("NATS_URL")
 		cfg.PublicURL = l.httpURL("BIRGE_PUBLIC_URL", true)
+		cfg.AnalyticsKey = l.keyFile("BIRGE_ANALYTICS_KEY_FILE", true)
+		if cfg.AnalyticsKey != nil && bytes.Equal(cfg.AnalyticsKey, cfg.PlanLinkKey) {
+			l.fail("BIRGE_ANALYTICS_KEY_FILE must hold its own key, not the plan link key")
+		}
 		l.objectStore(&cfg)
 		cfg.SMSGuard = guard.Config{
 			AllowedPrefixes: cfg.SMSPrefixes,
@@ -980,6 +995,26 @@ func (l *loader) lexiconOrDemo(cfg *Config) *crisis.Lexicon {
 	}
 	cfg.DemoPresets = append(cfg.DemoPresets, presets.NameCrisisLexicon)
 	return lex
+}
+
+// analyticsK is BIRGE_ANALYTICS_K when set. Unset, a deployment that runs on
+// the DEMO settings preset (consent versions from presets) takes the preset's
+// analytics_k (1, so demo data shows numbers) with the DemoPreset warning;
+// any other deployment gets analyticsmodel.DefaultK (5).
+func (l *loader) analyticsK(cfg *Config) int {
+	if strings.TrimSpace(l.getenv("BIRGE_ANALYTICS_K")) != "" {
+		return l.positiveInt("BIRGE_ANALYTICS_K", analyticsmodel.DefaultK)
+	}
+	if !slices.Contains(cfg.DemoPresets, presets.NameConsentVersions) {
+		return analyticsmodel.DefaultK
+	}
+	s, err := l.demoSettings()
+	if err != nil {
+		l.fail("BIRGE_ANALYTICS_K: " + err.Error())
+		return analyticsmodel.DefaultK
+	}
+	cfg.DemoPresets = append(cfg.DemoPresets, presets.NameAnalyticsK)
+	return s.AnalyticsK
 }
 
 func (l *loader) crisisPhonesOrDemo(cfg *Config) {

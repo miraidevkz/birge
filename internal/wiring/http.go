@@ -14,6 +14,9 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"birge/contracts/openapi"
+	analyticsadapter "birge/internal/domains/analytics/adapter"
+	analyticsapi "birge/internal/domains/analytics/api"
+	analyticsservice "birge/internal/domains/analytics/service"
 	assistantadapter "birge/internal/domains/assistant/adapter"
 	"birge/internal/domains/assistant/adapter/anthropic"
 	assistantapi "birge/internal/domains/assistant/api"
@@ -306,6 +309,13 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	mountAPI(api, cfg, members, activity, privacy, notify, safety, wellbeing, emergency, assistantSvc, knowledge, circle, chatSvc, sharingSvc, directorySvc, moderationSvc, d.Logger)
 	staffAccounts := &staffdir.PostgresStore{Pool: d.Pool}
 	mountStaffDir(api, &staffdir.Service{Store: staffAccounts, Clock: d.Clock, Logger: d.Logger}, d.Logger)
+	mountAnalytics(api, &analyticsservice.Service{
+		Store:    &analyticsadapter.PostgresStore{Pool: d.Pool},
+		Cohorts:  &WellbeingCohorts{Wellbeing: wellbeing},
+		Clock:    d.Clock,
+		Logger:   d.Logger,
+		Settings: analyticsservice.Settings{K: cfg.AnalyticsK, TimeZone: cfg.TimeZone},
+	}, d.Logger)
 
 	chatGW := &gateway.Gateway{
 		Chat: chatSvc, Auth: &ChatAuthenticator{Sessions: sessions, Members: members},
@@ -562,6 +572,19 @@ func mountStaffDir(mux *http.ServeMux, svc *staffdir.Service, logger *slog.Logge
 			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: httpapi.ResponseErrorHandler(logger),
 		}),
 		staffdirapi.StdHTTPServerOptions{BaseURL: apiBase, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler},
+	)
+}
+
+// mountAnalytics registers the pilot metrics operations (tag analytics).
+// They live under /v1/staff/, so the audience split in NewAPIHandler puts
+// them behind staffauth; the service checks admin and MFA, the period and
+// suppression, and audits every read and export.
+func mountAnalytics(mux *http.ServeMux, svc *analyticsservice.Service, logger *slog.Logger) {
+	analyticsapi.HandlerWithOptions(
+		analyticsapi.NewStrictHandlerWithOptions(&analyticsapi.Server{Service: svc}, nil, analyticsapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: httpapi.ResponseErrorHandler(logger),
+		}),
+		analyticsapi.StdHTTPServerOptions{BaseURL: apiBase, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler},
 	)
 }
 

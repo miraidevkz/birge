@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -103,6 +104,7 @@ func validEnv(t *testing.T) map[string]string {
 		"BIRGE_POW_KEY_FILE":          "/keys/pow",
 		"BIRGE_HASH_KEY_FILE":         "/keys/hash",
 		"BIRGE_PLAN_LINK_KEY_FILE":    "/keys/plan-link",
+		"BIRGE_ANALYTICS_KEY_FILE":    "/keys/analytics",
 		"BIRGE_PUBLIC_URL":            "https://app.example.invalid/",
 		"BIRGE_SMS_ALLOWED_PREFIXES":  "+7700, +7701",
 		"BIRGE_CONSENT_VERSIONS":      "data_processing=v1,ai_crossborder=v1,research=v2",
@@ -122,6 +124,7 @@ func validFiles(t *testing.T) fakeFiles {
 		"/keys/pow":                append(randomKey(t), '\n'),
 		"/keys/hash":               randomKey(t),
 		"/keys/plan-link":          randomKey(t),
+		"/keys/analytics":          randomKey(t),
 		"/keys/questionnaire.json": testQuestionnaireJSON(),
 		"/keys/assistant.v1.md":    []byte("# TEST assistant prompt\n\nReply in JSON only.\n"),
 	}
@@ -176,6 +179,9 @@ func TestLoadValid(t *testing.T) {
 				if cfg.Wellbeing.Questionnaire.Version != "test-v1" || cfg.PracticesBaseURL == "" {
 					t.Error("wellbeing questionnaire / practices URL not loaded")
 				}
+				if cfg.AnalyticsK != 5 {
+					t.Errorf("analytics k = %d, want the default 5 outside the DEMO preset", cfg.AnalyticsK)
+				}
 			}
 			if cmd == CommandWorker {
 				if cfg.NATSURL == "" || cfg.SMSGuard.DailyBudget != 1000 || cfg.PublicURL != "https://app.example.invalid" {
@@ -183,6 +189,9 @@ func TestLoadValid(t *testing.T) {
 				}
 				if cfg.EventsMaxAge != defaultEventsMaxAge || cfg.EventsMaxBytes != defaultEventsMaxBytes {
 					t.Errorf("events retention: age %s, bytes %d", cfg.EventsMaxAge, cfg.EventsMaxBytes)
+				}
+				if len(cfg.AnalyticsKey) < minKeyBytes {
+					t.Error("analytics key not loaded")
 				}
 			}
 		})
@@ -207,6 +216,9 @@ func TestLoadRejects(t *testing.T) {
 		{"same keys", CommandAPI, nil, func(f fakeFiles) { f["/keys/hash"] = bytes.TrimSpace(f["/keys/pow"]) }, "must hold different keys"},
 		{"missing plan link key", CommandWorker, map[string]string{"BIRGE_PLAN_LINK_KEY_FILE": ""}, nil, "BIRGE_PLAN_LINK_KEY_FILE is required"},
 		{"plan link key is the hash key", CommandAPI, nil, func(f fakeFiles) { f["/keys/plan-link"] = f["/keys/hash"] }, "BIRGE_PLAN_LINK_KEY_FILE must hold its own key"},
+		{"missing analytics key", CommandWorker, map[string]string{"BIRGE_ANALYTICS_KEY_FILE": ""}, nil, "BIRGE_ANALYTICS_KEY_FILE is required"},
+		{"analytics key is the plan link key", CommandWorker, nil, func(f fakeFiles) { f["/keys/analytics"] = f["/keys/plan-link"] }, "BIRGE_ANALYTICS_KEY_FILE must hold its own key"},
+		{"bad analytics k", CommandAPI, map[string]string{"BIRGE_ANALYTICS_K": "0"}, nil, "BIRGE_ANALYTICS_K"},
 		{"missing public url", CommandWorker, map[string]string{"BIRGE_PUBLIC_URL": ""}, nil, "BIRGE_PUBLIC_URL is required"},
 		{"bad plan link rate", CommandAPI, map[string]string{"BIRGE_PLAN_LINK_RATE_PER_IP": "x"}, nil, "BIRGE_PLAN_LINK_RATE_PER_IP"},
 		{"bad keyset", CommandAPI, nil, func(f fakeFiles) { f["/keys/kek.json"] = []byte(`{"key":[]}`) }, "BIRGE_KEK_KEYSET_FILE"},
@@ -299,6 +311,7 @@ func TestDemoPresetsWhenUnset(t *testing.T) {
 				want["questionnaire"] = true
 				want["consent_versions"] = true
 				want["assistant_prompt"] = true
+				want["analytics_k"] = true
 			}
 			if cmd == CommandWorker {
 				want["sms_texts"] = true
@@ -327,6 +340,9 @@ func TestDemoPresetsWhenUnset(t *testing.T) {
 				}
 				if cfg.Wellbeing.Questionnaire.Version == "" {
 					t.Error("demo questionnaire not loaded")
+				}
+				if cfg.AnalyticsK != 1 {
+					t.Errorf("analytics k = %d, want 1 on the DEMO settings preset", cfg.AnalyticsK)
 				}
 			}
 			if cmd == CommandWorker {
@@ -361,6 +377,43 @@ func TestConfiguredValueReplacesDemoPreset(t *testing.T) {
 	}
 	if cfg.Wellbeing.Questionnaire.Version != "test-v1" {
 		t.Fatalf("questionnaire version = %q", cfg.Wellbeing.Questionnaire.Version)
+	}
+}
+
+// TestAnalyticsK: an explicit BIRGE_ANALYTICS_K wins over the DEMO preset
+// and adds no DemoPreset warning for it.
+func TestAnalyticsK(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		demo   bool
+		k      string
+		want   int
+		preset bool
+	}{
+		{"configured deployment, unset", false, "", 5, false},
+		{"configured deployment, set", false, "10", 10, false},
+		{"demo settings, unset", true, "", 1, true},
+		{"demo settings, set", true, "3", 3, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			env := validEnv(t)
+			if tt.demo {
+				delete(env, "BIRGE_CONSENT_VERSIONS")
+			}
+			if tt.k != "" {
+				env["BIRGE_ANALYTICS_K"] = tt.k
+			}
+			cfg, err := load(env, validFiles(t), CommandAPI)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.AnalyticsK != tt.want {
+				t.Errorf("AnalyticsK = %d, want %d", cfg.AnalyticsK, tt.want)
+			}
+			if got := slices.Contains(cfg.DemoPresets, "analytics_k"); got != tt.preset {
+				t.Errorf("analytics_k DemoPreset = %v, want %v (%v)", got, tt.preset, cfg.DemoPresets)
+			}
+		})
 	}
 }
 

@@ -48,6 +48,7 @@ A fresh deployment can start with no configuration or reference data files: when
 | `sms_texts` | `presets/demo/sms_texts.json` | `BIRGE_SMS_TEXTS` |
 | `consent_versions` | `presets/demo/settings.json` | `BIRGE_CONSENT_VERSIONS` |
 | `crisis_phones` | `presets/demo/settings.json` | `BIRGE_CRISIS_PHONES` |
+| `analytics_k` | `presets/demo/settings.json` (`analytics_k: 1`) | `BIRGE_ANALYTICS_K`, only on a deployment that also runs on the DEMO consent versions; any other deployment gets k = 5 |
 | `reference` | `presets/demo/reference.json` | seeded by `birge migrate` only when membership cities, districts and needs are all empty (never overwrites) |
 | `knowledge` | `presets/demo/knowledge/articles.json` | seeded by `birge migrate` only when knowledge tables are empty (never overwrites) |
 | `directory` | `presets/demo/directory.json` (synthetic specialists) | seeded by `birge migrate`, already approved, only when `directory.specialists` is empty and the DEMO reference is in the database (never overwrites) |
@@ -84,6 +85,8 @@ A fresh deployment can start with no configuration or reference data files: when
 | `BIRGE_POW_KEY_FILE` | api | required | key that signs the proof-of-work challenges of the auth gateway |
 | `BIRGE_HASH_KEY_FILE` | api | required | key of the hashes of numbers and IPs in gateway logs and limiters; must differ from the PoW key |
 | `BIRGE_PLAN_LINK_KEY_FILE` | api, worker | required | HMAC key of the one-time plan links of external trusted contacts (at least 32 bytes): the worker mints links when it sends the plan SMS, the API finds them by keyed hash; only the hash is stored. Must differ from the PoW and hash keys. Replacing it kills every live link (the member sends the plan again) |
+| `BIRGE_ANALYTICS_KEY_FILE` | worker | required | pseudonym key of the analytics facts, `HMAC-SHA256(key, member_id)` (ADR-0024; at least 32 bytes). Its own key, never the plan link key. Replacing it gives every member a new pseudonym: retention and distinct counts across the change are wrong and account deletion no longer finds facts made with the old key. `birge keygen` and the compose keygen service create it (also on an existing secrets volume) |
+| `BIRGE_ANALYTICS_K` | api | `5` (`1` with the DEMO settings preset) | small-cell threshold of `GET /v1/staff/metrics` and its CSV: every cell built from fewer than k members is reported only as suppressed |
 | `BIRGE_PUBLIC_URL` | worker | required | public origin of the member web app (`https://…`, no credentials); the plan SMS link is `<this>/plan#<token>`. The compose stack defaults to `http://localhost:8081` |
 | `BIRGE_PLAN_LINK_RATE_PER_IP` | api | `10/1m` | per-IP token bucket of `POST /v1/external/plans/view` (anonymous), `<burst>/<interval>`; over it → 429. In memory, per replica |
 | `BIRGE_SMS_ALLOWED_PREFIXES` | api, worker | required | allowed E.164 mobile prefixes, comma-separated (`+7700,+7701`); used by the gateway and the notify SMS guard |

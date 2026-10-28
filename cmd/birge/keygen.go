@@ -22,7 +22,8 @@ const keygenFileMode = 0o600
 
 // runKeygen writes local development key files into dir: kek.json (cleartext
 // Tink AES256-GCM keyset for BIRGE_KEK_KEYSET_FILE) and pow.key, hash.key,
-// blind-index.key, plan-link.key (32 random bytes, base64 text). Existing files are refused.
+// blind-index.key, plan-link.key, analytics.key (32 random bytes, base64 text).
+// Existing files are refused.
 // It prints only the file names and the KEK id to use.
 func runKeygen(args []string) int {
 	fs := flag.NewFlagSet("keygen", flag.ContinueOnError)
@@ -59,6 +60,7 @@ func writeDevKeys(dir string) error {
 		{"hash.key", randomKeyB64()},
 		{"blind-index.key", randomKeyB64()},
 		{"plan-link.key", randomKeyB64()},
+		{"analytics.key", randomKeyB64()},
 	}
 	for _, f := range files {
 		path := filepath.Join(dir, f.name)

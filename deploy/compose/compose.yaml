@@ -15,6 +15,7 @@ x-birge-env: &birge-env
   BIRGE_POW_KEY_FILE: /secrets/pow.key
   BIRGE_HASH_KEY_FILE: /secrets/hash.key
   BIRGE_PLAN_LINK_KEY_FILE: /secrets/plan-link.key
+  BIRGE_ANALYTICS_KEY_FILE: /secrets/analytics.key
   # Origin of the member web app; plan SMS links are <this>/plan#<token>.
   # Same variable and default as ./up.sh web.
   BIRGE_PUBLIC_URL: ${BIRGE_PUBLIC_URL:-http://localhost:8081}
@@ -88,7 +89,7 @@ services:
 
   # Writes the development keys and the Kratos secrets once into the secrets
   # volume; later starts keep them (and the data stays readable). Keys added
-  # after a volume was made (plan-link.key) are generated on their own. Runs as
+  # after a volume was made (plan-link.key, analytics.key) are generated on their own. Runs as
   # root only to hand the new volume to the image's birge user.
   keygen:
     build: { context: ../.., dockerfile: deploy/compose/Dockerfile }
@@ -100,6 +101,7 @@ services:
         umask 077 &&
         { test -f /secrets/kek.json || birge keygen -dir /secrets; } &&
         { test -f /secrets/plan-link.key || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >/secrets/plan-link.key; } &&
+        { test -f /secrets/analytics.key || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >/secrets/analytics.key; } &&
         { test -f /secrets/kratos-secret || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >/secrets/kratos-secret; } &&
         { test -f /secrets/kratos-cipher || od -An -tx1 -N16 /dev/urandom | tr -d ' \n' >/secrets/kratos-cipher; } &&
         { test -f /secrets/hydra-system || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' >/secrets/hydra-system; } &&

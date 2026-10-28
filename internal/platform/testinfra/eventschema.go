@@ -6,13 +6,14 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 // eventSchema is the subset of JSON Schema the flat event contracts use:
 // a closed object, required keys, string properties with an enum or the uuid
-// format. ValidateEventPayload fails on any keyword it does not know, so a
+// or date format, and plain boolean properties. ValidateEventPayload fails on any keyword it does not know, so a
 // richer contract cannot pass unchecked; extend the check together with the
 // first contract that needs more.
 type eventSchema struct {
@@ -62,6 +63,19 @@ func ValidateEventPayload(t testing.TB, schemaFile string, payload []byte) {
 				t.Fatalf("%s: keyword %q of %q not supported by this check", schemaFile, kw, k)
 			}
 		}
+		if prop["type"] == "boolean" {
+			if _, ok := prop["format"]; ok {
+				t.Fatalf("%s: format of boolean %q not supported by this check", schemaFile, k)
+			}
+			if _, ok := prop["enum"]; ok {
+				t.Fatalf("%s: enum of boolean %q not supported by this check", schemaFile, k)
+			}
+			var b bool
+			if err := json.Unmarshal(v, &b); err != nil {
+				t.Fatalf("payload %s: %q is not a boolean", payload, k)
+			}
+			continue
+		}
 		if prop["type"] != "string" {
 			t.Fatalf("%s: type of %q not supported by this check", schemaFile, k)
 		}
@@ -70,11 +84,17 @@ func ValidateEventPayload(t testing.TB, schemaFile string, payload []byte) {
 			t.Fatalf("payload %s: %q is not a string", payload, k)
 		}
 		if f, ok := prop["format"]; ok {
-			if f != "uuid" {
+			switch f {
+			case "uuid":
+				if _, err := uuid.Parse(str); err != nil {
+					t.Fatalf("payload %s: %q is not a uuid", payload, k)
+				}
+			case "date":
+				if _, err := time.Parse(time.DateOnly, str); err != nil {
+					t.Fatalf("payload %s: %q is not a date", payload, k)
+				}
+			default:
 				t.Fatalf("%s: format %v not supported by this check", schemaFile, f)
-			}
-			if _, err := uuid.Parse(str); err != nil {
-				t.Fatalf("payload %s: %q is not a uuid", payload, k)
 			}
 		}
 		if enum, ok := prop["enum"].([]any); ok && !slices.Contains(enum, any(str)) {

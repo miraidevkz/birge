@@ -27,6 +27,7 @@ const (
 	NameAssistantPrompt = "assistant_prompt"
 	NameDirectory       = "directory"
 	NameListings        = "listings"
+	NameAnalyticsK      = "analytics_k"
 )
 
 //go:embed demo
@@ -76,13 +77,17 @@ func SMSTexts() (map[string]map[string]string, error) {
 	return out, nil
 }
 
-// Settings is the DEMO consent versions and crisis phones from settings.json.
+// Settings is the DEMO consent versions, crisis phones and metrics
+// small-cell threshold from settings.json.
 type Settings struct {
 	ConsentVersions map[string]string    `json:"consent_versions"`
 	CrisisPhones    []config.CrisisPhone `json:"crisis_phones"`
+	// AnalyticsK is the small-cell threshold of a deployment running on these
+	// DEMO settings (1: demo data shows numbers; ADR-0024).
+	AnalyticsK int `json:"analytics_k"`
 }
 
-// LoadSettings reads the DEMO settings (consent versions and crisis phones).
+// LoadSettings reads the DEMO settings (consent versions, crisis phones, analytics k).
 func LoadSettings() (Settings, error) {
 	b, err := demoFS.ReadFile("demo/settings.json")
 	if err != nil {
@@ -97,6 +102,9 @@ func LoadSettings() (Settings, error) {
 	}
 	if len(raw.CrisisPhones) == 0 {
 		return Settings{}, fmt.Errorf("presets: settings: crisis_phones required")
+	}
+	if raw.AnalyticsK < 1 {
+		return Settings{}, fmt.Errorf("presets: settings: analytics_k must be at least 1")
 	}
 	return raw, nil
 }

@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
 
+	analyticsadapter "birge/internal/domains/analytics/adapter"
+	analyticsservice "birge/internal/domains/analytics/service"
 	assistantadapter "birge/internal/domains/assistant/adapter"
 	assistantservice "birge/internal/domains/assistant/service"
 	chatadapter "birge/internal/domains/chat/adapter"
@@ -57,11 +59,13 @@ type Deleters struct {
 	Chat       *chatservice.Deletion
 	Sharing    *sharingservice.Deletion
 	Directory  *directoryservice.Deletion
+	Analytics  *analyticsservice.Deletion
 }
 
 // NewDeleters wires the deletion services on pool. objects deletes sharing
-// photos; identities deletes the Kratos identity (membership timer).
-func NewDeleters(pool *pgxpool.Pool, objects sharingport.ObjectStore, identities membershipport.IdentityDeleter, clk clock.Clock, logger *slog.Logger) *Deleters {
+// photos; identities deletes the Kratos identity (membership timer);
+// analyticsKey finds the member's analytics facts by her pseudonym.
+func NewDeleters(pool *pgxpool.Pool, objects sharingport.ObjectStore, identities membershipport.IdentityDeleter, analyticsKey []byte, clk clock.Clock, logger *slog.Logger) *Deleters {
 	return &Deleters{
 		Membership: &membershipservice.Deletion{Store: &membershipadapter.Postgres{Pool: pool}, Identities: identities, Clock: clk, Logger: logger},
 		Notify:     &notifyservice.Deletion{Store: &notifyadapter.PostgresStore{Pool: pool}, Clock: clk, Logger: logger},
@@ -73,6 +77,7 @@ func NewDeleters(pool *pgxpool.Pool, objects sharingport.ObjectStore, identities
 		Chat:       &chatservice.Deletion{Store: &chatadapter.PostgresStore{Pool: pool}, Clock: clk, Logger: logger},
 		Sharing:    &sharingservice.Deletion{Store: &sharingadapter.PostgresStore{Pool: pool}, Objects: objects, Clock: clk, Logger: logger},
 		Directory:  &directoryservice.Deletion{Store: &directoryadapter.PostgresStore{Pool: pool}, Clock: clk, Logger: logger},
+		Analytics:  &analyticsservice.Deletion{Store: &analyticsadapter.PostgresStore{Pool: pool}, Key: analyticsKey, Clock: clk, Logger: logger},
 	}
 }
 
@@ -93,6 +98,7 @@ func (d *Deleters) Consumers(js jetstream.JetStream, pool *pgxpool.Pool, logger 
 		{"membership", d.Membership}, {"notify", d.Notify}, {"safety", d.Safety},
 		{"wellbeing", d.Wellbeing}, {"emergency", d.Emergency}, {"assistant", d.Assistant},
 		{"circle", d.Circle}, {"chat", d.Chat}, {"sharing", d.Sharing}, {"directory", d.Directory},
+		{"analytics", d.Analytics},
 	}
 	out := make([]*DeletionConsumer, 0, len(byContext))
 	for _, c := range byContext {
