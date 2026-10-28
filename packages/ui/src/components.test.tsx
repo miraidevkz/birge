@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { initialsOf, tintOf } from './avatar';
+import { BarSeries } from './bar-series';
 import { Button } from './button';
 import { Illustration, type IllustrationName } from './illustration';
 import { ChoiceGroup } from './choice-group';
@@ -261,5 +262,28 @@ describe('Illustration', () => {
     expect(box).toBeTruthy();
     // Default queries skip hidden elements: decorative means not announced.
     expect(screen.queryByTestId(`illustration-${name}`)).toBeNull();
+  });
+});
+
+describe('BarSeries', () => {
+  it('draws a bar per shown value and none for a hidden one, reading each row as one element', async () => {
+    await render(
+      <BarSeries
+        label="Active members"
+        testID="series"
+        items={[
+          { key: 'a', label: 'Week 1', value: 10, valueLabel: '10' },
+          { key: 'b', label: 'Week 2', value: 0, valueLabel: '0' },
+          { key: 'c', label: 'Week 3', valueLabel: 'Hidden' },
+        ]}
+      />,
+    );
+    expect(screen.getByText('Active members')).toBeTruthy();
+    expect(screen.getByLabelText('Active members, Week 1: 10')).toBeTruthy();
+    expect(screen.getByLabelText('Active members, Week 3: Hidden')).toBeTruthy();
+    expect(screen.getByTestId('series-a-bar', { includeHiddenElements: true })).toBeTruthy();
+    expect(screen.getByTestId('series-b-bar', { includeHiddenElements: true })).toBeTruthy();
+    // A hidden value is never drawn, so it cannot look like zero.
+    expect(screen.queryByTestId('series-c-bar', { includeHiddenElements: true })).toBeNull();
   });
 });

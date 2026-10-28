@@ -11,7 +11,14 @@ import { Button, Card, ChoiceGroup, List, Screen, Text, TextField } from '@birge
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 
-import { AUDIT_ACTIONS, AUDIT_OBJECTS, auditLabelKey, shortId, type AuditCodeKind } from '@/lib/audit-codes';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_OBJECTS,
+  auditLabelKey,
+  auditRoleKey,
+  shortId,
+  type AuditCodeKind,
+} from '@/lib/audit-codes';
 import { auditObjectLink } from '@/lib/audit-links';
 import { isForbidden, isNotImplemented } from '@/lib/not-implemented';
 import { staffName, useAuditEntries, useStaffAccounts, type AuditEntry, type AuditFilter } from '@/lib/staff';
@@ -67,6 +74,13 @@ export function AuditScreen() {
   const label = (kind: AuditCodeKind, code: string) => {
     const key = auditLabelKey(kind, code);
     return key ? t(key) : t(`audit.unknown.${kind}`);
+  };
+
+  // A role the console does not know (one the contract has not listed yet)
+  // gets the generic label; the raw role is shown beneath it.
+  const roleLabel = (role: string) => {
+    const key = auditRoleKey(role);
+    return key ? t(key) : t('audit.unknown.role');
   };
 
   const personOptions = useMemo(() => {
@@ -189,7 +203,8 @@ export function AuditScreen() {
                 <Text tone="muted">{t('audit.row.reason', { reason: label('reason', item.reason) })}</Text>
               ) : null}
               {item.reason && !reasonKnown ? <Text tone="muted">{item.reason}</Text> : null}
-              <Text tone="muted">{t('audit.row.role', { role: t(`audit.role.${item.actorRole}`) })}</Text>
+              <Text tone="muted">{t('audit.row.role', { role: roleLabel(item.actorRole) })}</Text>
+              {auditRoleKey(item.actorRole) ? null : <Text tone="muted">{item.actorRole}</Text>}
               <Button
                 title={staffName(item.actorId, item.actorName)}
                 variant="secondary"

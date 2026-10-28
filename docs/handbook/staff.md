@@ -6,12 +6,12 @@ Phone examples below use the synthetic shape `+70000000000`. Never put real numb
 
 ## Roles at a glance
 
-| Role | Escalations | Duty roster | Moderation queue | Members and rooms | Knowledge | Audit log |
+| Role | Escalations | Duty roster | Moderation queue | Members and rooms | Knowledge | Audit log and metrics |
 | --- | --- | --- | --- | --- | --- | --- |
 | Psychologist | List, take, reveal, close | View; alerts use psychologist / backup phones | No | No | Self-help: draft, review, publish | No |
 | Moderator | Same as psychologist | View | Approve / reject (and verification); legal hold | View members; give / take the mentor role; assign / remove room mentors | No | No |
 | Lawyer | No | No | No | No | Rights: draft, review, publish | No |
-| Admin | Same queue roles as above where granted | Add / cancel shifts | Same as moderator | Same as moderator; lift suspensions | Topics of either kind; review-due for both | Read the log; staff list and cards |
+| Admin | Same queue roles as above where granted | Add / cancel shifts | Same as moderator | Same as moderator; lift suspensions | Topics of either kind; review-due for both | Read the log; staff list and cards; pilot metrics and CSV |
 
 The API enforces roles and MFA. If you see “MFA required”, complete the second factor and sign in again. Deny by default: wrong role → 403.
 
@@ -140,9 +140,20 @@ Who: **admin** only, with MFA. Other roles do not see the **Audit** tab; if some
 5. Where the console has a screen for the object, the entry has **Open in …** (Escalations, Moderation, Members, Rooms, Duty, Knowledge). Members cannot be filtered by one person there, so you get the list.
 6. **Staff** (button at the top of the log) lists everyone who has signed in to this deployment, most recently active first. The IdP still decides who is staff; this list is only for reading the log. A person appears after their first action in the console; their name, roles and "last seen" are refreshed at most once an hour, so a role change at the IdP shows here up to an hour later (access itself follows the IdP at once). The name is what the IdP sends as the display name or username; an email address is never shown or stored.
 
-Entries by members (for example a trusted contact opening a shared plan) and by the system (account deletion) are not in this log. Neither the log nor the staff list is ever deleted: they are kept as the record of who did what.
+Entries by members (for example a member contact opening a shared plan) and by the system (account deletion) are not in this log. One exception is on its way: when an external trusted contact (someone without the app) opens a sent emergency plan by its one-time link, the server records "Opened a sent emergency plan by its link" with the role "External trusted contact". Such rows appear here once the server's audit list includes that role; a role the console does not know yet shows as "Other role" with its code underneath. Neither the log nor the staff list is ever deleted: they are kept as the record of who did what.
 
 If the log or a card says "not available on this server yet", the server has not been updated with this feature.
+
+## Pilot metrics
+
+Who: **admin** only, with MFA. Other roles do not see the **Metrics** tab; if someone opens it anyway, the screen says that only an admin can see metrics. Opening the metrics and downloading the CSV are both audited ("Viewed pilot metrics", "Downloaded pilot metrics"), so open them when you need a figure, not to watch them change.
+
+1. Open **Metrics** and choose a period: **Last 4 weeks**, **Last 3 months**, **This year so far**, or **Custom dates** (`YYYY-MM-DD`, both days included). A period can be at most 12 months long; a longer one is not sent and the screen says how to shorten it. The line under the picker shows the period being read.
+2. The sections follow the pilot's metrics: **Activity** (members active at least once per week and per month, as bars), **Retention** (of members whose first active day falls in the period, the share still active 4 and 8 weeks later), **Tea meetings** (requests, matches both accepted, pairs who met), **SOS** (raised, share closed, median minutes to the first response), **Escalations** (opened, share taken within 15 minutes), **Rights** (answered from the knowledge base, share rated helpful), **Stress** (PSS-4 at the first check-in and about 8 weeks later: members, mean, median) and **Isolation** (before and after). Each section says in one line what it counts. Shares are percentages; times are minutes.
+3. **"Hidden" means privacy, not zero.** Any number built from fewer than *k* members (the line above the sections says which *k* this server uses, usually 5) is replaced by "Fewer than k members — hidden to protect privacy". In a small pilot a count of two or three could point to a real person, so the server never sends it; the screen never shows such a cell as 0 or as a blank. A hidden week or month in the activity bars has no bar. Rights and isolation may be fully hidden on today's server; that is expected, and the CSV marks the same cells as suppressed.
+4. **Download CSV** saves the same metrics for the chosen period as a file (`birge-metrics-<from>-<to>.csv`, one row per metric and week or month; hidden rows have empty numbers and `suppressed=true`). Treat the file like any other report from the product: keep it on work devices, and never combine it with lists of members to work out who is behind a number.
+
+If the screen says "not available on this server yet", the server has not been updated with metrics.
 
 ## Profile
 
@@ -160,6 +171,7 @@ Shows your subject and roles. Use **Sign out** when you leave a shared machine.
 | Mentor assigned / removed | Who changed a room's mentors |
 | Mentor role given / removed | Who changed whether a member can be a mentor |
 | Audit log read | Which admin read the log and when |
+| Pilot metrics viewed / downloaded | Which admin read or exported the metrics, and when |
 | Knowledge publish / reject | Who reviewed what version |
 | Shared emergency plan view (member side) | Separate member audit when a trusted contact opens a sent plan |
 | Account deletion | System actors per context after `privacy.DataDeletionRequested` |

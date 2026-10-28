@@ -6,6 +6,8 @@ export { ScreenBackProvider, useScreenBack } from './back';
 export type { ScreenBackProviderProps } from './back';
 export { Banner } from './banner';
 export type { BannerProps, BannerTone } from './banner';
+export { BarSeries } from './bar-series';
+export type { BarSeriesItem, BarSeriesProps } from './bar-series';
 export { Button } from './button';
 export type { ButtonProps, ButtonVariant } from './button';
 export { Card } from './card';

@@ -1,7 +1,15 @@
 import { resources } from '@birge/i18n';
 import { describe, expect, it, jest } from '@jest/globals';
 
-import { AUDIT_ACTIONS, AUDIT_OBJECTS, AUDIT_REASONS, auditLabelKey, shortId } from './audit-codes';
+import {
+  AUDIT_ACTIONS,
+  AUDIT_OBJECTS,
+  AUDIT_REASONS,
+  AUDIT_ROLES,
+  auditLabelKey,
+  auditRoleKey,
+  shortId,
+} from './audit-codes';
 import { auditObjectLink } from './audit-links';
 import { isAdmin, staffName } from './staff';
 import { dayEnd, dayStart, isDay } from './time';
@@ -44,6 +52,26 @@ describe('auditLabelKey', () => {
           expect(typeof lookup(admin, key ?? '')).toBe('string');
         }
       }
+    }
+  });
+});
+
+describe('auditRoleKey', () => {
+  it('names the known roles, including the external trusted contact', () => {
+    expect(auditRoleKey('admin')).toBe('audit.role.admin');
+    expect(auditRoleKey('external_contact')).toBe('audit.role.external_contact');
+  });
+
+  it('returns undefined for a role the console does not know', () => {
+    expect(auditRoleKey('future_role')).toBeUndefined();
+    expect(auditRoleKey('toString')).toBeUndefined();
+  });
+
+  it('has a label in every language for every known role and the generic one', () => {
+    for (const lang of ['kk', 'ru', 'en'] as const) {
+      const admin: unknown = resources[lang].admin;
+      for (const role of AUDIT_ROLES) expect(typeof lookup(admin, auditRoleKey(role) ?? '')).toBe('string');
+      expect(typeof lookup(admin, 'audit.unknown.role')).toBe('string');
     }
   });
 });

@@ -138,6 +138,34 @@ describe('AuditScreen', () => {
     expect(screen.queryByTestId(`audit-object-${UNKNOWN.id}`)).toBeNull();
   });
 
+  it('names the external contact plan view and gives an unknown role a generic label', async () => {
+    // The contract's AuditActorRole does not list these roles yet; the server writes them.
+    const external = {
+      id: '01900000-0000-7000-8000-0000000000f3',
+      occurredAt: '2026-10-28T07:00:00Z',
+      actorId: STAFF_B,
+      actorRole: 'external_contact',
+      action: 'emergency_plan.view_external',
+      objectType: 'emergency.child_card',
+      objectId: 'abcdef12-0000-7000-8000-000000000003',
+    };
+    const futureRole = { ...KNOWN, id: '01900000-0000-7000-8000-0000000000f4', actorRole: 'future_role' };
+    mockFetch.mockImplementation(
+      fetchRouter([accountsRoute, auditRoute(() => json(200, { items: [external, futureRole] }))]),
+    );
+    await renderScreen();
+
+    const ext = within(await screen.findByTestId(`audit-${external.id}`));
+    expect(ext.getByText('Opened a sent emergency plan by its link')).toBeTruthy();
+    expect(ext.getByText('Child card · abcdef12')).toBeTruthy();
+    expect(ext.getByText('Role: External trusted contact')).toBeTruthy();
+    expect(ext.queryByText('external_contact')).toBeNull();
+
+    const other = within(screen.getByTestId(`audit-${futureRole.id}`));
+    expect(other.getByText('Role: Other role')).toBeTruthy();
+    expect(other.getByText('future_role')).toBeTruthy();
+  });
+
   it('shows the empty state', async () => {
     mockFetch.mockImplementation(fetchRouter([accountsRoute, auditRoute(() => json(200, { items: [] }))]));
     await renderScreen();

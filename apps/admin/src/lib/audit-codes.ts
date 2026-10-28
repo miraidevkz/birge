@@ -40,6 +40,9 @@ export const AUDIT_ACTIONS = [
   'article.reject',
   'topic.create',
   'emergency_plan.view_shared',
+  'emergency_plan.view_external',
+  'analytics.metrics_read',
+  'analytics.metrics_export',
   'audit.read',
 ] as const;
 
@@ -56,6 +59,7 @@ export const AUDIT_OBJECTS = [
   'knowledge.version',
   'knowledge.topic',
   'emergency.child_card',
+  'analytics.metrics',
   'member',
 ] as const;
 
@@ -74,6 +78,23 @@ export const AUDIT_REASONS = [
   'missing_source',
   'other',
 ] as const;
+
+/**
+ * AUDIT_ROLES are the actor roles the console names (`admin:audit.role.*`).
+ * The contract's AuditActorRole lists the staff roles and `staff`; the server
+ * also writes `external_contact` (an external trusted contact opened a sent
+ * emergency plan by its one-time link), which the contract does not list
+ * yet. A role outside this list is shown with a generic label and the raw
+ * role beneath it, like an unknown code, so a new role never breaks a row.
+ */
+export const AUDIT_ROLES = ['psychologist', 'moderator', 'lawyer', 'admin', 'staff', 'external_contact'] as const;
+
+const KNOWN_ROLES: ReadonlySet<string> = new Set(AUDIT_ROLES);
+
+/** auditRoleKey returns the `admin` locale key that names an actor role, or undefined for an unknown role. */
+export function auditRoleKey(role: string): string | undefined {
+  return KNOWN_ROLES.has(role) ? `audit.role.${role}` : undefined;
+}
 
 /** AuditCodeKind is which of the three code lists a code belongs to. */
 export type AuditCodeKind = 'action' | 'object' | 'reason';

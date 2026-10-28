@@ -7,7 +7,8 @@
     "profile": "Profile",
     "members": "Members",
     "rooms": "Rooms",
-    "audit": "Audit"
+    "audit": "Audit",
+    "metrics": "Metrics"
   },
   "signIn": {
     "title": "Staff sign-in",
@@ -410,14 +411,16 @@
     "unknown": {
       "action": "Other action",
       "object": "Other object",
-      "reason": "Other reason"
+      "reason": "Other reason",
+      "role": "Other role"
     },
     "role": {
       "psychologist": "Psychologist",
       "moderator": "Moderator",
       "lawyer": "Lawyer",
       "admin": "Admin",
-      "staff": "Staff (role not recorded)"
+      "staff": "Staff (role not recorded)",
+      "external_contact": "External trusted contact"
     },
     "action": {
       "escalation_take": "Took an escalation",
@@ -448,6 +451,9 @@
       "article_reject": "Rejected an article",
       "topic_create": "Created a topic",
       "emergency_plan_view_shared": "Viewed a shared emergency plan",
+      "emergency_plan_view_external": "Opened a sent emergency plan by its link",
+      "analytics_metrics_read": "Viewed pilot metrics",
+      "analytics_metrics_export": "Downloaded pilot metrics",
       "audit_read": "Read the audit log"
     },
     "object": {
@@ -462,6 +468,7 @@
       "knowledge_version": "Article version",
       "knowledge_topic": "Knowledge topic",
       "emergency_child_card": "Child card",
+      "analytics_metrics": "Pilot metrics",
       "member": "Member account"
     },
     "reason": {
@@ -494,5 +501,107 @@
     "noActionsDescription": "Older entries are in the audit log.",
     "notFoundTitle": "No such staff account",
     "notFoundDescription": "Go back to the staff list and choose the person again."
+  },
+  "metrics": {
+    "title": "Pilot metrics",
+    "intro": "Totals for the pilot over a period, never about one person. Each view and download is recorded in the audit log.",
+    "kNote": "Numbers built from fewer than {{k}} members are hidden to protect privacy.",
+    "period": {
+      "label": "Period",
+      "last4w": "Last 4 weeks",
+      "last3m": "Last 3 months",
+      "ytd": "This year so far",
+      "custom": "Custom dates",
+      "from": "From",
+      "to": "To",
+      "dayHint": "YYYY-MM-DD",
+      "shown": "Period: {{from}} – {{to}}",
+      "dayInvalid": "Enter real dates as YYYY-MM-DD.",
+      "reversed": "The end date is before the start date.",
+      "tooLong": "A period can be at most 12 months long. Choose a later start or an earlier end.",
+      "invalid": "The server cannot show this period: the end must not be before the start and at most 12 months after it. Choose another period."
+    },
+    "download": "Download CSV",
+    "downloadFailed": "Could not download the file. Please try again in a moment.",
+    "forbiddenTitle": "Only an admin can see metrics",
+    "forbiddenDescription": "Pilot metrics are open to the admins of this deployment.",
+    "suppressed": "Fewer than {{k}} members — hidden to protect privacy",
+    "suppressedShort": "Fewer than {{k}} — hidden",
+    "members": "From {{members}} members",
+    "value": {
+      "percent": "{{value}}%",
+      "minutes": "{{value}} min"
+    },
+    "section": {
+      "activity": {
+        "title": "Activity",
+        "about": "How many members used the app at least once in each week and each month."
+      },
+      "retention": {
+        "title": "Retention",
+        "about": "Of the members whose first active day falls in the period, the share still active 4 and 8 weeks later. Only members whose window has already ended count."
+      },
+      "tea": {
+        "title": "Tea meetings",
+        "about": "The way to meeting in person: requests for a tea, matches both members accepted, and pairs who confirmed they met."
+      },
+      "sos": {
+        "title": "SOS",
+        "about": "SOS requests raised in the period, the share of them closed, and the median minutes until the first member responded."
+      },
+      "escalations": {
+        "title": "Escalations",
+        "about": "Escalations to staff opened in the period, and the share taken within 15 minutes."
+      },
+      "rights": {
+        "title": "Rights",
+        "about": "Questions about rights answered from the reviewed knowledge base, and the share of those replies rated helpful."
+      },
+      "stress": {
+        "title": "Stress (PSS-4)",
+        "about": "PSS-4 score of members whose first check-in falls in the period: at that check-in and at the one nearest to 8 weeks later (6–10 weeks). A lower score means less stress."
+      },
+      "isolation": {
+        "title": "Isolation",
+        "about": "Isolation score of the same members before and after, counted the same way as stress."
+      }
+    },
+    "activity": {
+      "weekly": "Active members per week",
+      "monthly": "Active members per month",
+      "weekOf": "Week of {{date}}",
+      "empty": "Nothing to show for this period yet."
+    },
+    "retention": {
+      "w4": "Still active after 4 weeks",
+      "w8": "Still active after 8 weeks"
+    },
+    "tea": {
+      "requests": "Tea requests",
+      "pairs": "Matches accepted",
+      "meetings": "Met in person"
+    },
+    "sos": {
+      "raised": "SOS raised",
+      "closedShare": "Closed",
+      "firstResponse": "Median time to first response"
+    },
+    "escalations": {
+      "opened": "Escalations opened",
+      "taken15": "Taken within 15 minutes"
+    },
+    "rights": {
+      "answered": "Answered from the knowledge base",
+      "helped": "Rated helpful"
+    },
+    "score": {
+      "baseline": "First check-in",
+      "week8": "About 8 weeks later",
+      "before": "Before",
+      "after": "After",
+      "members": "Members",
+      "mean": "Mean",
+      "median": "Median"
+    }
   }
 }

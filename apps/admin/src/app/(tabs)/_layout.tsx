@@ -52,6 +52,15 @@ export default function TabsLayout() {
           href: isAdmin(profile?.roles) ? undefined : null,
         }}
       />
+      {/* Admin only, like Audit; the server returns 403 to everyone else. */}
+      <Tabs.Screen
+        name="metrics"
+        options={{
+          title: t('tabs.metrics'),
+          tabBarIcon: icon('stats-chart-outline'),
+          href: isAdmin(profile?.roles) ? undefined : null,
+        }}
+      />
       <Tabs.Screen name="profile" options={{ title: t('tabs.profile'), tabBarIcon: icon('person-outline') }} />
     </Tabs>
   );
