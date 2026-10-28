@@ -1,5 +1,6 @@
 // Package moderationtest holds test doubles for the moderation ports: a fixed
-// clock and an in-memory ContentSource. Content is fake data only.
+// clock, an in-memory ContentSource and an in-memory store with transaction
+// rollback and failure injection (MemStore). Content is fake data only.
 package moderationtest
 
 import (

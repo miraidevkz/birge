@@ -5,13 +5,13 @@
 # reviewed change that says why. See docs/development.md, "Coverage ratchet".
 analytics    85.0
 assistant    84.9
-chat         27.7
+chat         92.2
 circle       65.8
-directory    41.3
+directory    90.7
 emergency    78.8
 knowledge    67.4
 membership   72.2
-moderation   39.9
+moderation   93.7
 notify       65.6
 platform     72.3
 privacy      72.1

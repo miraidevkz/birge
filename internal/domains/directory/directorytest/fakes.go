@@ -158,6 +158,9 @@ func (t *memoryTx) InsertSpecialist(_ context.Context, s model.Specialist) (mode
 
 // GetSpecialistByIdempotencyKey implements port.Tx.
 func (t *memoryTx) GetSpecialistByIdempotencyKey(_ context.Context, addedBy, key uuid.UUID) (model.Specialist, error) {
+	if err := t.check("GetSpecialistByIdempotencyKey"); err != nil {
+		return model.Specialist{}, err
+	}
 	for _, s := range t.st.specialists {
 		if s.AddedBy == addedBy && s.IdempotencyKey == key {
 			return s, nil
@@ -168,6 +171,9 @@ func (t *memoryTx) GetSpecialistByIdempotencyKey(_ context.Context, addedBy, key
 
 // GetSpecialist implements port.Tx.
 func (t *memoryTx) GetSpecialist(_ context.Context, id uuid.UUID, _ bool) (model.Specialist, error) {
+	if err := t.check("GetSpecialist"); err != nil {
+		return model.Specialist{}, err
+	}
 	s, ok := t.st.specialists[id]
 	if !ok {
 		return model.Specialist{}, model.ErrNotFound
@@ -177,6 +183,9 @@ func (t *memoryTx) GetSpecialist(_ context.Context, id uuid.UUID, _ bool) (model
 
 // SearchActiveSpecialists implements port.Tx.
 func (t *memoryTx) SearchActiveSpecialists(_ context.Context, f model.SearchFilter) ([]model.Specialist, error) {
+	if err := t.check("SearchActiveSpecialists"); err != nil {
+		return nil, err
+	}
 	var out []model.Specialist
 	for _, s := range t.st.specialists {
 		if s.Status != model.StatusActive {
@@ -226,6 +235,9 @@ func (t *memoryTx) SearchActiveSpecialists(_ context.Context, f model.SearchFilt
 
 // ApproveSpecialist implements port.Tx.
 func (t *memoryTx) ApproveSpecialist(_ context.Context, id uuid.UUID) (model.Specialist, bool, error) {
+	if err := t.check("ApproveSpecialist"); err != nil {
+		return model.Specialist{}, false, err
+	}
 	s, ok := t.st.specialists[id]
 	if !ok || s.Status != model.StatusPending {
 		return model.Specialist{}, false, nil
@@ -238,6 +250,9 @@ func (t *memoryTx) ApproveSpecialist(_ context.Context, id uuid.UUID) (model.Spe
 
 // RejectSpecialist implements port.Tx.
 func (t *memoryTx) RejectSpecialist(_ context.Context, id uuid.UUID, reason string) (model.Specialist, bool, error) {
+	if err := t.check("RejectSpecialist"); err != nil {
+		return model.Specialist{}, false, err
+	}
 	s, ok := t.st.specialists[id]
 	if !ok || s.Status != model.StatusPending {
 		return model.Specialist{}, false, nil
@@ -271,6 +286,9 @@ func (t *memoryTx) UpsertReview(_ context.Context, r model.Review) (model.Review
 
 // GetReview implements port.Tx.
 func (t *memoryTx) GetReview(_ context.Context, id uuid.UUID, _ bool) (model.Review, error) {
+	if err := t.check("GetReview"); err != nil {
+		return model.Review{}, err
+	}
 	r, ok := t.st.reviews[id]
 	if !ok {
 		return model.Review{}, model.ErrNotFound
@@ -280,6 +298,9 @@ func (t *memoryTx) GetReview(_ context.Context, id uuid.UUID, _ bool) (model.Rev
 
 // ListLatestActiveReviews implements port.Tx.
 func (t *memoryTx) ListLatestActiveReviews(_ context.Context, specialistID uuid.UUID, limit int32) ([]model.Review, error) {
+	if err := t.check("ListLatestActiveReviews"); err != nil {
+		return nil, err
+	}
 	var out []model.Review
 	for _, r := range t.st.reviews {
 		if r.SpecialistID == specialistID && r.Status == model.StatusActive {
@@ -303,6 +324,9 @@ func (t *memoryTx) ListLatestActiveReviews(_ context.Context, specialistID uuid.
 
 // AverageActiveRating implements port.Tx.
 func (t *memoryTx) AverageActiveRating(_ context.Context, specialistID uuid.UUID) (model.RatingStats, error) {
+	if err := t.check("AverageActiveRating"); err != nil {
+		return model.RatingStats{}, err
+	}
 	var sum float64
 	var n int
 	for _, r := range t.st.reviews {
@@ -319,6 +343,9 @@ func (t *memoryTx) AverageActiveRating(_ context.Context, specialistID uuid.UUID
 
 // ApproveReview implements port.Tx.
 func (t *memoryTx) ApproveReview(_ context.Context, id uuid.UUID, at time.Time) (model.Review, bool, error) {
+	if err := t.check("ApproveReview"); err != nil {
+		return model.Review{}, false, err
+	}
 	r, ok := t.st.reviews[id]
 	if !ok || r.Status != model.StatusPending {
 		return model.Review{}, false, nil
@@ -332,6 +359,9 @@ func (t *memoryTx) ApproveReview(_ context.Context, id uuid.UUID, at time.Time) 
 
 // RejectReview implements port.Tx.
 func (t *memoryTx) RejectReview(_ context.Context, id uuid.UUID, reason string, at time.Time) (model.Review, bool, error) {
+	if err := t.check("RejectReview"); err != nil {
+		return model.Review{}, false, err
+	}
 	r, ok := t.st.reviews[id]
 	if !ok || r.Status != model.StatusPending {
 		return model.Review{}, false, nil
@@ -354,6 +384,9 @@ func (t *memoryTx) Publish(_ context.Context, _ time.Time, e model.Event) error 
 
 // MarkProcessed implements port.Tx.
 func (t *memoryTx) MarkProcessed(_ context.Context, consumer string, eventID uuid.UUID) (bool, error) {
+	if err := t.check("MarkProcessed"); err != nil {
+		return false, err
+	}
 	if t.st.processed[consumer] == nil {
 		t.st.processed[consumer] = map[uuid.UUID]bool{}
 	}

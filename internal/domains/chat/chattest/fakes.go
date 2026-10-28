@@ -1,7 +1,8 @@
-// Package chattest provides fakes of the chat ports for tests: a sealer
-// that binds associated data and can shred, member profiles, blocks and
-// the mentor role, author suspension, the safety crisis path, the fan-out
-// bus and the WebSocket authenticator. Every name and text in tests is fake.
+// Package chattest provides fakes of the chat ports for tests: an in-memory
+// store with transaction rollback and failure injection (MemStore), a sealer
+// that binds associated data and can shred, member profiles, blocks and the
+// mentor role, author suspension, the safety crisis path, the fan-out bus and
+// the WebSocket authenticator. Every name and text in tests is fake.
 package chattest
 
 import (
