@@ -5,7 +5,7 @@
 // shown from locale texts by code, never with the input echoed.
 import { E164, SignInError, type PendingSignIn, type SignInErrorCode } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
-import { Banner, Button, PhoneField, Screen, Text, TextField } from '@birge/ui';
+import { Banner, Button, Heading, Logo, PhoneField, Screen, Text, TextField } from '@birge/ui';
 import { useState } from 'react';
 
 import { kratos } from '@/lib/api';
@@ -75,11 +75,10 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
 
   if (!pending) {
     return (
-      <Screen
-        title={t('title')}
-        layout="form"
-        footer={<Button title={t('sendCode')} onPress={sendCode} loading={busy} />}
-      >
+      <Screen layout="form" footer={<Button title={t('sendCode')} onPress={sendCode} loading={busy} />}>
+        {/* The brand opens the app: the name is the screen's heading here. */}
+        <Logo size="lg" name={t('common:appName')} />
+        <Heading>{t('title')}</Heading>
         <Text>{t('intro')}</Text>
         {config.demoCodesUrl ? <Text tone="muted">{t('demo.numbers')}</Text> : null}
         <PhoneField

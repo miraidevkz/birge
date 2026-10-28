@@ -2,7 +2,7 @@
 // memory only. On MFA step-up the API has already cleared the token; this
 // screen shows the locale text and the same sign-in button.
 import { useTranslation } from '@birge/i18n';
-import { Banner, Button, Screen, Text } from '@birge/ui';
+import { Banner, Button, Logo, Screen, Text } from '@birge/ui';
 import { useState } from 'react';
 
 import { useSession } from '@/lib/session';
@@ -55,6 +55,7 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
       layout="form"
       footer={<Button title={t('signIn.button')} onPress={signIn} loading={busy} testID="staff-sign-in" />}
     >
+      <Logo size="md" name={t('common:appName')} />
       <Text>{t('signIn.intro')}</Text>
       {error ? (
         <Banner tone="danger">{error === 'cancelled' ? t('signIn.cancelled') : t('signIn.failed')}</Banner>

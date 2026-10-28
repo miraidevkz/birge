@@ -13,6 +13,7 @@ One design language, set in `packages/ui/tokens.js` and the shared components, n
 - **Shape.** Soft radii (cards 24, controls 16, buttons fully rounded); cards are raised with a faint shadow instead of a hard border.
 - **Space.** Generous padding (cards 20, screen gutters 20); on wide screens content sits in one centred column (`max-w-content`, 640 px) instead of stretching.
 - **Warmth without noise.** Empty states get a soft icon in a tinted circle and a kind sentence; the home screen greets the member by name and puts today's one action first. Motion stays within ADR-0014 (150–250 ms, none with reduce motion and on crisis screens).
+- **Brand.** The mark is Shenber, six dots in a circle (`branding/`, chosen 2026-10-28), the same shape at every size and recoloured from `branding/brand.json`. It opens the app on the sign-in screen with the product name; screen headers carry the title and SOS, not the logo.
 - **Discretion.** Nothing in the look reveals the app's subject to someone glancing at the phone (same rule as the app icon).
 
 ## Consequences

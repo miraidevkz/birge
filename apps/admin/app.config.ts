@@ -21,6 +21,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     package: 'invalid.example.birge.admin',
   },
   web: {
+    favicon: './assets/brand/favicon.png',
     bundler: 'metro',
     output: 'single',
     name: 'Birge Admin',

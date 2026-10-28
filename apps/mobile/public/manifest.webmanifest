@@ -1,19 +1,37 @@
 {
   "name": "Birge",
   "short_name": "Birge",
-  "description": "Peer support for mothers of children with special needs.",
+  "description": "Birge — together.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#FBF8F4",
-  "theme_color": "#2F6B5E",
+  "background_color": "#F7F3EE",
+  "theme_color": "#3F6F63",
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

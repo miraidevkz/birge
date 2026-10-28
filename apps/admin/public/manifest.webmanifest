@@ -1,13 +1,13 @@
 {
   "name": "Birge Admin",
   "short_name": "Admin",
-  "description": "Staff console for Birge escalations, moderation and duty roster.",
+  "description": "Birge staff console.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#FBF8F4",
-  "theme_color": "#2F6B5E",
+  "background_color": "#F7F3EE",
+  "theme_color": "#3F6F63",
   "icons": [
     {
       "src": "/icon.svg",
