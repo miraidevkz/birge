@@ -9,9 +9,11 @@
 package model
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,9 +61,6 @@ var RetentionSubject = uuid.MustParse("019a3000-0000-7000-8000-0000000a4a1c")
 const (
 	// FactRetentionMonths is how long facts are kept before the weekly roll-up.
 	FactRetentionMonths = 24
-	// ErasedRetention is how long the pseudonym of a deleted member blocks
-	// late facts: longer than JetStream may keep an event (at most a year).
-	ErasedRetention = 366 * 24 * time.Hour
 	// MaxPeriodMonths is the longest report period.
 	MaxPeriodMonths = 12
 	// DefaultK is the small-cell threshold when configuration sets none.
@@ -103,6 +102,22 @@ func SubjectPseudonym(key []byte, id uuid.UUID) []byte {
 	m := hmac.New(sha256.New, key)
 	m.Write([]byte("subject|" + id.String()))
 	return m.Sum(nil)
+}
+
+// LockOrder sorts facts by the pseudonym the store locks when it inserts
+// each (the actor, else the subject; see InsertFact in the adapter). The
+// facts of one event are inserted in this order, so two transactions that
+// lock the same two members (a pair event delivered twice with the members
+// swapped, or two events of one pair) take the locks in the same order and
+// cannot deadlock.
+func LockOrder(facts []Fact) {
+	key := func(f Fact) []byte {
+		if f.Actor != nil {
+			return f.Actor
+		}
+		return f.Subject
+	}
+	slices.SortStableFunc(facts, func(a, b Fact) int { return bytes.Compare(key(a), key(b)) })
 }
 
 // RetentionCutoff is the first instant whose facts are kept at now: the

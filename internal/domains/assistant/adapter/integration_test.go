@@ -271,7 +271,7 @@ func TestQuestionAnsweredOutboxPostgres(t *testing.T) {
 		if err := json.Unmarshal(p, &got); err != nil {
 			t.Fatal(err)
 		}
-		if got != (model.QuestionAnsweredData{MessageID: want[i].id, Scope: want[i].scope, Source: want[i].source}) {
+		if got != (model.QuestionAnsweredData{MessageID: want[i].id, MemberID: member, Scope: want[i].scope, Source: want[i].source}) {
 			t.Fatalf("event %d = %s, want %+v", i, p, want[i])
 		}
 	}

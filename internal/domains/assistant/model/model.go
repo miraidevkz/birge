@@ -312,10 +312,15 @@ type Reply struct {
 }
 
 // QuestionAnsweredData is the payload of assistant.QuestionAnswered v1: the
-// assistant turn ID, the scope and the answer source only. No text, no topic,
-// no member ID and no article IDs (ADR-0024: metrics only).
+// assistant turn ID, the member who asked, the scope and the answer source
+// only. No text, no topic and no article IDs (ADR-0024: metrics only).
+// MemberID lets analytics count the members behind a rights cell for
+// small-cell suppression; analytics stores only its keyed pseudonym, never
+// next to any text, so the event links a member to a scope and a source but
+// never to what she asked.
 type QuestionAnsweredData struct {
 	MessageID uuid.UUID `json:"message_id"`
+	MemberID  uuid.UUID `json:"member_id"`
 	Scope     string    `json:"scope"`
 	Source    string    `json:"source"`
 }

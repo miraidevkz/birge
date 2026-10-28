@@ -26,7 +26,8 @@ Contract merged, code pending (answers 501):
 - [x] One-time link for external trusted contacts to view a sent emergency plan (`viewExternalPlan`, emergency)
 - [x] Metric input events for analytics: `membership.MemberActiveDay`, `circle.TeaRequested`, `assistant.QuestionAnswered`
 - [x] Analytics (ADR-0024): wellbeing cohort aggregates, the `analytics` context with `getMetrics` and `getMetricsCsv`
-- [ ] Rights metrics need a member reference in `assistant.QuestionAnswered` and `assistant.ReplyRated`; the isolation metric needs an isolation item in the check-in (product and psychologist decision)
+- [x] Rights metrics: `assistant.QuestionAnswered` carries `member_id`; analytics joins `ReplyRated` to it by message
+- [ ] The isolation metric needs an isolation item in the check-in (product and psychologist decision)
 
 No contract change needed:
 - [x] Push (FCM, APNs) and SMS provider adapters (an SMS provider in Kazakhstan, e.g. SMSC.kz, with a registered sender ID); production refuses the log senders

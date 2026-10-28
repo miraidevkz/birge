@@ -23,8 +23,9 @@ func (s *Service) EnsureRetentionTimer(ctx context.Context) error {
 // transaction: facts older than FactRetentionMonths, cut at the Monday that
 // starts their week in the deployment zone (so a week is rolled up whole and
 // once), become weekly counts without actors and are deleted; erased
-// pseudonyms older than ErasedRetention are deleted; the next run is
-// scheduled. Everything commits with the timer, so a crash repeats it whole.
+// pseudonyms older than Settings.EventsMaxAge are deleted (none when it is
+// zero); the next run is scheduled. Everything commits with the timer, so a
+// crash repeats it whole.
 func (s *Service) HandleRetention(ctx context.Context, tx port.Tx) error {
 	loc, err := s.location()
 	if err != nil {
@@ -32,10 +33,22 @@ func (s *Service) HandleRetention(ctx context.Context, tx port.Tx) error {
 	}
 	now := s.now()
 	cutoff := model.RetentionCutoff(now, loc)
-	deleted, err := tx.RollUpAndDelete(ctx, loc.String(), cutoff, now.Add(-model.ErasedRetention))
+	deleted, err := tx.RollUpAndDelete(ctx, loc.String(), cutoff, s.erasedBefore(now))
 	if err != nil {
 		return err
 	}
 	s.log().InfoContext(ctx, "analytics retention sweep", "event", "AnalyticsRetention", "deleted", deleted)
 	return tx.ScheduleRetention(ctx, model.NextDailyRun(now, retentionAt))
+}
+
+// erasedBefore is the erased_at before which a deleted member's pseudonym
+// can be forgotten: the EVENTS stream drops an event once it is older than
+// its max age, and her events were published before her deletion was
+// processed (erased_at), so none of them can arrive after erased_at plus
+// that age. The zero time (EventsMaxAge unset) forgets nothing.
+func (s *Service) erasedBefore(now time.Time) time.Time {
+	if s.Settings.EventsMaxAge <= 0 {
+		return time.Time{}
+	}
+	return now.Add(-s.Settings.EventsMaxAge)
 }

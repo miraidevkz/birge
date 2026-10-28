@@ -58,6 +58,9 @@ func (emptyTx) SosOutcomes(context.Context, time.Time, time.Time) (port.SosCount
 func (emptyTx) EscalationOutcomes(context.Context, time.Time, time.Time, time.Duration) (port.EscalationCounts, error) {
 	return port.EscalationCounts{}, nil
 }
+func (emptyTx) RightsOutcomes(context.Context, time.Time, time.Time) (port.RightsCounts, error) {
+	return port.RightsCounts{}, nil
+}
 func (emptyTx) RollUpAndDelete(context.Context, string, time.Time, time.Time) (int64, error) {
 	return 0, nil
 }

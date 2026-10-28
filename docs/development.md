@@ -113,7 +113,7 @@ A fresh deployment can start with no configuration or reference data files: when
 | `BIRGE_SMS_PROVIDER` | worker | `log` in dev, required otherwise | `log` or `smsc` (SMSC.kz) |
 | `BIRGE_SMSC_LOGIN_FILE`, `BIRGE_SMSC_PASSWORD_FILE` | worker | required with `smsc` | files holding the SMSC.kz account login and password (trailing newline removed) |
 | `BIRGE_SMSC_SENDER` | worker | account default | registered alphanumeric sender ID, up to 11 Latin letters, digits or spaces |
-| `BIRGE_EVENTS_MAX_AGE` | worker | `720h` | JetStream EVENTS stream MaxAge (how long events are retained) |
+| `BIRGE_EVENTS_MAX_AGE` | worker | `720h` | JetStream EVENTS stream MaxAge (how long events are retained); also how long analytics keeps a deleted member's pseudonym in `analytics.erased_actors` (her late events can arrive only that long) |
 | `BIRGE_EVENTS_MAX_BYTES` | worker | `1073741824` (1 GiB) | JetStream EVENTS stream MaxBytes (size cap; oldest messages discarded first) |
 | `BIRGE_LLM_MODEL` | api | `claude-opus-5-5` | Anthropic model id for the assistant (logged with every reply) |
 | `BIRGE_LLM_API_KEY_FILE` | api | unset | path to the Anthropic API key file; unset or unreadable → Warn `LLMDisabled`, every reply `degraded=true`, process still starts |

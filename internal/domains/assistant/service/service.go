@@ -635,7 +635,7 @@ func (s *Service) persist(ctx context.Context, ex exchange, at model.Turn, assis
 		}
 		if inserted {
 			evErr := tx.PublishQuestionAnswered(ctx, ex.now, model.QuestionAnsweredData{
-				MessageID: ex.assistantTurnID, Scope: ex.scope, Source: source,
+				MessageID: ex.assistantTurnID, MemberID: ex.memberID, Scope: ex.scope, Source: source,
 			})
 			if evErr != nil && at.Crisis {
 				droppedEvent = evErr

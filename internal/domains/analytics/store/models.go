@@ -16,6 +16,11 @@ type AnalyticsErasedActor struct {
 	ErasedAt time.Time
 }
 
+type AnalyticsErasedSubject struct {
+	Subject  []byte
+	ErasedAt time.Time
+}
+
 type AnalyticsFact struct {
 	ID         uuid.UUID
 	EventType  string

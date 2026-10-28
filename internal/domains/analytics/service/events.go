@@ -33,6 +33,9 @@ func (s *Service) HandleEvent(ctx context.Context, e model.Event) error {
 		return err
 	}
 	oldest := s.now().AddDate(0, -model.FactRetentionMonths, 0)
+	// Inserting locks each fact's pseudonym against a concurrent erasure;
+	// a fixed order keeps two transactions from waiting on each other.
+	model.LockOrder(facts)
 	return s.Store.InTx(ctx, func(tx port.Tx) error {
 		newly, err := tx.MarkProcessed(ctx, FactsConsumer, e.ID)
 		if err != nil || !newly {

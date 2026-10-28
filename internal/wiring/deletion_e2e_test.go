@@ -112,9 +112,10 @@ var deletionPolicy = map[string]struct {
 
 	// Analytics keeps no member ID at all: facts name pseudonyms
 	// (HMAC-SHA256, bytea), which checkTombstonesAndOthers checks directly.
-	"analytics.facts":          {"", nil},
-	"analytics.weekly_rollups": {"", nil},
-	"analytics.erased_actors":  {"her pseudonym, so her late events are not counted (ADR-0024)", nil},
+	"analytics.facts":           {"", nil},
+	"analytics.weekly_rollups":  {"", nil},
+	"analytics.erased_actors":   {"her pseudonym, so her late events are not counted (ADR-0024)", nil},
+	"analytics.erased_subjects": {"pseudonyms of her SOS, escalations and answers, so late facts about them are not counted (ADR-0024)", nil},
 }
 
 // memberColumnPattern matches column names that can hold a member (or
@@ -202,7 +203,7 @@ type deletionSeed struct {
 	heldMessage, otherListing, otherSos uuid.UUID
 	keptSpecialist, otherReview, match  uuid.UUID
 	directRoom, herUpload, herListing   uuid.UUID
-	analyticsKey                        []byte
+	analyticsKey, otherAnswerSubject    []byte
 }
 
 func seedEveryContext(t *testing.T, ctx context.Context, pool *pgxpool.Pool, her uuid.UUID) deletionSeed {
@@ -348,8 +349,9 @@ func seedEveryContext(t *testing.T, ctx context.Context, pool *pgxpool.Pool, her
 	// moderation: an item about her review holds only IDs and codes
 	exec(`INSERT INTO moderation.items (id, kind, object_id, created_at) VALUES ($1, 'review', $2, now())`, id(), herReview)
 
-	// analytics: her active day, her SOS and its closing (no actor), and the
-	// other member's active day
+	// analytics: her active day, her SOS and its closing (no actor), her
+	// rights answer and its rating (no actor), and the other member's active
+	// day, rights answer and rating
 	s.analyticsKey = bytes.Repeat([]byte{0x5a}, 32)
 	herActor, otherActor := analyticsmodel.Pseudonym(s.analyticsKey, her), analyticsmodel.Pseudonym(s.analyticsKey, s.other)
 	herSosSubject := analyticsmodel.SubjectPseudonym(s.analyticsKey, herSos)
@@ -358,6 +360,14 @@ func seedEveryContext(t *testing.T, ctx context.Context, pool *pgxpool.Pool, her
 	exec(`INSERT INTO analytics.facts (id, event_type, occurred_at, code, actor, subject) VALUES ($1, 'emergency.SosRaised', now(), 'other', $2, $3)`,
 		id(), herActor, herSosSubject)
 	exec(`INSERT INTO analytics.facts (id, event_type, occurred_at, subject) VALUES ($1, 'emergency.SosClosed', now(), $2)`, id(), herSosSubject)
+	herAnswer, otherAnswer := analyticsmodel.SubjectPseudonym(s.analyticsKey, id()), analyticsmodel.SubjectPseudonym(s.analyticsKey, id())
+	s.otherAnswerSubject = otherAnswer
+	exec(`INSERT INTO analytics.facts (id, event_type, occurred_at, code, actor, subject) VALUES
+		($1, 'assistant.QuestionAnswered', now(), 'rights_knowledge', $2, $3), ($4, 'assistant.QuestionAnswered', now(), 'rights_knowledge', $5, $6)`,
+		id(), herActor, herAnswer, id(), otherActor, otherAnswer)
+	exec(`INSERT INTO analytics.facts (id, event_type, occurred_at, code, subject) VALUES
+		($1, 'assistant.ReplyRated', now(), 'helped', $2), ($3, 'assistant.ReplyRated', now(), 'helped', $4)`,
+		id(), herAnswer, id(), otherAnswer)
 
 	// Pending timers of her and her records (far in the future: only cancelling may end them).
 	for _, tm := range []struct {
@@ -671,8 +681,11 @@ func checkTombstonesAndOthers(t *testing.T, ctx context.Context, pool *pgxpool.P
 	herActor := analyticsmodel.Pseudonym(s.analyticsKey, her)
 	expect("her analytics facts", `SELECT count(*) FROM analytics.facts WHERE actor = $1`, 0, herActor)
 	expect("her closed SOS fact", `SELECT count(*) FROM analytics.facts WHERE event_type = 'emergency.SosClosed'`, 0)
-	expect("other member's analytics fact", `SELECT count(*) FROM analytics.facts WHERE actor = $1`, 1, analyticsmodel.Pseudonym(s.analyticsKey, s.other))
+	expect("her rating (joined through her answer)", `SELECT count(*) FROM analytics.facts WHERE event_type = 'assistant.ReplyRated' AND subject IS DISTINCT FROM $1`, 0, s.otherAnswerSubject)
+	expect("other member's rating", `SELECT count(*) FROM analytics.facts WHERE event_type = 'assistant.ReplyRated' AND subject = $1`, 1, s.otherAnswerSubject)
+	expect("other member's analytics facts", `SELECT count(*) FROM analytics.facts WHERE actor = $1`, 2, analyticsmodel.Pseudonym(s.analyticsKey, s.other))
 	expect("her erased pseudonym", `SELECT count(*) FROM analytics.erased_actors WHERE actor = $1`, 1, herActor)
+	expect("her erased subjects (SOS, rights answer)", `SELECT count(*) FROM analytics.erased_subjects`, 2)
 	expect("audit entries", `SELECT count(DISTINCT action) FROM platform.audit_log
 		WHERE object_type = 'member' AND object_id = $1 AND action LIKE '%.member_deleted' AND actor_role = 'system'`, 12, her)
 	expect("one audit entry per context", `SELECT count(*) FROM platform.audit_log

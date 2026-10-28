@@ -37,6 +37,13 @@ type Settings struct {
 	// Key is the analytics pseudonym key (BIRGE_ANALYTICS_KEY_FILE). Only
 	// the worker has it; HandleEvent refuses to run without it.
 	Key []byte
+	// EventsMaxAge is how long the EVENTS stream keeps an event (wiring
+	// Config.EventsMaxAge, BIRGE_EVENTS_MAX_AGE, the MaxAge the worker gives
+	// the stream). A deleted member's pseudonym stays in erased_actors this
+	// long: an event of hers can reach analytics only while the stream still
+	// holds it. Zero keeps erased pseudonyms (never purged): without the
+	// stream's limit there is no safe point to forget them.
+	EventsMaxAge time.Duration
 }
 
 // Service implements the analytics use cases. Store and Clock are required;
@@ -140,11 +147,6 @@ func (s *Service) report(ctx context.Context, p auth.Principal, from, to time.Ti
 		StressWeek8:     model.ScoreOf(cohorts.StressWeek8),
 		IsolationBefore: model.ScoreOf(cohorts.IsolationBefore),
 		IsolationAfter:  model.ScoreOf(cohorts.IsolationAfter),
-		// Rights: assistant.QuestionAnswered and assistant.ReplyRated carry
-		// no member, so these cells cannot say how many members they are
-		// built from and stay suppressed (members 0) whatever k is.
-		RightsAnsweredFromKnowledge: model.Cell{},
-		RightsHelpedShare:           model.Cell{},
 	}
 	err = s.Store.InTx(ctx, func(tx port.Tx) error {
 		if err := tx.Audit(ctx, port.AuditEntry{
@@ -215,5 +217,16 @@ func (s *Service) fill(ctx context.Context, tx port.Tx, m *model.Metrics, loc *t
 	}
 	m.EscalationsOpened = model.Count(esc.Members, esc.Opened)
 	m.EscalationsTakenWithin15mShare = model.Share(esc.Members, esc.TakenWithin, esc.Opened)
+
+	// Rights (requirements section 9): answers closed by the knowledge base,
+	// and the share of rated rights answers rated helped. Members are the
+	// askers (QuestionAnswered actor); a rating counts for the member of the
+	// answer it rates.
+	rights, err := tx.RightsOutcomes(ctx, start, end)
+	if err != nil {
+		return err
+	}
+	m.RightsAnsweredFromKnowledge = model.Count(rights.KnowledgeMembers, rights.AnsweredFromKnowledge)
+	m.RightsHelpedShare = model.Share(rights.RatedMembers, rights.Helped, rights.Rated)
 	return nil
 }

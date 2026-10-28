@@ -30,7 +30,10 @@ type fakeStore struct {
 	processed map[uuid.UUID]bool
 	facts     []model.Fact
 	counts    port.SosCounts
+	rights    port.RightsCounts
 	active    map[time.Time]int
+	// erasedBefore is the last erasedBefore given to RollUpAndDelete.
+	erasedBefore time.Time
 }
 
 func newFakeStore() *fakeStore { return &fakeStore{processed: map[uuid.UUID]bool{}} }
@@ -67,7 +70,11 @@ func (s *fakeStore) SosOutcomes(context.Context, time.Time, time.Time) (port.Sos
 func (s *fakeStore) EscalationOutcomes(context.Context, time.Time, time.Time, time.Duration) (port.EscalationCounts, error) {
 	return port.EscalationCounts{Opened: 6, Members: 5, TakenWithin: 3}, nil
 }
-func (s *fakeStore) RollUpAndDelete(context.Context, string, time.Time, time.Time) (int64, error) {
+func (s *fakeStore) RightsOutcomes(context.Context, time.Time, time.Time) (port.RightsCounts, error) {
+	return s.rights, nil
+}
+func (s *fakeStore) RollUpAndDelete(_ context.Context, _ string, _, erasedBefore time.Time) (int64, error) {
+	s.erasedBefore = erasedBefore
 	return 0, nil
 }
 func (s *fakeStore) ScheduleRetention(context.Context, time.Time) error { return nil }
@@ -162,6 +169,7 @@ func TestMetricsBuiltSuppressedAndAudited(t *testing.T) {
 	store := newFakeStore()
 	store.counts = port.SosCounts{Raised: 6, RaisedMembers: 5, Closed: 3, Responded: 4, RespondedMembers: 4, MedianMinutesToFirstResponse: 12}
 	store.active = map[time.Time]int{time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC): 8}
+	store.rights = port.RightsCounts{AnsweredFromKnowledge: 9, KnowledgeMembers: 5, Rated: 4, Helped: 3, RatedMembers: 4}
 	svc := newService(store, 5)
 
 	m, err := svc.Metrics(context.Background(), admin, from, to)
@@ -195,8 +203,8 @@ func TestMetricsBuiltSuppressedAndAudited(t *testing.T) {
 	hidden("sos first response (4 < k)", m.SosFirstResponseMedianMinutes)
 	cell("escalations opened", m.EscalationsOpened, 5, 6)
 	cell("escalations taken within 15m", m.EscalationsTakenWithin15mShare, 5, 0.5)
-	hidden("rights answered", m.RightsAnsweredFromKnowledge)
-	hidden("rights helped", m.RightsHelpedShare)
+	cell("rights answered from knowledge", m.RightsAnsweredFromKnowledge, 5, 9)
+	hidden("rights helped share (4 < k)", m.RightsHelpedShare)
 	if len(m.ActiveWeekly) != 6 || len(m.ActiveMonthly) != 1 {
 		t.Fatalf("buckets: %d weekly, %d monthly", len(m.ActiveWeekly), len(m.ActiveMonthly))
 	}
@@ -234,6 +242,67 @@ func TestMetricsDemoK1(t *testing.T) {
 	}
 	if !m.RightsHelpedShare.Suppressed {
 		t.Fatal("a cell from no member must stay suppressed even with k=1")
+	}
+}
+
+// TestRightsSuppression: both rights cells are counted by the members behind
+// them and suppressed at k-1, shown at k.
+func TestRightsSuppression(t *testing.T) {
+	const k = 5
+	for _, tt := range []struct {
+		name    string
+		members int
+		hidden  bool
+	}{{"k-1 members", k - 1, true}, {"k members", k, false}} {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newFakeStore()
+			store.rights = port.RightsCounts{
+				AnsweredFromKnowledge: 12, KnowledgeMembers: tt.members,
+				Rated: 8, Helped: 6, RatedMembers: tt.members,
+			}
+			m, err := newService(store, k).Metrics(context.Background(), admin, from, to)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := map[string]model.Cell{
+				"answered from knowledge": {Members: tt.members, Value: 12},
+				"helped share":            {Members: tt.members, Value: 0.75},
+			}
+			if tt.hidden {
+				want = map[string]model.Cell{"answered from knowledge": {Suppressed: true}, "helped share": {Suppressed: true}}
+			}
+			for name, got := range map[string]model.Cell{
+				"answered from knowledge": m.RightsAnsweredFromKnowledge, "helped share": m.RightsHelpedShare,
+			} {
+				if got != want[name] {
+					t.Errorf("%s = %+v, want %+v", name, got, want[name])
+				}
+			}
+		})
+	}
+}
+
+// TestRetentionErasedBefore: erased pseudonyms are forgotten after the EVENTS
+// stream's max age, and never when it is not configured.
+func TestRetentionErasedBefore(t *testing.T) {
+	store := newFakeStore()
+	svc := newService(store, 5)
+	now := svc.Clock.Now()
+
+	svc.Settings.EventsMaxAge = 720 * time.Hour
+	if err := svc.HandleRetention(context.Background(), store); err != nil {
+		t.Fatal(err)
+	}
+	if want := now.Add(-720 * time.Hour); !store.erasedBefore.Equal(want) {
+		t.Fatalf("erasedBefore = %s, want %s", store.erasedBefore, want)
+	}
+
+	svc.Settings.EventsMaxAge = 0
+	if err := svc.HandleRetention(context.Background(), store); err != nil {
+		t.Fatal(err)
+	}
+	if !store.erasedBefore.IsZero() {
+		t.Fatalf("erasedBefore without a max age = %s, want the zero time (keep all)", store.erasedBefore)
 	}
 }
 

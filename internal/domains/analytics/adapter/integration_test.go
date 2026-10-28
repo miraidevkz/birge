@@ -64,7 +64,7 @@ func newEnv(t *testing.T) *env {
 		}},
 		Clock:    clk,
 		Logger:   slog.New(slog.NewJSONHandler(logs, nil)),
-		Settings: service.Settings{K: 1, TimeZone: "Asia/Almaty", Key: key},
+		Settings: service.Settings{K: 1, TimeZone: "Asia/Almaty", Key: key, EventsMaxAge: 720 * time.Hour},
 	}
 	return &env{
 		t: t, ctx: context.Background(), pool: pool, clock: clk, svc: svc, key: key, logs: logs,
@@ -166,9 +166,9 @@ func (e *env) seed() seed {
 	e.emit(model.EventEscalationTaken, utc(3, 13, 9, 40), map[string]any{"escalation_id": esc2.String(), "taken_by": staff.String()})
 	e.emit(model.EventEscalationOpened, utc(3, 14, 9, 0), map[string]any{"escalation_id": uuid.NewString(), "member_id": s.m3.String(), "source": "assistant"})
 
-	// Rights: stored without an actor, reported suppressed.
+	// Rights: m1 asks, the knowledge base answers, she rates it helped.
 	msg := uuid.New()
-	e.emit(model.EventQuestionAnswered, utc(3, 15, 9, 0), map[string]any{"message_id": msg.String(), "scope": "rights", "source": "knowledge"})
+	e.emit(model.EventQuestionAnswered, utc(3, 15, 9, 0), map[string]any{"message_id": msg.String(), "member_id": s.m1.String(), "scope": "rights", "source": "knowledge"})
 	e.emit(model.EventReplyRated, utc(3, 15, 9, 5), map[string]any{"message_id": msg.String(), "helped": true})
 	return s
 }
@@ -219,9 +219,10 @@ func TestMetricsFromEvents(t *testing.T) {
 	cellIs(t, "escalations opened", m.EscalationsOpened, 3, 3)
 	cellIs(t, "escalations taken within 15m", m.EscalationsTakenWithin15mShare, 3, 1.0/3)
 	cellIs(t, "stress baseline mean", m.StressBaseline.Mean, 2, 10)
+	cellIs(t, "rights answered from knowledge", m.RightsAnsweredFromKnowledge, 1, 1)
+	cellIs(t, "rights helped share", m.RightsHelpedShare, 1, 1)
 	for name, c := range map[string]model.Cell{
 		"stress week8": m.StressWeek8.Mean, "isolation": m.IsolationBefore.Median,
-		"rights answered": m.RightsAnsweredFromKnowledge, "rights helped": m.RightsHelpedShare,
 	} {
 		if !c.Suppressed {
 			t.Errorf("%s = %+v, want suppressed", name, c)
@@ -295,9 +296,10 @@ func TestDeletionAndLateEvents(t *testing.T) {
 			t.Errorf("facts about her SOS or escalation = %d", n)
 		}
 	}
-	// 2 = the SOS closing and the escalation taking.
-	if after := e.count(`SELECT count(*) FROM analytics.facts`); after != before-own-2 {
-		t.Errorf("facts after deletion = %d, want %d", after, before-own-2)
+	// 3 = the SOS closing, the escalation taking and the rating of her
+	// rights answer (none carries an actor).
+	if after := e.count(`SELECT count(*) FROM analytics.facts`); after != before-own-3 {
+		t.Errorf("facts after deletion = %d, want %d", after, before-own-3)
 	}
 	if n := e.count(`SELECT count(*) FROM analytics.facts WHERE actor = $1`, model.Pseudonym(e.key, s.m2)); n == 0 {
 		t.Error("another member's facts were deleted")
@@ -316,11 +318,18 @@ func TestDeletionAndLateEvents(t *testing.T) {
 func TestRetentionRollsUpAndDeletes(t *testing.T) {
 	e := newEnv(t)
 	s := e.seed()
-	if err := (&service.Deletion{Store: &adapter.PostgresStore{Pool: e.pool}, Key: e.key, Clock: e.clock}).DeleteMember(e.ctx, s.m3); err != nil {
+	del := &service.Deletion{Store: &adapter.PostgresStore{Pool: e.pool}, Key: e.key, Clock: e.clock}
+	if err := del.DeleteMember(e.ctx, s.m3); err != nil {
 		t.Fatal(err)
 	}
 	// A fact inside the retention period stays.
 	e.clock.Set(time.Date(2028, 3, 20, 12, 0, 0, 0, time.UTC))
+	// A member deleted the day before the sweep: her late events may still
+	// be in the EVENTS stream, so her pseudonym must survive the sweep.
+	recent := uuid.New()
+	if err := del.DeleteMember(e.ctx, recent); err != nil {
+		t.Fatal(err)
+	}
 	e.emit(model.EventMemberActiveDay, utc(3, 1, 0, 0), map[string]any{"member_id": s.m2.String(), "day": "2026-07-01"})
 	if err := e.svc.EnsureRetentionTimer(e.ctx); err != nil {
 		t.Fatal(err)
@@ -353,8 +362,14 @@ func TestRetentionRollsUpAndDeletes(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM analytics.weekly_rollups WHERE week = '2026-03-02' AND event_type = $1 AND code = ''`, model.EventMemberActiveDay); n != 1 {
 		t.Errorf("week of 2 March active-day roll-up rows = %d", n)
 	}
-	if n := e.count(`SELECT count(*) FROM analytics.erased_actors`); n != 0 {
-		t.Errorf("erased pseudonyms older than a year = %d, want 0", n)
+	if n := e.count(`SELECT count(*) FROM analytics.erased_actors WHERE actor = $1`, model.Pseudonym(e.key, s.m3)); n != 0 {
+		t.Errorf("erased pseudonym older than the stream max age = %d, want 0", n)
+	}
+	if n := e.count(`SELECT count(*) FROM analytics.erased_actors WHERE actor = $1`, model.Pseudonym(e.key, recent)); n != 1 {
+		t.Errorf("erased pseudonym within the stream max age = %d, want 1", n)
+	}
+	if n := e.count(`SELECT count(*) FROM analytics.erased_subjects`); n != 0 {
+		t.Errorf("erased subjects older than the stream max age = %d, want 0", n)
 	}
 	if n := e.count(`SELECT count(*) FROM platform.timers WHERE kind = $1 AND done_at IS NULL`, model.TimerRetention); n != 1 {
 		t.Errorf("next retention runs scheduled = %d, want 1", n)
@@ -371,6 +386,188 @@ func TestRetentionRollsUpAndDeletes(t *testing.T) {
 	}
 	if n := e.count(`SELECT sum(facts)::int FROM analytics.weekly_rollups`); n != sum {
 		t.Errorf("roll-ups changed on the second sweep: %d, want %d", n, sum)
+	}
+}
+
+// TestRightsMetrics computes both rights cells from a seeded event sequence:
+// ratings delivered before and after their answer, a changed rating, answers
+// outside the period or scope, an orphan rating, suppression at k-1 and k,
+// and account deletion with late events of the deleted member.
+func TestRightsMetrics(t *testing.T) {
+	e := newEnv(t)
+	a, b, c := uuid.New(), uuid.New(), uuid.New()
+	q1, q2, q3, q4, q5 := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	answer := func(msg, member uuid.UUID, at time.Time, scope, source string) {
+		t.Helper()
+		e.emit(model.EventQuestionAnswered, at, map[string]any{"message_id": msg.String(), "member_id": member.String(), "scope": scope, "source": source})
+	}
+	rate := func(msg uuid.UUID, at time.Time, helped bool) {
+		t.Helper()
+		e.emit(model.EventReplyRated, at, map[string]any{"message_id": msg.String(), "helped": helped})
+	}
+	// a: q1 from the knowledge base, rated after the answer arrived, first
+	// helped, then changed to not helped (the last rating wins).
+	answer(q1, a, utc(3, 2, 10, 0), "rights", "knowledge")
+	rate(q1, utc(3, 2, 10, 5), true)
+	rate(q1, utc(3, 3, 8, 0), false)
+	// b: q2 from the knowledge base; its rating is delivered before the
+	// answer (redelivery, consumer restart), so it is stored first.
+	rate(q2, utc(3, 4, 10, 5), true)
+	if n := e.count(`SELECT count(*) FROM analytics.facts WHERE event_type = $1 AND actor IS NULL`, model.EventReplyRated); n != 3 {
+		t.Fatalf("ratings stored without an actor = %d, want 3", n)
+	}
+	answer(q2, b, utc(3, 4, 10, 0), "rights", "knowledge")
+	// c: q3 had no answer in the knowledge base, still rated helped.
+	answer(q3, c, utc(3, 5, 10, 0), "rights", "no_answer")
+	rate(q3, utc(3, 5, 10, 5), true)
+	// Not counted: a general answer (q4), a rights answer in April (q5), a
+	// rating whose answer never arrived.
+	answer(q4, a, utc(3, 6, 10, 0), "general", "knowledge")
+	rate(q4, utc(3, 6, 10, 5), true)
+	answer(q5, b, utc(4, 2, 10, 0), "rights", "knowledge")
+	rate(q5, utc(4, 2, 10, 5), true)
+	rate(uuid.New(), utc(3, 7, 10, 0), true)
+
+	if n := e.count(`SELECT count(*) FROM analytics.facts WHERE event_type = $1 AND actor = $2`, model.EventQuestionAnswered, model.Pseudonym(e.key, b)); n != 2 {
+		t.Fatalf("answers of b stored with her pseudonym = %d, want 2", n)
+	}
+	for _, id := range []uuid.UUID{a, b, c, q1, q2, q3} {
+		if n := e.count(`SELECT count(*) FROM analytics.facts f WHERE f::text LIKE '%' || $1 || '%'`, id.String()); n != 0 {
+			t.Errorf("a fact contains the ID %s in clear", id)
+		}
+	}
+
+	from, to := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC)
+	report := func(k int) model.Metrics {
+		t.Helper()
+		e.svc.Settings.K = k
+		m, err := e.svc.Metrics(e.ctx, admin, from, to)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	// Answered from knowledge: q1 (a), q2 (b). Rated rights answers: q1
+	// not helped, q2 helped, q3 helped, from a, b, c.
+	m := report(1)
+	cellIs(t, "answered from knowledge", m.RightsAnsweredFromKnowledge, 2, 2)
+	cellIs(t, "helped share", m.RightsHelpedShare, 3, 2.0/3)
+
+	// Suppression: 2 members behind answeredFromKnowledge, 3 behind helpedShare.
+	if m := report(3); !m.RightsAnsweredFromKnowledge.Suppressed {
+		t.Errorf("answered from 2 members shown with k=3: %+v", m.RightsAnsweredFromKnowledge)
+	} else {
+		cellIs(t, "helped share with k=3", m.RightsHelpedShare, 3, 2.0/3)
+	}
+	cellIs(t, "answered from knowledge with k=2", report(2).RightsAnsweredFromKnowledge, 2, 2)
+	if m := report(4); !m.RightsHelpedShare.Suppressed {
+		t.Errorf("helped share from 3 members shown with k=4: %+v", m.RightsHelpedShare)
+	}
+
+	// Deleting b removes her answers and their ratings (which carry no actor).
+	del := &service.Deletion{Store: &adapter.PostgresStore{Pool: e.pool}, Key: e.key, Clock: e.clock}
+	if err := del.DeleteMember(e.ctx, b); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []uuid.UUID{q2, q5} {
+		if n := e.count(`SELECT count(*) FROM analytics.facts WHERE subject = $1`, model.SubjectPseudonym(e.key, q)); n != 0 {
+			t.Errorf("facts about her answer = %d, want 0", n)
+		}
+	}
+	// Late events of hers: a rating of an answer analytics had stored is
+	// dropped (erased subject); an answer is dropped (erased pseudonym); a
+	// rating of that answer is stored without an actor but joins no answer,
+	// so it is not counted.
+	rate(q2, utc(3, 9, 8, 0), false)
+	if n := e.count(`SELECT count(*) FROM analytics.facts WHERE subject = $1`, model.SubjectPseudonym(e.key, q2)); n != 0 {
+		t.Fatalf("a late rating of a deleted member's answer was stored")
+	}
+	late := uuid.New()
+	rate(late, utc(3, 8, 10, 5), true)
+	answer(late, b, utc(3, 8, 10, 0), "rights", "knowledge")
+	if n := e.count(`SELECT count(*) FROM analytics.facts WHERE actor = $1`, model.Pseudonym(e.key, b)); n != 0 {
+		t.Fatalf("a late answer of a deleted member was stored")
+	}
+	m = report(1)
+	cellIs(t, "answered from knowledge after deletion", m.RightsAnsweredFromKnowledge, 1, 1)
+	cellIs(t, "helped share after deletion", m.RightsHelpedShare, 2, 0.5)
+}
+
+// TestErasureSerializedWithFactInsert interleaves a fact insert and an
+// account deletion: the insert's transaction is open (its erased check done,
+// its row not committed) when the deletion starts. The deletion must wait
+// for it and then delete the row; without the shared advisory lock it would
+// commit first, miss the uncommitted row, and the fact would stay forever.
+// Phase 1 covers a fact with her actor, phase 2 an actor-less fact about her
+// SOS (subject lock), followed by a late closing that must be dropped.
+func TestErasureSerializedWithFactInsert(t *testing.T) {
+	e := newEnv(t)
+	del := &service.Deletion{Store: &adapter.PostgresStore{Pool: e.pool}, Key: e.key, Clock: e.clock}
+
+	waitForLockWaiter := func() {
+		t.Helper()
+		for range 400 {
+			if e.count(`SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted`) > 0 {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		t.Fatal("the deletion did not wait on the advisory lock")
+	}
+	interleave := func(member uuid.UUID, f model.Fact) {
+		t.Helper()
+		tx, err := e.pool.Begin(e.ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback(e.ctx) }()
+		if err := adapter.Bind(tx).InsertFact(e.ctx, f); err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- del.DeleteMember(e.ctx, member) }()
+		waitForLockWaiter()
+		select {
+		case err := <-done:
+			t.Fatalf("deletion finished while the insert was open: %v", err)
+		default:
+		}
+		if err := tx.Commit(e.ctx); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Phase 1: a fact with her actor.
+	her := uuid.New()
+	actor := model.Pseudonym(e.key, her)
+	interleave(her, model.Fact{ID: uuid.New(), Type: model.EventMemberActiveDay, OccurredAt: utc(6, 29, 7, 0), Actor: actor})
+	if n := e.count(`SELECT count(*) FROM analytics.facts WHERE actor = $1`, actor); n != 0 {
+		t.Fatalf("facts of the deleted member after the interleaving = %d, want 0", n)
+	}
+
+	// Phase 2: her SOS is stored; its closing is in flight when she is deleted.
+	other, sos := uuid.New(), uuid.New()
+	subj := model.SubjectPseudonym(e.key, sos)
+	e.emit(model.EventSosRaised, utc(6, 29, 8, 0), map[string]any{"sos_id": sos.String(), "member_id": other.String(), "type": "other"})
+	interleave(other, model.Fact{ID: uuid.New(), Type: model.EventSosClosed, OccurredAt: utc(6, 29, 9, 0), Subject: subj})
+	if n := e.count(`SELECT count(*) FROM analytics.facts WHERE subject = $1`, subj); n != 0 {
+		t.Fatalf("facts about the deleted member's SOS after the interleaving = %d, want 0", n)
+	}
+	if n := e.count(`SELECT count(*) FROM analytics.erased_subjects WHERE subject = $1`, subj); n != 1 {
+		t.Fatalf("erased subjects = %d, want 1", n)
+	}
+	// A closing delivered after the deletion is dropped; another SOS's is not.
+	e.emit(model.EventSosClosed, utc(6, 29, 10, 0), map[string]any{"sos_id": sos.String()})
+	unrelated := uuid.New()
+	e.emit(model.EventSosClosed, utc(6, 29, 10, 0), map[string]any{"sos_id": unrelated.String()})
+	if n := e.count(`SELECT count(*) FROM analytics.facts WHERE subject = $1`, subj); n != 0 {
+		t.Fatal("a late closing of a deleted member's SOS was stored")
+	}
+	if n := e.count(`SELECT count(*) FROM analytics.facts WHERE subject = $1`, model.SubjectPseudonym(e.key, unrelated)); n != 1 {
+		t.Fatal("a closing of an SOS nobody erased was dropped")
 	}
 }
 

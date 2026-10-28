@@ -2,16 +2,21 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:birge:events:assistant.QuestionAnswered.v1",
   "title": "assistant.QuestionAnswered",
-  "description": "The assistant finished one turn. source says where the answer came from; no text, no topic. For metrics only (ADR-0024).",
+  "description": "The assistant finished one turn. source says where the answer came from; no text, no topic. member_id lets analytics count members behind a cell (it stores only a keyed pseudonym); ReplyRated joins this event by message_id. For metrics only (ADR-0024).",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "message_id",
+    "member_id",
     "scope",
     "source"
   ],
   "properties": {
     "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "member_id": {
       "type": "string",
       "format": "uuid"
     },

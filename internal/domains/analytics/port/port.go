@@ -45,10 +45,14 @@ type Tx interface {
 	SosOutcomes(ctx context.Context, from, to time.Time) (SosCounts, error)
 	// EscalationOutcomes returns the outcomes of the escalations opened in [from, to).
 	EscalationOutcomes(ctx context.Context, from, to time.Time, within time.Duration) (EscalationCounts, error)
+	// RightsOutcomes returns the outcomes of the rights answers given in
+	// [from, to); ratings are joined to their answer by message subject.
+	RightsOutcomes(ctx context.Context, from, to time.Time) (RightsCounts, error)
 
 	// RollUpAndDelete rolls the facts before `before` into weekly counts
 	// (weeks in tz), deletes those facts and the erased pseudonyms older than
-	// erasedBefore. It returns how many facts were deleted.
+	// erasedBefore (the zero time deletes none). It returns how many facts
+	// were deleted.
 	RollUpAndDelete(ctx context.Context, tz string, before, erasedBefore time.Time) (int64, error)
 	// ScheduleRetention schedules the next analytics.Retention run (deduplicated per day).
 	ScheduleRetention(ctx context.Context, at time.Time) error
@@ -79,6 +83,15 @@ type EscalationCounts struct {
 	Opened, Members, TakenWithin int
 }
 
+// RightsCounts are the outcomes of the rights answers given in a period.
+// AnsweredFromKnowledge answers had source knowledge and came from
+// KnowledgeMembers members; Rated answers have a rating (the latest counts),
+// Helped of them rated helped, from RatedMembers members.
+type RightsCounts struct {
+	AnsweredFromKnowledge, KnowledgeMembers int
+	Rated, Helped, RatedMembers             int
+}
+
 // AuditEntry is one platform.audit_log row written with a read or export.
 type AuditEntry struct {
 	ActorID    uuid.UUID
@@ -91,7 +104,8 @@ type AuditEntry struct {
 // (privacy.DataDeletionRequested, AGENTS.md N6).
 type MemberEraser interface {
 	// EraseActor, in one transaction: deletes the facts of actor (and the
-	// actor-less closed/taken facts of her SOS and escalations), records the
+	// actor-less closed/taken/rated facts of her SOS, escalations and
+	// assistant answers), records the
 	// pseudonym as erased so late events are not counted, and writes the
 	// audit entry once (memberID is its object). Repeating it changes nothing.
 	EraseActor(ctx context.Context, memberID uuid.UUID, actor []byte, now time.Time) error

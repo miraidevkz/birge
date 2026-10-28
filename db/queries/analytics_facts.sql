@@ -1,9 +1,32 @@
+-- name: LockPseudonym :exec
+-- Serializes storing a fact with erasing the member it belongs to (ADR-0024).
+-- Under READ COMMITTED an insert could check erased_actors before an
+-- erasure commits while the erasure's DELETE cannot see the uncommitted
+-- insert; both would commit and leave a fact of a deleted member. Both
+-- sides take this transaction lock first: a fact with an actor locks the
+-- actor, a fact without one locks its subject, and EraseActor locks her
+-- actor and every subject it erases. The key is (class, first 4 bytes of
+-- the pseudonym): the pseudonyms are HMAC output, so 4 bytes spread evenly;
+-- a collision only makes two unrelated transactions wait for each other.
+-- The class keeps actors and subjects apart, and the two-key form does not
+-- overlap the one-bigint locks other contexts take.
+SELECT pg_advisory_xact_lock(
+    hashtext(@class::text),
+    ('x' || encode(substring(@pseudonym::bytea FROM 1 FOR 4), 'hex'))::bit(32)::integer);
+
 -- name: InsertFact :exec
--- A fact for an erased pseudonym is dropped: her late events stay uncounted.
+-- A fact of an erased member is dropped, so her late events stay uncounted:
+-- one with an actor when the actor is erased, one without an actor when its
+-- subject (her SOS, escalation or answer) is erased. Runs after LockPseudonym.
 INSERT INTO analytics.facts (id, event_type, occurred_at, code, actor, subject)
 SELECT @id::uuid, @event_type::text, @occurred_at::timestamptz, sqlc.narg(code)::text, sqlc.narg(actor)::bytea, sqlc.narg(subject)::bytea
-WHERE sqlc.narg(actor)::bytea IS NULL
-   OR NOT EXISTS (SELECT 1 FROM analytics.erased_actors e WHERE e.actor = sqlc.narg(actor)::bytea);
+WHERE CASE
+    WHEN sqlc.narg(actor)::bytea IS NOT NULL THEN
+        NOT EXISTS (SELECT 1 FROM analytics.erased_actors e WHERE e.actor = sqlc.narg(actor)::bytea)
+    WHEN sqlc.narg(subject)::bytea IS NOT NULL THEN
+        NOT EXISTS (SELECT 1 FROM analytics.erased_subjects e WHERE e.subject = sqlc.narg(subject)::bytea)
+    ELSE true
+END;
 
 -- name: CountFacts :many
 -- Per event type in [from_at, to_at): facts, distinct subjects, distinct actors.
@@ -112,3 +135,33 @@ SELECT
         WHERE f.subject = o.subject AND f.event_type = 'safety.EscalationTaken'
           AND extract(epoch FROM f.occurred_at - o.occurred_at) <= @within_seconds::float8))::integer AS taken_within
 FROM opened o;
+
+-- name: RightsOutcomes :one
+-- Rights answers (QuestionAnswered with scope rights) given in
+-- [from_at, to_at), by members (the answer's actor):
+--   - answered_from_knowledge: those with source knowledge;
+--   - rated / helped: those that have a rating (at any time), judged by
+--     their latest rating, since a member may change it and the last one wins.
+-- A ReplyRated fact names no member; it is joined to its answer by the
+-- message subject here, at report time, so the order in which the two events
+-- arrive does not matter. A rating whose answer is not stored (not arrived
+-- yet, or erased with its member) joins nothing and is not counted.
+WITH answered AS (
+    SELECT q.subject, q.actor, q.code
+    FROM analytics.facts q
+    WHERE q.event_type = 'assistant.QuestionAnswered'
+      AND q.code LIKE 'rights\_%'
+      AND q.subject IS NOT NULL AND q.actor IS NOT NULL
+      AND q.occurred_at >= @from_at::timestamptz AND q.occurred_at < @to_at::timestamptz
+), rated AS (
+    SELECT DISTINCT ON (a.subject) a.subject, a.actor, r.code AS rating
+    FROM answered a
+    JOIN analytics.facts r ON r.subject = a.subject AND r.event_type = 'assistant.ReplyRated'
+    ORDER BY a.subject, r.occurred_at DESC, r.id DESC
+)
+SELECT
+    (SELECT count(*) FROM answered WHERE code = 'rights_knowledge')::integer                AS answered_from_knowledge,
+    (SELECT count(DISTINCT actor) FROM answered WHERE code = 'rights_knowledge')::integer   AS knowledge_members,
+    (SELECT count(*) FROM rated)::integer                                                   AS rated,
+    (SELECT count(*) FROM rated WHERE rating = 'helped')::integer                           AS helped,
+    (SELECT count(DISTINCT actor) FROM rated)::integer                                      AS rated_members;

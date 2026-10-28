@@ -55,8 +55,28 @@ func (t *postgresTx) MarkProcessed(ctx context.Context, consumer string, eventID
 	return n == 1, nil
 }
 
-// InsertFact implements port.Tx.
+// Advisory lock classes of LockPseudonym (analytics_facts.sql): actors and
+// subjects never share a key.
+const (
+	lockClassActor   = "analytics.actor"
+	lockClassSubject = "analytics.subject"
+)
+
+// InsertFact implements port.Tx. It first takes the transaction lock of the
+// fact's actor (or, without one, of its subject), the lock EraseActor takes
+// before it deletes, so the erased check and the erasure never interleave.
+// A transaction storing several facts must insert them in model.LockOrder,
+// so two of them never wait on each other's locks.
 func (t *postgresTx) InsertFact(ctx context.Context, f model.Fact) error {
+	class, key := lockClassActor, f.Actor
+	if key == nil {
+		class, key = lockClassSubject, f.Subject
+	}
+	if key != nil {
+		if err := t.q.LockPseudonym(ctx, analyticsstore.LockPseudonymParams{Class: class, Pseudonym: key}); err != nil {
+			return fmt.Errorf("lock pseudonym: %w", err)
+		}
+	}
 	var code *string
 	if f.Code != "" {
 		code = &f.Code
@@ -149,6 +169,18 @@ func (t *postgresTx) EscalationOutcomes(ctx context.Context, from, to time.Time,
 	return port.EscalationCounts{Opened: int(r.Opened), Members: int(r.Members), TakenWithin: int(r.TakenWithin)}, nil
 }
 
+// RightsOutcomes implements port.Tx.
+func (t *postgresTx) RightsOutcomes(ctx context.Context, from, to time.Time) (port.RightsCounts, error) {
+	r, err := t.q.RightsOutcomes(ctx, analyticsstore.RightsOutcomesParams{FromAt: from, ToAt: to})
+	if err != nil {
+		return port.RightsCounts{}, fmt.Errorf("rights outcomes: %w", err)
+	}
+	return port.RightsCounts{
+		AnsweredFromKnowledge: int(r.AnsweredFromKnowledge), KnowledgeMembers: int(r.KnowledgeMembers),
+		Rated: int(r.Rated), Helped: int(r.Helped), RatedMembers: int(r.RatedMembers),
+	}, nil
+}
+
 // RollUpAndDelete implements port.Tx. The roll-up runs before the delete in
 // the same transaction, so no fact is deleted without being counted.
 func (t *postgresTx) RollUpAndDelete(ctx context.Context, tz string, before, erasedBefore time.Time) (int64, error) {
@@ -161,6 +193,9 @@ func (t *postgresTx) RollUpAndDelete(ctx context.Context, tz string, before, era
 	}
 	if _, err := t.q.DeleteErasedBefore(ctx, erasedBefore); err != nil {
 		return 0, fmt.Errorf("delete old erased pseudonyms: %w", err)
+	}
+	if _, err := t.q.DeleteErasedSubjectsBefore(ctx, erasedBefore); err != nil {
+		return 0, fmt.Errorf("delete old erased subjects: %w", err)
 	}
 	return n, nil
 }
@@ -181,10 +216,27 @@ func (t *postgresTx) Audit(ctx context.Context, e port.AuditEntry) error {
 	})
 }
 
-// EraseActor implements port.MemberEraser.
+// EraseActor implements port.MemberEraser. Order matters:
+//  1. lock her actor, then the subjects of her SOS, escalations and answers
+//     (sorted), the locks InsertFact takes; each later statement takes a new
+//     snapshot under READ COMMITTED, so it sees every fact committed by a
+//     transaction that held one of the locks first;
+//  2. record those subjects as erased, so a late closing, taking or rating
+//     (no actor) is dropped;
+//  3. delete the actor-less facts about those subjects, then her facts;
+//  4. record her pseudonym as erased and write the audit entry.
 func (s *PostgresStore) EraseActor(ctx context.Context, memberID uuid.UUID, actor []byte, now time.Time) error {
 	return db.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
 		q, platform := analyticsstore.New(tx), platformstore.New(tx)
+		if err := q.LockPseudonym(ctx, analyticsstore.LockPseudonymParams{Class: lockClassActor, Pseudonym: actor}); err != nil {
+			return fmt.Errorf("analytics: lock actor: %w", err)
+		}
+		if err := q.LockErasedSubjects(ctx, analyticsstore.LockErasedSubjectsParams{Class: lockClassSubject, Actor: actor}); err != nil {
+			return fmt.Errorf("analytics: lock subjects: %w", err)
+		}
+		if err := q.MarkSubjectsErased(ctx, analyticsstore.MarkSubjectsErasedParams{Actor: actor, ErasedAt: now}); err != nil {
+			return fmt.Errorf("analytics: mark subjects erased: %w", err)
+		}
 		if _, err := q.DeleteDependentFacts(ctx, actor); err != nil {
 			return fmt.Errorf("analytics: delete dependent facts: %w", err)
 		}

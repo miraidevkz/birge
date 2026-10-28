@@ -31,10 +31,21 @@ CREATE INDEX facts_subject_idx ON analytics.facts (subject, event_type) WHERE su
 
 -- Pseudonyms of deleted members. Events are consumed asynchronously, so an
 -- event of hers may arrive after her deletion; a fact for an erased
--- pseudonym is never stored. Purged by the retention timer after a year
--- (longer than the JetStream stream may keep an event, BIRGE_EVENTS_MAX_AGE).
+-- pseudonym is never stored. Purged by the retention timer once it is older
+-- than the EVENTS stream's max age (BIRGE_EVENTS_MAX_AGE): by then the stream
+-- has dropped every event of hers that could still arrive.
 CREATE TABLE analytics.erased_actors (
     actor     bytea       PRIMARY KEY CHECK (octet_length(actor) = 32),
+    erased_at timestamptz NOT NULL
+);
+
+-- Subject pseudonyms of a deleted member's SOS, escalations and assistant
+-- answers. The facts that close, take or rate them carry no actor, so
+-- erased_actors cannot stop one that arrives after her deletion; a fact
+-- without an actor whose subject is listed here is never stored. Same
+-- window as erased_actors (purged with it after the EVENTS max age).
+CREATE TABLE analytics.erased_subjects (
+    subject   bytea       PRIMARY KEY CHECK (octet_length(subject) = 32),
     erased_at timestamptz NOT NULL
 );
 

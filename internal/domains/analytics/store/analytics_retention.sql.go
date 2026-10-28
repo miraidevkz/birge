@@ -26,16 +26,17 @@ func (q *Queries) DeleteActorFacts(ctx context.Context, actor []byte) (int64, er
 const deleteDependentFacts = `-- name: DeleteDependentFacts :execrows
 DELETE FROM analytics.facts f
 WHERE f.actor IS NULL
-  AND f.event_type IN ('emergency.SosClosed', 'safety.EscalationTaken')
+  AND f.event_type IN ('emergency.SosClosed', 'safety.EscalationTaken', 'assistant.ReplyRated')
   AND f.subject IN (
       SELECT h.subject FROM analytics.facts h
       WHERE h.actor = $1 AND h.subject IS NOT NULL
-        AND h.event_type IN ('emergency.SosRaised', 'safety.EscalationOpened'))
+        AND h.event_type IN ('emergency.SosRaised', 'safety.EscalationOpened', 'assistant.QuestionAnswered'))
 `
 
-// Account deletion, step 1: the facts about her SOS and escalations that
-// carry no actor (closed, taken), found through her facts' subjects. Runs
-// before DeleteActorFacts, which removes the facts it looks them up by.
+// Account deletion, step 1: the facts about her SOS, escalations and
+// assistant answers that carry no actor (closed, taken, rated), found
+// through her facts' subjects. Runs before DeleteActorFacts, which removes
+// the facts it looks them up by.
 func (q *Queries) DeleteDependentFacts(ctx context.Context, actor []byte) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteDependentFacts, actor)
 	if err != nil {
@@ -56,6 +57,18 @@ func (q *Queries) DeleteErasedBefore(ctx context.Context, before time.Time) (int
 	return result.RowsAffected(), nil
 }
 
+const deleteErasedSubjectsBefore = `-- name: DeleteErasedSubjectsBefore :execrows
+DELETE FROM analytics.erased_subjects WHERE erased_at < $1
+`
+
+func (q *Queries) DeleteErasedSubjectsBefore(ctx context.Context, before time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteErasedSubjectsBefore, before)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteFactsBefore = `-- name: DeleteFactsBefore :execrows
 DELETE FROM analytics.facts WHERE occurred_at < $1
 `
@@ -66,6 +79,32 @@ func (q *Queries) DeleteFactsBefore(ctx context.Context, before time.Time) (int6
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const lockErasedSubjects = `-- name: LockErasedSubjects :exec
+SELECT pg_advisory_xact_lock(hashtext($1::text), k.key)
+FROM (
+    SELECT DISTINCT ('x' || encode(substring(h.subject FROM 1 FOR 4), 'hex'))::bit(32)::integer AS key
+    FROM analytics.facts h
+    WHERE h.actor = $2 AND h.subject IS NOT NULL
+      AND h.event_type IN ('emergency.SosRaised', 'safety.EscalationOpened', 'assistant.QuestionAnswered')
+    ORDER BY 1
+) k
+`
+
+type LockErasedSubjectsParams struct {
+	Class string
+	Actor []byte
+}
+
+// Account deletion, step 0 (after locking her actor): lock every subject
+// MarkSubjectsErased will record, in a fixed order, so a fact without an
+// actor about one of them is either committed before the deletes below
+// (and deleted) or checked after erased_subjects has it (and dropped).
+// Same key as LockPseudonym with the subject class.
+func (q *Queries) LockErasedSubjects(ctx context.Context, arg LockErasedSubjectsParams) error {
+	_, err := q.db.Exec(ctx, lockErasedSubjects, arg.Class, arg.Actor)
+	return err
 }
 
 const markActorErased = `-- name: MarkActorErased :exec
@@ -81,6 +120,28 @@ type MarkActorErasedParams struct {
 
 func (q *Queries) MarkActorErased(ctx context.Context, arg MarkActorErasedParams) error {
 	_, err := q.db.Exec(ctx, markActorErased, arg.Actor, arg.ErasedAt)
+	return err
+}
+
+const markSubjectsErased = `-- name: MarkSubjectsErased :exec
+INSERT INTO analytics.erased_subjects (subject, erased_at)
+SELECT DISTINCT h.subject, $1::timestamptz
+FROM analytics.facts h
+WHERE h.actor = $2 AND h.subject IS NOT NULL
+  AND h.event_type IN ('emergency.SosRaised', 'safety.EscalationOpened', 'assistant.QuestionAnswered')
+ON CONFLICT (subject) DO NOTHING
+`
+
+type MarkSubjectsErasedParams struct {
+	ErasedAt time.Time
+	Actor    []byte
+}
+
+// Account deletion: record the subjects of her SOS, escalations and answers,
+// so a closing, taking or rating that arrives later is not stored. Runs
+// before DeleteActorFacts, which removes the facts it reads them from.
+func (q *Queries) MarkSubjectsErased(ctx context.Context, arg MarkSubjectsErasedParams) error {
+	_, err := q.db.Exec(ctx, markSubjectsErased, arg.ErasedAt, arg.Actor)
 	return err
 }
 

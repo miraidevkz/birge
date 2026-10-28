@@ -8,7 +8,7 @@ import (
 
 func TestValidateEventPayloadAccepts(t *testing.T) {
 	testinfra.ValidateEventPayload(t, "assistant.QuestionAnswered.v1.json",
-		[]byte(`{"message_id":"019a2f00-0000-7000-8000-00000000000a","scope":"rights","source":"knowledge"}`))
+		[]byte(`{"message_id":"019a2f00-0000-7000-8000-00000000000a","member_id":"019a2f00-0000-7000-8000-00000000000b","scope":"rights","source":"knowledge"}`))
 	testinfra.ValidateEventPayload(t, "assistant.ReplyRated.v1.json",
 		[]byte(`{"message_id":"019a2f00-0000-7000-8000-00000000000a","helped":false}`))
 	testinfra.ValidateEventPayload(t, "membership.MemberActiveDay.v1.json",

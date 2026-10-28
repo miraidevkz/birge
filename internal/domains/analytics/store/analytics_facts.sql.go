@@ -190,8 +190,13 @@ func (q *Queries) EscalationOutcomes(ctx context.Context, arg EscalationOutcomes
 const insertFact = `-- name: InsertFact :exec
 INSERT INTO analytics.facts (id, event_type, occurred_at, code, actor, subject)
 SELECT $1::uuid, $2::text, $3::timestamptz, $4::text, $5::bytea, $6::bytea
-WHERE $5::bytea IS NULL
-   OR NOT EXISTS (SELECT 1 FROM analytics.erased_actors e WHERE e.actor = $5::bytea)
+WHERE CASE
+    WHEN $5::bytea IS NOT NULL THEN
+        NOT EXISTS (SELECT 1 FROM analytics.erased_actors e WHERE e.actor = $5::bytea)
+    WHEN $6::bytea IS NOT NULL THEN
+        NOT EXISTS (SELECT 1 FROM analytics.erased_subjects e WHERE e.subject = $6::bytea)
+    ELSE true
+END
 `
 
 type InsertFactParams struct {
@@ -203,7 +208,9 @@ type InsertFactParams struct {
 	Subject    []byte
 }
 
-// A fact for an erased pseudonym is dropped: her late events stay uncounted.
+// A fact of an erased member is dropped, so her late events stay uncounted:
+// one with an actor when the actor is erased, one without an actor when its
+// subject (her SOS, escalation or answer) is erased. Runs after LockPseudonym.
 func (q *Queries) InsertFact(ctx context.Context, arg InsertFactParams) error {
 	_, err := q.db.Exec(ctx, insertFact,
 		arg.ID,
@@ -213,6 +220,33 @@ func (q *Queries) InsertFact(ctx context.Context, arg InsertFactParams) error {
 		arg.Actor,
 		arg.Subject,
 	)
+	return err
+}
+
+const lockPseudonym = `-- name: LockPseudonym :exec
+SELECT pg_advisory_xact_lock(
+    hashtext($1::text),
+    ('x' || encode(substring($2::bytea FROM 1 FOR 4), 'hex'))::bit(32)::integer)
+`
+
+type LockPseudonymParams struct {
+	Class     string
+	Pseudonym []byte
+}
+
+// Serializes storing a fact with erasing the member it belongs to (ADR-0024).
+// Under READ COMMITTED an insert could check erased_actors before an
+// erasure commits while the erasure's DELETE cannot see the uncommitted
+// insert; both would commit and leave a fact of a deleted member. Both
+// sides take this transaction lock first: a fact with an actor locks the
+// actor, a fact without one locks its subject, and EraseActor locks her
+// actor and every subject it erases. The key is (class, first 4 bytes of
+// the pseudonym): the pseudonyms are HMAC output, so 4 bytes spread evenly;
+// a collision only makes two unrelated transactions wait for each other.
+// The class keeps actors and subjects apart, and the two-key form does not
+// overlap the one-bigint locks other contexts take.
+func (q *Queries) LockPseudonym(ctx context.Context, arg LockPseudonymParams) error {
+	_, err := q.db.Exec(ctx, lockPseudonym, arg.Class, arg.Pseudonym)
 	return err
 }
 
@@ -271,6 +305,64 @@ func (q *Queries) Retention(ctx context.Context, arg RetentionParams) (Retention
 		&i.Retained4w,
 		&i.Eligible8w,
 		&i.Retained8w,
+	)
+	return i, err
+}
+
+const rightsOutcomes = `-- name: RightsOutcomes :one
+WITH answered AS (
+    SELECT q.subject, q.actor, q.code
+    FROM analytics.facts q
+    WHERE q.event_type = 'assistant.QuestionAnswered'
+      AND q.code LIKE 'rights\_%'
+      AND q.subject IS NOT NULL AND q.actor IS NOT NULL
+      AND q.occurred_at >= $1::timestamptz AND q.occurred_at < $2::timestamptz
+), rated AS (
+    SELECT DISTINCT ON (a.subject) a.subject, a.actor, r.code AS rating
+    FROM answered a
+    JOIN analytics.facts r ON r.subject = a.subject AND r.event_type = 'assistant.ReplyRated'
+    ORDER BY a.subject, r.occurred_at DESC, r.id DESC
+)
+SELECT
+    (SELECT count(*) FROM answered WHERE code = 'rights_knowledge')::integer                AS answered_from_knowledge,
+    (SELECT count(DISTINCT actor) FROM answered WHERE code = 'rights_knowledge')::integer   AS knowledge_members,
+    (SELECT count(*) FROM rated)::integer                                                   AS rated,
+    (SELECT count(*) FROM rated WHERE rating = 'helped')::integer                           AS helped,
+    (SELECT count(DISTINCT actor) FROM rated)::integer                                      AS rated_members
+`
+
+type RightsOutcomesParams struct {
+	FromAt time.Time
+	ToAt   time.Time
+}
+
+type RightsOutcomesRow struct {
+	AnsweredFromKnowledge int32
+	KnowledgeMembers      int32
+	Rated                 int32
+	Helped                int32
+	RatedMembers          int32
+}
+
+// Rights answers (QuestionAnswered with scope rights) given in
+// [from_at, to_at), by members (the answer's actor):
+//   - answered_from_knowledge: those with source knowledge;
+//   - rated / helped: those that have a rating (at any time), judged by
+//     their latest rating, since a member may change it and the last one wins.
+//
+// A ReplyRated fact names no member; it is joined to its answer by the
+// message subject here, at report time, so the order in which the two events
+// arrive does not matter. A rating whose answer is not stored (not arrived
+// yet, or erased with its member) joins nothing and is not counted.
+func (q *Queries) RightsOutcomes(ctx context.Context, arg RightsOutcomesParams) (RightsOutcomesRow, error) {
+	row := q.db.QueryRow(ctx, rightsOutcomes, arg.FromAt, arg.ToAt)
+	var i RightsOutcomesRow
+	err := row.Scan(
+		&i.AnsweredFromKnowledge,
+		&i.KnowledgeMembers,
+		&i.Rated,
+		&i.Helped,
+		&i.RatedMembers,
 	)
 	return i, err
 }

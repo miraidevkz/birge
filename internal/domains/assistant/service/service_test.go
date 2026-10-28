@@ -550,7 +550,7 @@ func TestQuestionAnsweredSource(t *testing.T) {
 				t.Fatal(err)
 			}
 			all := h.store.AnsweredSnapshot()
-			want := model.QuestionAnsweredData{MessageID: r.MessageID, Scope: tc.scope, Source: tc.source}
+			want := model.QuestionAnsweredData{MessageID: r.MessageID, MemberID: h.member, Scope: tc.scope, Source: tc.source}
 			if len(all) != 1 || all[0] != want {
 				t.Fatalf("events = %+v, want [%+v]", all, want)
 			}

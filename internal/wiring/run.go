@@ -419,10 +419,12 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		Logger:  logger,
 	}
 	analytics := &analyticsservice.Service{
-		Store:    &analyticsadapter.PostgresStore{Pool: pool},
-		Clock:    clk,
-		Logger:   logger,
-		Settings: analyticsservice.Settings{TimeZone: cfg.TimeZone, Key: cfg.AnalyticsKey},
+		Store:  &analyticsadapter.PostgresStore{Pool: pool},
+		Clock:  clk,
+		Logger: logger,
+		// EventsMaxAge is the same value EnsureStream gives the EVENTS stream:
+		// erased pseudonyms are kept exactly as long as a late event can arrive.
+		Settings: analyticsservice.Settings{TimeZone: cfg.TimeZone, Key: cfg.AnalyticsKey, EventsMaxAge: cfg.EventsMaxAge},
 	}
 	if err := analytics.EnsureRetentionTimer(ctx); err != nil {
 		return fmt.Errorf("worker: analytics retention: %w", err)

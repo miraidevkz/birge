@@ -20,7 +20,9 @@
 //
 // Retention. The daily analytics.Retention timer rolls facts older than 24
 // months (cut at a week boundary) into weekly counts without actors and
-// deletes them, together with erased pseudonyms older than a year.
+// deletes them, together with erased pseudonyms older than the EVENTS
+// stream's max age (Settings.EventsMaxAge), after which no late event of a
+// deleted member can arrive.
 //
 // Account deletion. Deletion.DeleteMember computes the member's pseudonym and
 // deletes her facts (privacy.DataDeletionRequested, AGENTS.md N6).

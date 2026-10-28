@@ -194,9 +194,11 @@ func TestFactsFromEvent(t *testing.T) {
 			[]Fact{{Type: EventEscalationOpened, OccurredAt: at, Code: "checkin", Actor: me, Subject: subj}}, false},
 		{"escalation taken never stores the staff member", ev(EventEscalationTaken, map[string]string{"escalation_id": obj.String(), "taken_by": other.String()}),
 			[]Fact{{Type: EventEscalationTaken, OccurredAt: at, Subject: subj}}, false},
-		{"question answered", ev(EventQuestionAnswered, map[string]string{"message_id": obj.String(), "scope": "rights", "source": "no_answer"}),
-			[]Fact{{Type: EventQuestionAnswered, OccurredAt: at, Code: "rights_no_answer", Subject: subj}}, false},
-		{"reply rated", ev(EventReplyRated, map[string]any{"message_id": obj.String(), "helped": false}),
+		{"question answered counts for the member who asked", ev(EventQuestionAnswered, map[string]string{"message_id": obj.String(), "member_id": member.String(), "scope": "rights", "source": "no_answer"}),
+			[]Fact{{Type: EventQuestionAnswered, OccurredAt: at, Code: "rights_no_answer", Actor: me, Subject: subj}}, false},
+		{"question answered without member", ev(EventQuestionAnswered, map[string]string{"message_id": obj.String(), "scope": "rights", "source": "knowledge"}), nil, true},
+		{"question answered with text as source", ev(EventQuestionAnswered, map[string]string{"message_id": obj.String(), "member_id": member.String(), "scope": "rights", "source": "Call me"}), nil, true},
+		{"reply rated has no actor (joined to its answer at report time)", ev(EventReplyRated, map[string]any{"message_id": obj.String(), "helped": false}),
 			[]Fact{{Type: EventReplyRated, OccurredAt: at, Code: CodeNotHelped, Subject: subj}}, false},
 		{"unknown type", ev("chat.MessageHeld", map[string]string{}), nil, false},
 		{"bad day", ev(EventMemberActiveDay, map[string]string{"member_id": member.String(), "day": "04.03.2026"}), nil, true},
@@ -265,5 +267,24 @@ func TestRetentionCutoffAndNextRun(t *testing.T) {
 	}
 	if got := NextDailyRun(time.Date(2026, 3, 9, 3, 30, 0, 0, time.UTC), at); !got.Equal(time.Date(2026, 3, 10, 3, 30, 0, 0, time.UTC)) {
 		t.Fatalf("next run = %s", got)
+	}
+}
+
+func TestLockOrder(t *testing.T) {
+	lo, hi := bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32)
+	for _, in := range [][]Fact{
+		{{Actor: hi}, {Actor: lo}},
+		{{Actor: lo}, {Actor: hi}},
+	} {
+		LockOrder(in)
+		if !bytes.Equal(in[0].Actor, lo) || !bytes.Equal(in[1].Actor, hi) {
+			t.Fatalf("order = %x, %x", in[0].Actor, in[1].Actor)
+		}
+	}
+	// Without an actor the subject is the key.
+	facts := []Fact{{Subject: hi}, {Actor: lo}}
+	LockOrder(facts)
+	if !bytes.Equal(facts[0].Actor, lo) {
+		t.Fatalf("subject-only fact sorted before %x", facts[0].Actor)
 	}
 }

@@ -47,6 +47,7 @@ type (
 	}
 	questionAnsweredData struct {
 		MessageID uuid.UUID `json:"message_id"`
+		MemberID  uuid.UUID `json:"member_id"`
 		Scope     string    `json:"scope"`
 		Source    string    `json:"source"`
 	}
@@ -76,11 +77,13 @@ type Event struct {
 //   - SosClosed, EscalationTaken: subject only (the raised or opened fact
 //     carries the member; the staff member who took it is never stored);
 //   - EscalationOpened: actor = member, subject = escalation, code = source;
-//   - QuestionAnswered: subject = message, code = <scope>_<source>;
+//   - QuestionAnswered: actor = member who asked, subject = message,
+//     code = <scope>_<source>;
 //   - ReplyRated: subject = message, code = helped | not_helped.
 //
-// QuestionAnswered and ReplyRated name no member, so their facts have no
-// actor. Unknown types return no facts and no error. A payload that cannot
+// ReplyRated names no member, so its fact has no actor: a report finds the
+// member of a rating through the QuestionAnswered fact with the same
+// subject. Unknown types return no facts and no error. A payload that cannot
 // be read returns ErrInvalidInput: redelivery cannot fix it.
 func FactsFromEvent(key []byte, e Event, loc *time.Location) ([]Fact, error) {
 	bad := func(what string) ([]Fact, error) {
@@ -156,14 +159,14 @@ func FactsFromEvent(key []byte, e Event, loc *time.Location) ([]Fact, error) {
 		return []Fact{fact("", nil, subject(d.EscalationID))}, nil
 	case EventQuestionAnswered:
 		var d questionAnsweredData
-		if json.Unmarshal(e.Data, &d) != nil || d.MessageID == uuid.Nil {
+		if json.Unmarshal(e.Data, &d) != nil || d.MessageID == uuid.Nil || d.MemberID == uuid.Nil {
 			return bad("payload")
 		}
 		code := d.Scope + "_" + d.Source
 		if !codeOK(d.Scope) || !codeOK(d.Source) || !codeOK(code) {
 			return bad("scope or source")
 		}
-		return []Fact{fact(code, nil, subject(d.MessageID))}, nil
+		return []Fact{fact(code, actor(d.MemberID), subject(d.MessageID))}, nil
 	case EventReplyRated:
 		var d replyRatedData
 		if json.Unmarshal(e.Data, &d) != nil || d.MessageID == uuid.Nil || d.Helped == nil {
