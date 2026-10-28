@@ -8,6 +8,7 @@ sql:
       - db/queries/platform_timers.sql
       - db/queries/platform_keys.sql
       - db/queries/platform_audit.sql
+      - db/queries/platform_staff.sql
     gen:
       go:
         package: store

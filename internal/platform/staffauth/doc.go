@@ -49,6 +49,22 @@
 // providers apart. Changing the namespace or the derivation re-identifies
 // every non-UUID staff member, so it must never change.
 //
+// # Staff accounts
+//
+// When Config.Accounts is set, a request whose token passed every check (MFA
+// included) records the staff account through it (package staffdir: staff
+// ID, display name, mapped roles, time seen), so the audit log can show names
+// behind staff IDs. The display name is the "name" claim, else
+// "preferred_username" (top level, then under "ext"), cleaned and trimmed to
+// 80 characters; "email" is never read and a value containing "@" is dropped.
+// The name is cached with the principal but never put into auth.Principal.
+//
+// Recording is throttled to once per staff ID per hour per process by an
+// in-memory map with a bound, so the hot path is one map lookup. The write
+// has its own short deadline and never fails the request: on error the
+// middleware logs "StaffAccountRecordFailed" with the staff ID only and
+// retries after a minute.
+//
 // # Caching and failure behaviour
 //
 // Results that pass the checks above are cached for at most CacheTTL

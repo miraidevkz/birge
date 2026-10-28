@@ -50,6 +50,8 @@ var deletionPolicy = map[string]struct {
 	"platform.timers":           {"done timers keep their subject ID (the shredding timer itself is one)", []string{"subject_id"}},
 	"platform.audit_log":        {"append-only audit: <context>.member_deleted entries", []string{"actor_id", "object_id"}},
 	"platform.member_keys":      {"shredded key tombstone (ADR-0009)", []string{"member_id"}},
+	// Staff accounts hold staff, never members: no row may name a member.
+	"platform.staff_accounts": {"", []string{"staff_id"}},
 
 	"membership.cities":                {"", nil},
 	"membership.districts":             {"", nil},

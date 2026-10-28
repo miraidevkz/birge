@@ -18,7 +18,8 @@ Shared infrastructure used by bounded contexts. Contexts must not import each ot
 | `outbox` | Transactional outbox enqueue + NATS JetStream relay. | [0007](../../../docs/adr/0007-messaging-outbox-nats.md) |
 | `pgtemp` | Throwaway PostgreSQL clusters for tools/tests (dev tooling). | [0006](../../../docs/adr/0006-database-and-migrations.md) |
 | `session` | Bearer session validation against Kratos `whoami` with short LRU cache. | [0008](../../../docs/adr/0008-identity.md) |
-| `staffauth` | Staff OIDC access tokens via RFC 7662 introspection: claim mapping to roles, MFA required, short LRU cache. | [0008](../../../docs/adr/0008-identity.md) |
-| `store` | sqlc-generated queries for platform tables (outbox, timers, keys, audit_log, processed_events). | [0006](../../../docs/adr/0006-database-and-migrations.md) |
+| `staffauth` | Staff OIDC access tokens via RFC 7662 introspection: claim mapping to roles, MFA required, short LRU cache; records each passing staff account through `AccountRecorder` at most hourly. | [0008](../../../docs/adr/0008-identity.md) |
+| `staffdir` | Staff accounts (`platform.staff_accounts`) and the admin read side of the audit log (tag `staff`: `listAuditEntries`, `listStaffAccounts`, `getStaffAccount`; admin with MFA; reads audited as `audit.read`). | [0008](../../../docs/adr/0008-identity.md) |
+| `store` | sqlc-generated queries for platform tables (outbox, timers, keys, audit_log, staff_accounts, processed_events). | [0006](../../../docs/adr/0006-database-and-migrations.md) |
 | `testinfra` | Test helpers: `Postgres(t)` and `NATS(t)` for integration tests. | — |
 | `timers` | Durable PostgreSQL timers claimed with `SKIP LOCKED`; `CancelSubjects` cancels the pending timers of many subjects at once (account deletion). | [0020](../../../docs/adr/0020-scheduler.md) |

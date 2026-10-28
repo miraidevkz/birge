@@ -349,6 +349,26 @@ func TestAPIStaffAuth(t *testing.T) {
 		t.Fatalf("admin POST /v1/staff/duty-roster: %d %s, want 201", rec.Code, rec.Body)
 	}
 
+	// Staff directory: every token above recorded its account; the audit log
+	// and the accounts are admin only and the log shows the duty change.
+	for _, path := range []string{"/v1/staff/audit", "/v1/staff/accounts", "/v1/staff/accounts/" + uuid.NewString()} {
+		if rec := do(t, h, http.MethodGet, path, e2eModeratorToken, ""); rec.Code != http.StatusForbidden {
+			t.Fatalf("moderator GET %s: %d %s, want 403", path, rec.Code, rec.Body)
+		}
+	}
+	rec = do(t, h, http.MethodGet, "/v1/staff/accounts", e2eAdminToken, "")
+	if rec.Code != http.StatusOK || strings.Count(rec.Body.String(), `"firstSeenAt"`) != 3 {
+		t.Fatalf("admin GET /v1/staff/accounts: %d %s, want the three staff accounts", rec.Code, rec.Body)
+	}
+	rec = do(t, h, http.MethodGet, "/v1/staff/audit?action=duty_shift.add", e2eAdminToken, "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"actorRole":"admin"`) {
+		t.Fatalf("admin GET /v1/staff/audit: %d %s, want the duty change", rec.Code, rec.Body)
+	}
+	rec = do(t, h, http.MethodGet, "/v1/staff/accounts/"+uuid.NewString(), e2eAdminToken, "")
+	if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), `"code":"not_found"`) {
+		t.Fatalf("admin GET unknown staff account: %d %s, want 404 not_found", rec.Code, rec.Body)
+	}
+
 	logs := e.logs.String()
 	for _, secret := range []string{e2ePsychologistToken, e2eModeratorToken, e2eAdminToken, e2eStaffSecret, "+77001234567"} {
 		if strings.Contains(logs, secret) {

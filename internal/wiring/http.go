@@ -71,6 +71,8 @@ import (
 	"birge/internal/platform/ratelimit"
 	"birge/internal/platform/session"
 	"birge/internal/platform/staffauth"
+	"birge/internal/platform/staffdir"
+	staffdirapi "birge/internal/platform/staffdir/api"
 )
 
 // AnonymousOperations are exactly the operations declared with "security: []"
@@ -105,7 +107,8 @@ type APIDeps struct {
 //     per-IP, per-number and global limits and the proof of work);
 //  3. /v1/: per-IP rate limit → authentication → request validation → the
 //     generated handlers of meta, membership, privacy, notify, safety,
-//     wellbeing, emergency, assistant, knowledge and circle on one mux.
+//     wellbeing, emergency, assistant, knowledge, circle, the other
+//     contexts and the staff directory (package staffdir) on one mux.
 //     Authentication depends on the route:
 //     /v1/staff/ goes through staffauth (OIDC token introspection, MFA
 //     required; 503 when no provider is configured), everything else
@@ -287,6 +290,8 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 
 	api := http.NewServeMux()
 	mountAPI(api, cfg, members, privacy, notify, safety, wellbeing, emergency, assistantSvc, knowledge, circle, chatSvc, sharingSvc, directorySvc, moderationSvc, d.Logger)
+	staffAccounts := &staffdir.PostgresStore{Pool: d.Pool}
+	mountStaffDir(api, &staffdir.Service{Store: staffAccounts, Clock: d.Clock, Logger: d.Logger}, d.Logger)
 
 	chatGW := &gateway.Gateway{
 		Chat: chatSvc, Auth: &ChatAuthenticator{Sessions: sessions, Members: members},
@@ -305,6 +310,9 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	if cfg.StaffAuth != nil {
 		sc := *cfg.StaffAuth
 		sc.Clock, sc.Logger = d.Clock, d.Logger
+		// Every staff request that passes records its account (at most
+		// hourly per staff ID); a failed write never fails the request.
+		sc.Accounts = staffAccounts
 		mw, err := staffauth.New(sc)
 		if err != nil {
 			return nil, fmt.Errorf("wiring: %w", err)
@@ -525,6 +533,18 @@ func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service
 			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
 		}),
 		moderationapi.StdHTTPServerOptions{BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler},
+	)
+}
+
+// mountStaffDir registers the staff accounts and audit log operations (tag
+// staff, package staffdir). They live under /v1/staff/, so the audience split
+// in NewAPIHandler puts them behind staffauth; Service checks admin and MFA.
+func mountStaffDir(mux *http.ServeMux, svc *staffdir.Service, logger *slog.Logger) {
+	staffdirapi.HandlerWithOptions(
+		staffdirapi.NewStrictHandlerWithOptions(&staffdir.Server{Service: svc}, nil, staffdirapi.StrictHTTPServerOptions{
+			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: httpapi.ResponseErrorHandler(logger),
+		}),
+		staffdirapi.StdHTTPServerOptions{BaseURL: apiBase, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler},
 	)
 }
 

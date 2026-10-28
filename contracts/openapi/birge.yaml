@@ -2961,6 +2961,11 @@ components:
     StaffRole:
       type: string
       enum: [psychologist, moderator, lawyer, admin]
+    AuditActorRole:
+      type: string
+      enum: [psychologist, moderator, lawyer, admin, staff]
+      x-enum-varnames: [AuditActorPsychologist, AuditActorModerator, AuditActorLawyer, AuditActorAdmin, AuditActorStaff]
+      description: The staff role the action was taken with; staff when the context records only that the actor was staff, not which role.
     AuditEntry:
       type: object
       additionalProperties: false
@@ -2969,7 +2974,7 @@ components:
         id: {type: string, format: uuid}
         occurredAt: {type: string, format: date-time}
         actorId: {type: string, format: uuid, description: Staff ID; open its card with getStaffAccount.}
-        actorRole: {$ref: '#/components/schemas/StaffRole'}
+        actorRole: {$ref: '#/components/schemas/AuditActorRole'}
         actorName: {type: string, maxLength: 80, description: The staff account's display name when known.}
         action: {$ref: '#/components/schemas/AuditCode'}
         objectType: {$ref: '#/components/schemas/AuditCode'}

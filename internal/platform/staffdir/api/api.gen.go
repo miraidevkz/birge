@@ -18,6 +18,33 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for AuditActorRole.
+const (
+	AuditActorAdmin        AuditActorRole = "admin"
+	AuditActorLawyer       AuditActorRole = "lawyer"
+	AuditActorModerator    AuditActorRole = "moderator"
+	AuditActorPsychologist AuditActorRole = "psychologist"
+	AuditActorStaff        AuditActorRole = "staff"
+)
+
+// Valid indicates whether the value is a known member of the AuditActorRole enum.
+func (e AuditActorRole) Valid() bool {
+	switch e {
+	case AuditActorAdmin:
+		return true
+	case AuditActorLawyer:
+		return true
+	case AuditActorModerator:
+		return true
+	case AuditActorPsychologist:
+		return true
+	case AuditActorStaff:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for StaffRole.
 const (
 	Admin        StaffRole = "admin"
@@ -42,6 +69,9 @@ func (e StaffRole) Valid() bool {
 	}
 }
 
+// AuditActorRole The staff role the action was taken with; staff when the context records only that the actor was staff, not which role.
+type AuditActorRole string
+
 // AuditCode A short code such as escalation.take or safety.escalation (package platform/audit).
 type AuditCode = string
 
@@ -54,8 +84,10 @@ type AuditEntry struct {
 	ActorId openapi_types.UUID `json:"actorId"`
 
 	// ActorName The staff account's display name when known.
-	ActorName *string             `json:"actorName,omitempty"`
-	ActorRole StaffRole           `json:"actorRole"`
+	ActorName *string `json:"actorName,omitempty"`
+
+	// ActorRole The staff role the action was taken with; staff when the context records only that the actor was staff, not which role.
+	ActorRole AuditActorRole      `json:"actorRole"`
 	Id        openapi_types.UUID  `json:"id"`
 	ObjectId  *openapi_types.UUID `json:"objectId,omitempty"`
 

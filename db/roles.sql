@@ -15,6 +15,10 @@ REVOKE DELETE, TRUNCATE ON platform.member_keys FROM birge_app;
 GRANT SELECT, INSERT ON platform.audit_log TO birge_app;
 REVOKE UPDATE, DELETE, TRUNCATE ON platform.audit_log FROM birge_app;
 
+-- Staff accounts: kept as the names behind audit actor IDs; no DELETE.
+GRANT SELECT, INSERT, UPDATE ON platform.staff_accounts TO birge_app;
+REVOKE DELETE, TRUNCATE ON platform.staff_accounts FROM birge_app;
+
 -- Context schemas: the application reads and writes its own rows, no DDL.
 -- DELETE is needed by account deletion and retention (AGENTS.md N6); they
 -- are the only code paths that delete. "ALL TABLES" is re-evaluated on every

@@ -138,9 +138,9 @@ Who: **admin** only, with MFA. Other roles do not see the **Audit** tab; if some
 3. An action or object the console does not know yet shows as "Other action" / "Other object" with its code underneath; that is normal after a server update that added a new action.
 4. Tap the person's name to open their **staff card**: roles, when they were first and last seen, and how many times they did each action in the last 30 days. **Show their actions** goes back to the log filtered to that person. **Back** returns to where you were.
 5. Where the console has a screen for the object, the entry has **Open in …** (Escalations, Moderation, Members, Rooms, Duty, Knowledge). Members cannot be filtered by one person there, so you get the list.
-6. **Staff** (button at the top of the log) lists everyone who has signed in to this deployment, most recently active first. The IdP still decides who is staff; this list is only for reading the log.
+6. **Staff** (button at the top of the log) lists everyone who has signed in to this deployment, most recently active first. The IdP still decides who is staff; this list is only for reading the log. A person appears after their first action in the console; their name, roles and "last seen" are refreshed at most once an hour, so a role change at the IdP shows here up to an hour later (access itself follows the IdP at once). The name is what the IdP sends as the display name or username; an email address is never shown or stored.
 
-Entries by members (for example a trusted contact opening a shared plan) and by the system (account deletion) are not in this log.
+Entries by members (for example a trusted contact opening a shared plan) and by the system (account deletion) are not in this log. Neither the log nor the staff list is ever deleted: they are kept as the record of who did what.
 
 If the log or a card says "not available on this server yet", the server has not been updated with this feature.
 

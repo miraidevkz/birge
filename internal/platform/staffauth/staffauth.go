@@ -60,8 +60,12 @@ type Config struct {
 	CacheTTL time.Duration
 	// CacheSize is the maximum number of cached tokens. Default 1000.
 	CacheSize int
-	Clock     clock.Clock
-	Logger    *slog.Logger
+	// Accounts records each staff member who passes every check (package
+	// staffdir), at most hourly per staff ID per process. Optional: nil
+	// records nothing. A failed write never fails the request.
+	Accounts AccountRecorder
+	Clock    clock.Clock
+	Logger   *slog.Logger
 }
 
 // Middleware validates staff access tokens.
@@ -73,9 +77,19 @@ type Middleware struct {
 	stepUp       string
 	client       *http.Client
 	ttl          time.Duration
-	cache        *bearer.Cache[auth.Principal]
+	cache        *bearer.Cache[session]
+	accounts     AccountRecorder
+	throttle     *accountThrottle
 	clock        clock.Clock
 	logger       *slog.Logger
+}
+
+// session is a cached introspection result: the principal and the display
+// name for the account record. The name stays out of auth.Principal so that
+// services never see it; it lives only in this process's memory.
+type session struct {
+	p    auth.Principal
+	name string
 }
 
 // New validates cfg and returns the middleware. Errors name the field,
@@ -129,9 +143,11 @@ func New(cfg Config) (*Middleware, error) {
 			issuer: cfg.Issuer, audience: cfg.Audience, rolesClaim: rolesClaim, roleMap: roleMap,
 			mfaACR: append([]string(nil), cfg.MFAACR...), mfaAMR: append([]string(nil), cfg.MFAAMR...),
 		},
-		ttl:    cfg.CacheTTL,
-		clock:  cfg.Clock,
-		logger: cfg.Logger,
+		ttl:      cfg.CacheTTL,
+		accounts: cfg.Accounts,
+		throttle: newAccountThrottle(maxTrackedAccounts),
+		clock:    cfg.Clock,
+		logger:   cfg.Logger,
 	}
 	m.stepUp = realm + `, error="insufficient_user_authentication", error_description="multi-factor authentication required"`
 	if len(cfg.MFAACR) > 0 {
@@ -144,7 +160,7 @@ func New(cfg Config) (*Middleware, error) {
 	if size <= 0 {
 		size = defaultCacheSize
 	}
-	m.cache = bearer.NewCache[auth.Principal](size)
+	m.cache = bearer.NewCache[session](size)
 	if m.clock == nil {
 		m.clock = clock.System{}
 	}
@@ -184,7 +200,7 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 			unauthorized(w)
 			return
 		}
-		p, err := m.authenticate(r.Context(), token)
+		s, err := m.authenticate(r.Context(), token)
 		var rej rejection
 		switch {
 		case errors.As(err, &rej):
@@ -200,12 +216,15 @@ func (m *Middleware) Wrap(next http.Handler) http.Handler {
 			httpapi.WriteProblem(w, http.StatusServiceUnavailable, "auth_unavailable", "Sign-in is temporarily unavailable.")
 			return
 		}
-		if !p.MFA {
+		if !s.p.MFA {
 			w.Header().Set("WWW-Authenticate", m.stepUp)
 			httpapi.WriteProblem(w, http.StatusForbidden, "mfa_required", "Sign in with a second factor.")
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), p)))
+		if m.accounts != nil {
+			m.recordAccount(r.Context(), s.p, s.name)
+		}
+		next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), s.p)))
 	})
 }
 
@@ -237,34 +256,34 @@ const (
 	rejectNoSubject rejection = "subject"
 )
 
-func (m *Middleware) authenticate(ctx context.Context, token string) (auth.Principal, error) {
+func (m *Middleware) authenticate(ctx context.Context, token string) (session, error) {
 	now := m.clock.Now()
-	if p, ok := m.cache.Get(token, now); ok {
-		return p, nil
+	if s, ok := m.cache.Get(token, now); ok {
+		return s, nil
 	}
 	c, err := m.introspect(ctx, token)
 	if err != nil {
-		return auth.Principal{}, err
+		return session{}, err
 	}
 	if active, _ := c["active"].(bool); !active {
-		return auth.Principal{}, rejectInactive
+		return session{}, rejectInactive
 	}
 	if !tokenKindOK(c) {
-		return auth.Principal{}, rejectKind
+		return session{}, rejectKind
 	}
 	if c.str("iss") != m.policy.issuer {
-		return auth.Principal{}, rejectIssuer
+		return session{}, rejectIssuer
 	}
 	if !m.policy.audienceOK(c) {
-		return auth.Principal{}, rejectAudience
+		return session{}, rejectAudience
 	}
 	exp, ok := c.expiry()
 	if !ok || !now.Before(exp) {
-		return auth.Principal{}, rejectExpiry
+		return session{}, rejectExpiry
 	}
 	sub := c.str("sub")
 	if sub == "" {
-		return auth.Principal{}, rejectNoSubject
+		return session{}, rejectNoSubject
 	}
 	p := auth.Principal{
 		IdentityID: StaffID(m.policy.issuer, sub),
@@ -278,8 +297,9 @@ func (m *Middleware) authenticate(ctx context.Context, token string) (auth.Princ
 	}
 	// The principal is cached with its MFA flag; Wrap checks MFA on every
 	// request, so a cached token without MFA keeps getting 403.
-	m.cache.Put(token, p, expires)
-	return p, nil
+	s := session{p: p, name: displayName(c)}
+	m.cache.Put(token, s, expires)
+	return s, nil
 }
 
 // introspect posts the token to the introspection endpoint (RFC 7662 § 2.1).

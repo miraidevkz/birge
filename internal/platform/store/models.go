@@ -45,6 +45,14 @@ type PlatformProcessedEvent struct {
 	ProcessedAt time.Time
 }
 
+type PlatformStaffAccount struct {
+	StaffID     uuid.UUID
+	DisplayName *string
+	Roles       []string
+	FirstSeenAt time.Time
+	LastSeenAt  time.Time
+}
+
 type PlatformTimer struct {
 	ID        uuid.UUID
 	Kind      string
