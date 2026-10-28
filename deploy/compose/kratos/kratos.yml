@@ -1,6 +1,7 @@
 # Development Kratos: phone + SMS code only (ADR-0008). Reached only through
 # the birge auth gateway at /auth/; the public and admin ports are not
-# published. SMS go to an unreachable sink: read codes with `up.sh codes`.
+# published. SMS go to the development relay (cmd/birge-devsms), which drops
+# them unless Telegram delivery is enabled: read codes with `up.sh codes`.
 version: v26.2.0
 serve:
   public:
@@ -64,7 +65,7 @@ courier:
     - id: sms
       type: http
       request_config:
-        url: http://sms-sink.invalid/
+        url: http://devsms:4000/sms
         method: POST
         # function(ctx) { recipient: ctx.recipient, body: ctx.body }
         body: base64://ZnVuY3Rpb24oY3R4KSB7IHJlY2lwaWVudDogY3R4LnJlY2lwaWVudCwgYm9keTogY3R4LmJvZHkgfQ==

@@ -208,6 +208,25 @@ services:
     depends_on:
       hydra: { condition: service_started }
 
+  # Development SMS endpoint of the Kratos courier (cmd/birge-devsms). Drops
+  # every message by default (read codes with ./up.sh codes). With
+  # BIRGE_DEVSMS_TELEGRAM=1 it sends the sign-in code through Telegram
+  # Gateway, for testing only: the phone number leaves the jurisdiction. The
+  # token is ~/.config/birge/telegram-gateway.token on the host, never in the tree.
+  devsms:
+    image: birge-dev:local
+    entrypoint: ["birge-devsms"]
+    # BIRGE_DEVSMS_TELEGRAM=1 goes in this optional host file, so the choice
+    # survives tree syncs and is never committed.
+    env_file:
+      - path: ${HOME}/.config/birge/devsms.env
+        required: false
+    environment:
+      BIRGE_DEVSMS_TOKEN_FILE: /run/devsms/telegram-gateway.token
+      BIRGE_SMS_ALLOWED_PREFIXES: ${BIRGE_SMS_ALLOWED_PREFIXES:-+77}
+    volumes:
+      - ${HOME}/.config/birge:/run/devsms:ro
+
   # The exported web apps (./up.sh web builds both): the member app on
   # 127.0.0.1:8081 and the staff admin on 127.0.0.1:8082. Browsers
   # need a secure context for the sign-in proof-of-work (WebCrypto), and
