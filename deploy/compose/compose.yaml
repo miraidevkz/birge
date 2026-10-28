@@ -235,15 +235,16 @@ services:
   # need a secure context for the sign-in proof-of-work (WebCrypto), and
   # localhost is one: from another machine use `ssh -L 8081:localhost:8081`.
   # Recreated after every export: the export replaces the directory. The
-  # stack's builds go to dist-stack, never dist: `npm run check` rebuilds dist
-  # for localhost and would otherwise swap the served site under the stack.
+  # stack's builds live outside the tree (BIRGE_WEB_DIR, default
+  # ~/.local/share/birge-web): `npm run check` rebuilds dist for localhost, and
+  # tree syncs delete untracked files; either took the public site down.
   web:
     image: caddy:2.10.2-alpine
     profiles: [web]
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ../../apps/mobile/dist-stack:/srv:ro
-      - ../../apps/admin/dist-stack:/srv-admin:ro
+      - ${BIRGE_WEB_DIR:-${HOME}/.local/share/birge-web}/mobile:/srv:ro
+      - ${BIRGE_WEB_DIR:-${HOME}/.local/share/birge-web}/admin:/srv-admin:ro
     ports:
       - "127.0.0.1:8081:8081"
       - "127.0.0.1:8082:8082"

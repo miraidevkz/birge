@@ -1,9 +1,12 @@
-// Home: a greeting, the next weekly check-in as the one thing to do, and the
-// latest inbox items (ADR-0025: one clear action, warm and personal).
+// Home: a greeting, "how are you today" (routes on; stores nothing), the next
+// weekly check-in as the one thing to do, the member's Circle, a gentle tip
+// of the day and the latest inbox items (ADR-0025: warm, personal, one action).
+// "Hard" goes to Help: the crisis path is one tap from the first screen.
 import { unwrap, type Schemas } from '@birge/api';
 import { i18n, useTranslation } from '@birge/i18n';
-import { Button, Card, Heading, List, ListItem, Screen, Text } from '@birge/ui';
+import { Button, Card, ChoiceGroup, Heading, List, ListItem, Screen, Text } from '@birge/ui';
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { router } from 'expo-router';
 
 import { api } from '@/lib/api';
@@ -49,6 +52,85 @@ function CheckinCard() {
   );
 }
 
+// 'none' is the unanswered state: no chip is selected.
+type Mood = 'none' | 'good' | 'okay' | 'hard';
+
+/** MoodCard asks how she is today and takes her to the right next step. */
+function MoodCard() {
+  const { t } = useTranslation('home');
+  const [answer, setAnswer] = useState<Mood>('none');
+  function pick(m: Mood) {
+    setAnswer(m);
+    if (m === 'okay') router.push('/checkin');
+    if (m === 'hard') router.push('/sos');
+  }
+  return (
+    <Card testID="home-mood">
+      <ChoiceGroup<Mood>
+        label={t('mood.question')}
+        value={answer}
+        onChange={pick}
+        options={[
+          { value: 'good', label: t('mood.good') },
+          { value: 'okay', label: t('mood.okay') },
+          { value: 'hard', label: t('mood.hard') },
+        ]}
+        testID="home-mood-choice"
+      />
+      {answer === 'good' ? (
+        <Text tone="primary" accessibilityLiveRegion="polite">
+          {t('mood.goodReply')}
+        </Text>
+      ) : null}
+    </Card>
+  );
+}
+
+/** CircleCard shows her tea match or search, or invites her into the Circle. */
+function CircleCard() {
+  const { t } = useTranslation('home');
+  const matches = useQuery({ queryKey: ['matches'], queryFn: () => unwrap(api.GET('/me/matches')) });
+  const tea = useQuery({ queryKey: ['tea-requests'], queryFn: () => unwrap(api.GET('/me/tea-requests')) });
+  const match = matches.data?.find((m) => m.status === 'proposed' || m.status === 'accepted');
+  const searching = tea.data?.some((r) => r.status === 'open');
+  let body: string;
+  if (match)
+    body = t(match.status === 'accepted' ? 'circle.matchAccepted' : 'circle.match', { name: match.otherDisplayName });
+  else if (searching) body = t('circle.searching');
+  else body = t('circle.invite');
+  return (
+    <Card
+      testID="home-circle"
+      onPress={() => router.push('/circle')}
+      accessibilityLabel={`${t('circle.heading')}. ${body}`}
+    >
+      <Heading>{t('circle.heading')}</Heading>
+      <Text>{body}</Text>
+      <Text variant="label" tone="primary">
+        {t('circle.open')}
+      </Text>
+    </Card>
+  );
+}
+
+/** TIP_COUNT is how many tips home.json has (tip.1 .. tip.N); one per day. */
+const TIP_COUNT = 7;
+
+/** TipCard is a short, gentle idea for the day, the same all day long. */
+function TipCard() {
+  const { t } = useTranslation('home');
+  // The day is fixed when the card mounts: rendering stays pure.
+  const [day] = useState(() => Math.floor(Date.now() / 86_400_000));
+  return (
+    <Card testID="home-tip">
+      <Text variant="label" tone="muted">
+        {t('tip.heading')}
+      </Text>
+      <Text>{t(`tip.${(day % TIP_COUNT) + 1}`)}</Text>
+    </Card>
+  );
+}
+
 /** HomeScreen is the first tab. */
 export function HomeScreen() {
   const { t } = useTranslation('home');
@@ -83,7 +165,10 @@ export function HomeScreen() {
         header={
           <>
             <Text tone="muted">{t('howAreYou')}</Text>
+            <MoodCard />
             <CheckinCard />
+            <CircleCard />
+            <TipCard />
             <Heading>{t('inbox.heading')}</Heading>
           </>
         }

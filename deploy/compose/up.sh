@@ -15,15 +15,19 @@ web)
 	# BIRGE_PUBLIC_URL (e.g. https://demo.example.org) builds the member app for
 	# the stack published at that origin; the admin stays local-only.
 	member_url=${BIRGE_PUBLIC_URL:-http://localhost:8081}
+	# Served builds live outside the repository tree: tree syncs to the stack
+	# host delete untracked files and took the public site down with them.
+	web_dir=${BIRGE_WEB_DIR:-$HOME/.local/share/birge-web}
+	mkdir -p "$web_dir"
 	(cd ../../apps/mobile &&
 		EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=$member_url/v1 \
 			EXPO_PUBLIC_KRATOS_URL=$member_url/auth \
 			EXPO_PUBLIC_DEMO_CODES_URL=$member_url/demo/code \
-			npx expo export --platform web --output-dir dist-stack --clear)
+			npx expo export --platform web --output-dir "$web_dir/mobile" --clear)
 	(cd ../../apps/admin &&
 		EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=http://localhost:8082/v1 \
-			npx expo export --platform web --output-dir dist-stack --clear)
-	docker compose --profile web up -d --force-recreate web
+			npx expo export --platform web --output-dir "$web_dir/admin" --clear)
+	BIRGE_WEB_DIR="$web_dir" docker compose --profile web up -d --force-recreate web
 	;;
 codes)
 	docker compose exec -T postgres psql -U kratos -d kratos -At \

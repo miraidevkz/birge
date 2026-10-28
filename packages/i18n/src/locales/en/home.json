@@ -14,5 +14,30 @@
   },
   "greeting": "Hello, {{name}}",
   "greetingNoName": "Hello",
-  "howAreYou": "How are you today? We are here with you."
+  "howAreYou": "We are here with you.",
+  "mood": {
+    "question": "How are you today?",
+    "good": "Good",
+    "okay": "So-so",
+    "hard": "Hard",
+    "goodReply": "Glad to hear it. Drop by the Circle, people are there for you."
+  },
+  "circle": {
+    "heading": "Circle",
+    "match": "{{name}} would like to meet for tea. Answer in the Circle.",
+    "matchAccepted": "Tea with {{name}} is agreed. The chat is open.",
+    "searching": "We are looking for a tea partner for you.",
+    "invite": "Mothers who understand are here. Find yours.",
+    "open": "Open the Circle"
+  },
+  "tip": {
+    "heading": "Thought for the day",
+    "1": "Five quiet minutes count as caring for yourself too.",
+    "2": "Asking for help is strength, not weakness.",
+    "3": "A glass of water and a deep breath: a small step that works.",
+    "4": "You do not have to manage everything alone.",
+    "5": "Notice one thing that went well today.",
+    "6": "A short walk helps you reset.",
+    "7": "Write to someone who understands: a few words are often enough."
+  }
 }
