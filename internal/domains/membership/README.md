@@ -73,6 +73,7 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 
 ## Invariants
 
+- The auth gateway never forwards `Cookie`, `Origin` or its PoW header to Kratos: members (native and web) use the API flow with a session token, and Kratos refuses an API flow that carries `Origin` (authgw).
 - Lazy member creation; unique `identity_id` (database + service); concurrent first calls yield one member and one `MemberRegistered` (service + unique constraint).
 - A member only reads/changes her own data; principal from `internal/platform/auth`; staff sessions refused on member routes (service + API).
 - Display name sealed via `port.Encryptor` (ADR-0009); never logged; events carry IDs only (service + `Member.LogValue`).

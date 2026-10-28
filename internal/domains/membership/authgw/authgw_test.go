@@ -128,6 +128,7 @@ func (h *harness) do(method, target, pow, contentType, body string) *httptest.Re
 		req.Header.Set("Content-Type", contentType)
 	}
 	req.Header.Set("Cookie", "kratos_session=should-not-pass")
+	req.Header.Set("Origin", "https://web.example.invalid")
 	req.Header.Set("Connection", "X-Hop")
 	req.Header.Set("X-Hop", "1")
 	rec := httptest.NewRecorder()
@@ -180,7 +181,7 @@ func TestLoginPassesWithValidPoW(t *testing.T) {
 	if got.method != "POST" || got.path != "/self-service/login" || got.query != "flow=f1" {
 		t.Errorf("kratos got %s %s?%s", got.method, got.path, got.query)
 	}
-	for _, hdr := range []string{PoWHeader, "Cookie", "X-Hop"} {
+	for _, hdr := range []string{PoWHeader, "Cookie", "Origin", "X-Hop"} {
 		if got.header.Get(hdr) != "" {
 			t.Errorf("header %s forwarded", hdr)
 		}

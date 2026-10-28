@@ -166,6 +166,12 @@ func New(cfg Config) (*Gateway, error) {
 			pr.SetURL(target)
 			pr.Out.Header.Del(PoWHeader)
 			pr.Out.Header.Del("Cookie")
+			// Kratos refuses an API flow that carries Origin (it takes it for a
+			// browser that should use the cookie flow). Our web client uses the
+			// API flow with a session token and no cookies, like the native
+			// apps, and this gateway is its boundary (PoW, limits), so the
+			// browser's Origin stops here.
+			pr.Out.Header.Del("Origin")
 			pr.Out.Header.Set("X-Forwarded-For", cfg.ClientIP(pr.In))
 		},
 		Transport:    cfg.Transport,

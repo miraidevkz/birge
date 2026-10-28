@@ -27,6 +27,8 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 
 - **Tests connect as the application role, not a superuser.** The e2e database URL uses `birge_app`, so a schema missing from `db/roles.sql` fails a test instead of production; `db.TestRolesCoverEverySchema` checks every `CREATE SCHEMA` has a grant. (all context schemas but two had no grants.)
 
+- **A browser client on the Kratos API flow needs `Origin` stripped at the gateway.** Kratos answers 400 "the request was made as part of an AJAX request" to any API flow with an `Origin` header; the native apps send none, so only the web build failed ("Could not sign in"). The auth gateway drops it, as it drops `Cookie`. Test sign-in in a browser, not only on a device. (web demo)
+
 ## Contracts and code generation
 
 - **Quote YAML strings that contain punctuation in flow style.** A comma inside `{description: ...}` split it into an extra field and invalidated the whole OpenAPI document; the generator accepted it, the validator did not. The validator's tests load the real contract. (68739b9) A bulk fix must touch only `description` keys that describe a schema, not properties named `description`. (The validator caught a second case before commit.)
