@@ -6,12 +6,12 @@ Phone examples below use the synthetic shape `+70000000000`. Never put real numb
 
 ## Roles at a glance
 
-| Role | Escalations | Duty roster | Moderation queue | Knowledge |
-| --- | --- | --- | --- | --- |
-| Psychologist | List, take, reveal, close | View; alerts use psychologist / backup phones | No | Self-help: draft, review, publish |
-| Moderator | Same as psychologist | View | Approve / reject (and verification) | No |
-| Lawyer | No | No | No | Rights: draft, review, publish |
-| Admin | Same queue roles as above where granted | Add / cancel shifts | Same as moderator | Topics of either kind; review-due for both |
+| Role | Escalations | Duty roster | Moderation queue | Members and rooms | Knowledge |
+| --- | --- | --- | --- | --- | --- |
+| Psychologist | List, take, reveal, close | View; alerts use psychologist / backup phones | No | No | Self-help: draft, review, publish |
+| Moderator | Same as psychologist | View | Approve / reject (and verification); legal hold | View members; assign / remove room mentors | No |
+| Lawyer | No | No | No | No | Rights: draft, review, publish |
+| Admin | Same queue roles as above where granted | Add / cancel shifts | Same as moderator | Same as moderator; lift suspensions | Topics of either kind; review-due for both |
 
 The API enforces roles and MFA. If you see “MFA required”, complete the second factor and sign in again. Deny by default: wrong role → 403.
 
@@ -62,18 +62,47 @@ Audited: `escalation.take`, `escalation.reveal_contact`, `escalation.close`.
 
 Who: **moderator** or **admin**, with MFA.
 
-1. Open **Moderation**. Items are oldest first: listings, specialists, reviews, chat reports, held chat messages, verification requests.
-2. Read the **summary** (content under review). It must not contain contact data; still treat it as sensitive and do not paste it elsewhere.
-3. **Approve** or **Reject** with a reason code (`rules_medicine`, `rules_money`, `person_in_photo`, `unsafe`, `spam`, `inaccurate`, `duplicate`, `other`). A decision is final (retry → already decided).
-4. For chat **reports**: approve = keep the message (report dismissed); reject = take the message down. The API also supports `blockAuthor` (suspend the author) and `legalHold` (preserve content for legal review, ADR-0019). The current admin screen focuses on approve/reject; legal hold can also be set via staff chat endpoints when your process requires it.
+1. Open **Moderation**. Items are oldest first: listings, specialists, reviews, chat reports, held chat messages, verification requests. The chips at the top show one kind at a time (or all); **Show more** loads the next page.
+2. Read the **summary** (content under review) and the photo, if the item has one. It must not contain contact data; still treat it as sensitive and do not paste it elsewhere. Held chat messages show why they were held (new member, a link, a phone number, possible crisis); reports show the first report reason and how many reports are open.
+3. **Approve** or **Reject** with a reason code (`rules_medicine`, `rules_money`, `person_in_photo`, `unsafe`, `spam`, `inaccurate`, `duplicate`, `other`). A decision is final: if someone decided first, the screen says so and refreshes the list.
+4. **Verification** requests: **Approve and verify** makes her a verified member. Reject only with `inaccurate`, `duplicate` or `other`.
+5. For chat **reports** and **held chat messages**: approve = keep the message (report dismissed, held message published); reject = take the message down. The reject sheet has two extra switches:
+   - **Also suspend the author** (`blockAuthor`): she can no longer post or write in chats until an admin lifts the suspension. Use it for serious or repeated cases. The screen asks once more before sending.
+   - **Keep for legal review** (`legalHold`, ADR-0019): the content is preserved for the lawyer even after it is taken down.
 
-Audited: `moderation.approve` / `moderation.reject`, and when used `moderation.block_author`, `moderation.legal_hold`.
+### Legal hold on a single chat message
+
+On report and held-message items the card also has **Put on legal hold** and **Release legal hold** (both confirmed). They act on that one message, without deciding the item. The API does not show whether a message is already on hold, so choose the action you need; both are safe to repeat. Use legal hold when the lawyer asks to preserve a message (for example for a police request), and release it when the lawyer says the case is closed.
+
+Audited: `chat.message.legal_hold_on`, `chat.message.legal_hold_off`.
+
+Audited (decisions): `moderation.approve` / `moderation.reject`, and when used `moderation.block_author`, `moderation.legal_hold`.
 
 ### Never do this in moderation
 
 - Do not punish or expose people outside the product tools (no public call-outs with real names).
 - Do not approve content that shows a person in a photo when policy forbids it, or that pressures someone to leave a child with an unverified person.
 - Do not store queue text in personal files.
+
+## Members
+
+Who: **moderator** or **admin**, with MFA. Every time the list is read, the server writes it to the audit log, so open it when you need it, not "just to look".
+
+1. Open **Members**. Choose **Verified** or **Suspended**; optionally pick a district. **Show more** loads the next page.
+2. Each row shows her first name, district and when she was verified or suspended. Nothing else (no phone, children, needs or check-ins) is available here, by design.
+3. **Lift suspension** (suspended list, **admin** only): confirm, and she can post and write in chats again. A moderator who tries gets the message that only an admin can do it.
+
+If the screen says "This list is not available on this server yet", the server has not been updated with this feature; nothing is wrong with your account.
+
+## Rooms and mentors
+
+Who: **moderator** or **admin**, with MFA.
+
+1. Open **Rooms**. It lists the district and topic group rooms (never private conversations) with the number of members and the current mentors.
+2. **Add mentor** opens the list of verified members. Tap one to make her a mentor of that room. Only a member who already holds the mentor role can be assigned; otherwise the screen explains it and nothing changes. **Back to rooms** leaves without a change.
+3. **Remove** next to a mentor's name, then confirm, takes the mentor role in that room away from her.
+
+Audited: `chat.room.mentor_assign`, `chat.room.mentor_remove`. As with Members, "not available on this server yet" means the server has not been updated yet.
 
 ## Knowledge: draft, review, publish, review-due
 
@@ -107,6 +136,9 @@ Shows your subject and roles. Use **Sign out** when you leave a shared machine.
 | Take / reveal / close escalation | Who took responsibility, who saw contact, outcome |
 | Duty add / cancel | Who changed on-duty phones and windows |
 | Moderation decision | Approve/reject codes; optional block author / legal hold |
+| Legal hold on a message | Who put or released the hold |
+| Members list read, suspension lifted | Who looked at the list; who lifted whose suspension |
+| Mentor assigned / removed | Who changed a room's mentors |
 | Knowledge publish / reject | Who reviewed what version |
 | Shared emergency plan view (member side) | Separate member audit when a trusted contact opens a sent plan |
 | Account deletion | System actors per context after `privacy.DataDeletionRequested` |

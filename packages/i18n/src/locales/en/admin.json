@@ -4,7 +4,9 @@
     "moderation": "Moderation",
     "duty": "Duty",
     "knowledge": "Knowledge",
-    "profile": "Profile"
+    "profile": "Profile",
+    "members": "Members",
+    "rooms": "Rooms"
   },
   "signIn": {
     "title": "Staff sign-in",
@@ -85,7 +87,60 @@
       "other": "Other"
     },
     "rejectTitle": "Reject item",
-    "confirmReject": "Reject"
+    "confirmReject": "Reject",
+    "filter": {
+      "label": "Show",
+      "all": "All"
+    },
+    "createdAt": "Received {{time}}",
+    "photo": "Photo under review",
+    "heldFor": "Held: {{reason}}",
+    "holdReason": {
+      "crisis": "Possible crisis",
+      "newcomer": "New member",
+      "link": "Contains a link",
+      "phone": "Contains a phone number",
+      "unknown": "Other reason"
+    },
+    "reportedFor": "Reported: {{reason}}",
+    "reportReason": {
+      "harassment": "Harassment",
+      "scam_or_fundraising": "Scam or fundraising",
+      "miracle_cure": "Miracle cure",
+      "unsafe_content": "Unsafe content",
+      "child_safety": "Child safety",
+      "spam": "Spam",
+      "other": "Other",
+      "unknown": "Other reason"
+    },
+    "reportCount": "Open reports: {{count}}",
+    "approveVerification": "Approve and verify",
+    "verificationHint": "Approving makes her a verified member.",
+    "blockAuthor": {
+      "label": "Also suspend the author",
+      "hint": "She will not be able to post or write in chats until an admin lifts the suspension. For serious or repeated cases."
+    },
+    "legalHoldOption": {
+      "label": "Keep for legal review",
+      "hint": "Preserves the content for the lawyer (legal hold), even after it is taken down."
+    },
+    "blockConfirm": {
+      "title": "Reject and suspend the author?",
+      "message": "The item will be rejected and its author suspended. Only an admin can lift the suspension.",
+      "confirm": "Reject and suspend"
+    },
+    "legalHold": {
+      "put": "Put on legal hold",
+      "release": "Release legal hold",
+      "stateUnknown": "The current hold state is not shown here. Choose the action you need.",
+      "putTitle": "Put this message on legal hold?",
+      "putMessage": "The message will be preserved for the lawyer until the hold is released.",
+      "putDone": "The message is on legal hold.",
+      "releaseTitle": "Release the legal hold?",
+      "releaseMessage": "The message will follow the usual retention period again.",
+      "releaseDone": "The legal hold is released."
+    },
+    "alreadyDecided": "Someone has already decided this item. The list is refreshed."
   },
   "duty": {
     "title": "Duty roster",
@@ -252,6 +307,62 @@
       "forbidden": "This action belongs to another role. Another reviewer may be needed, or you authored this version.",
       "conflict": "This version cannot be changed right now: its status has changed. Refresh the list.",
       "failed": "The request failed. Try again."
+    }
+  },
+  "actions": {
+    "failed": "The request did not go through. Try again."
+  },
+  "notAvailable": {
+    "title": "Not on this server yet",
+    "description": "This list is not available on this server yet. It will appear after the next server update."
+  },
+  "members": {
+    "title": "Members",
+    "status": {
+      "label": "List",
+      "verified": "Verified",
+      "suspended": "Suspended"
+    },
+    "district": {
+      "label": "District",
+      "all": "All districts"
+    },
+    "emptyVerifiedTitle": "No verified members yet",
+    "emptyVerifiedDescription": "Members appear here once their verification is approved.",
+    "emptySuspendedTitle": "Nobody is suspended",
+    "emptySuspendedDescription": "Members suspended by a moderation decision appear here.",
+    "verifiedOn": "Verified {{date}}",
+    "suspendedOn": "Suspended {{date}}",
+    "lift": "Lift suspension",
+    "liftTitle": "Lift the suspension?",
+    "liftMessage": "She will be able to post and write in chats again.",
+    "liftDone": "The suspension is lifted.",
+    "liftForbidden": "Only an admin can lift a suspension. Ask an admin of this deployment."
+  },
+  "rooms": {
+    "title": "Rooms",
+    "kind": {
+      "district": "District room",
+      "topic": "Topic room"
+    },
+    "memberCount": "Members: {{count}}",
+    "mentors": "Mentors",
+    "noMentors": "No mentor yet",
+    "addMentor": "Add mentor",
+    "removeMentor": "Remove",
+    "removeTitle": "Remove this mentor?",
+    "removeMessage": "{{name}} will no longer be a mentor of {{room}}.",
+    "removeConfirm": "Remove mentor",
+    "emptyTitle": "No group rooms yet",
+    "emptyDescription": "District and topic rooms appear here once they are created.",
+    "assigned": "Mentor assigned.",
+    "removed": "Mentor removed.",
+    "conflict": "She cannot be made a mentor of this room. Only a verified member with the mentor role can be assigned.",
+    "pick": {
+      "title": "Choose a mentor",
+      "intro": "Verified members. Tap one to make her a mentor of {{room}}.",
+      "back": "Back to rooms",
+      "already": "Already a mentor here"
     }
   }
 }

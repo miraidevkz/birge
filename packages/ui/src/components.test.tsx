@@ -5,9 +5,11 @@ import { initialsOf, tintOf } from './avatar';
 import { Button } from './button';
 import { Illustration, type IllustrationName } from './illustration';
 import { ChoiceGroup } from './choice-group';
+import { ConfirmSheet } from './confirm-sheet';
 import { List } from './list';
 import { ListItem } from './list-item';
 import { MessageBubble } from './message-bubble';
+import { Photo } from './photo';
 import { Screen } from './screen';
 import { SosProvider } from './sos';
 import { Text } from './text';
@@ -169,6 +171,55 @@ describe('List', () => {
   it('shows the empty state for an empty result', async () => {
     await render_({ data: [] });
     expect(screen.getByText('Nothing new')).toBeTruthy();
+  });
+
+  it('offers "Show more" only with onLoadMore and rows on screen', async () => {
+    const onLoadMore = jest.fn();
+    await render_({ data: ['a'], onLoadMore, testID: 'rows' });
+    await fireEvent.press(screen.getByRole('button', { name: 'Show more' }));
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no "Show more" on an empty result or the last page', async () => {
+    await render_({ data: [], onLoadMore: () => undefined });
+    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+    await render_({ data: ['a'] });
+    expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+  });
+});
+
+describe('ConfirmSheet', () => {
+  it('states the consequence and confirms with the named action', async () => {
+    const onConfirm = jest.fn();
+    const onClose = jest.fn();
+    await render(
+      <ConfirmSheet
+        visible
+        title="Lift suspension?"
+        message="She can use the app again."
+        confirmLabel="Lift suspension"
+        onConfirm={onConfirm}
+        onClose={onClose}
+        testID="lift"
+      />,
+    );
+    expect(screen.getByText('She can use the app again.')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('lift-confirm'));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Close' })[0]!);
+    expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe('Photo', () => {
+  it('shows a web photo with its label', async () => {
+    await render(<Photo uri="https://media.example.invalid/p.jpg" accessibilityLabel="Listing photo" />);
+    expect(screen.getByLabelText('Listing photo')).toBeTruthy();
+  });
+
+  it('renders nothing for a non-web address', async () => {
+    await render(<Photo uri="javascript:alert(1)" accessibilityLabel="Listing photo" />);
+    expect(screen.queryByLabelText('Listing photo')).toBeNull();
   });
 });
 

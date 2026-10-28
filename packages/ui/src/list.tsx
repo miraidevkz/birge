@@ -25,6 +25,10 @@ export interface ListProps<T> {
   header?: ReactElement;
   /** footer scrolls after the rows (a secondary form); keep the Screen footer for the one primary action. */
   footer?: ReactElement;
+  /** onLoadMore, when set, shows a "Show more" button after the rows (cursor paging); omit it on the last page. */
+  onLoadMore?: () => void;
+  /** loadingMore is true while the next page loads. */
+  loadingMore?: boolean;
   testID?: string;
 }
 
@@ -34,6 +38,8 @@ export interface ListProps<T> {
  * content (with a non-blocking error when a refresh failed). The first rows
  * fade in, slightly staggered, when the data first shows (Appear); rows that
  * mount later while she scrolls, and re-rendered rows, appear without motion.
+ * Cursor paging is an explicit "Show more" button (onLoadMore), not loading
+ * on scroll: the reader decides, and a failed page never loops.
  */
 export function List<T>({
   data,
@@ -45,6 +51,8 @@ export function List<T>({
   empty,
   header,
   footer,
+  onLoadMore,
+  loadingMore = false,
   testID,
 }: ListProps<T>) {
   const { t } = useTranslation('ui');
@@ -68,6 +76,23 @@ export function List<T>({
         {t('error.description')}
       </Banner>
     ) : null;
+  const more =
+    onLoadMore && data !== undefined && data.length > 0 ? (
+      <Button
+        title={t('list.more')}
+        onPress={onLoadMore}
+        variant="secondary"
+        loading={loadingMore}
+        testID={testID ? `${testID}-more` : undefined}
+      />
+    ) : null;
+  const footerContent =
+    footer || more ? (
+      <View className="gap-4 pt-4">
+        {more}
+        {footer}
+      </View>
+    ) : undefined;
   // The list scrolls the whole screen width, so its scrollbar sits at the
   // screen edge: it cancels the screen's 20 px gutter (Screen, px-5) and
   // pads its own content instead. A List always lives directly in a Screen.
@@ -87,7 +112,7 @@ export function List<T>({
             </View>
           }
           ListEmptyComponent={data !== undefined ? <EmptyState {...empty} /> : null}
-          ListFooterComponent={footer ? <View className="gap-4 pt-4">{footer}</View> : undefined}
+          ListFooterComponent={footerContent}
           contentContainerStyle={{ paddingBottom: tokens.spacing[6], paddingHorizontal: tokens.spacing[5] }}
         />
       </AppearListScope>

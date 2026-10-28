@@ -39,28 +39,34 @@ All configuration comes from the environment at build time ([`app.config.ts`](ap
 ## Structure
 
 ```
-src/app/            routes only (Expo Router): _layout, (tabs)/{index,moderation,duty,knowledge/*,profile}, sign-in
-src/screens/        screen bodies: sign-in, escalations, moderation, duty, knowledge-*, profile
-src/lib/            app services: config, auth (token in memory), session, api, query, platform-crypto, knowledge-problem
+src/app/            routes only (Expo Router): _layout, (tabs)/{index,moderation,members,rooms,duty,knowledge/*,profile}, sign-in
+src/screens/        screen bodies: sign-in, escalations, moderation, members, rooms, duty, knowledge-*, profile
+src/lib/            app services: config, auth (token in memory), session, api, query, platform-crypto, knowledge-problem,
+                    not-implemented (501 detection), members (members and districts queries), room-title, time
 public/             web shell: index.html, manifest.webmanifest, icon
 scripts/            check-web-build.mjs
 ```
 
 ## Screens
 
-| Screen               | Route                         | Role                                                                                   |
-| -------------------- | ----------------------------- | -------------------------------------------------------------------------------------- |
-| Escalations          | `(tabs)/`                     | Open / taken / closed queue; reveal contact; close with outcome                        |
-| Moderation           | `(tabs)/moderation`           | Approve / reject queue items                                                           |
-| Duty                 | `(tabs)/duty`                 | Current-week roster; add / delete shifts                                               |
-| Knowledge articles   | `(tabs)/knowledge`            | List versions (kind + status filters); create topic; open editor / review / review-due |
-| Knowledge editor     | `(tabs)/knowledge/editor`     | Draft create / update / submit; new version from review-due                            |
-| Knowledge review     | `(tabs)/knowledge/review`     | `in_review` queue; publish or reject with reason                                       |
-| Knowledge review due | `(tabs)/knowledge/review-due` | Published versions past review-due; open editor for a new version                      |
-| Profile              | `(tabs)/profile`              | Subject, roles, sign out                                                               |
-| Sign-in              | `/sign-in`                    | OIDC + MFA message                                                                     |
+| Screen               | Route                         | Role                                                                                                 |
+| -------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Escalations          | `(tabs)/`                     | Open / taken / closed queue; reveal contact; close with outcome                                      |
+| Moderation           | `(tabs)/moderation`           | Queue by kind with paging; approve / reject (block author, legal hold); legal hold on a chat message |
+| Members              | `(tabs)/members`              | Verified / suspended members by district; lift a suspension (admin)                                  |
+| Rooms                | `(tabs)/rooms`                | Group rooms with member counts and mentors; add mentor (picker over verified members) / remove       |
+| Duty                 | `(tabs)/duty`                 | Current-week roster; add / delete shifts                                                             |
+| Knowledge articles   | `(tabs)/knowledge`            | List versions (kind + status filters); create topic; open editor / review / review-due               |
+| Knowledge editor     | `(tabs)/knowledge/editor`     | Draft create / update / submit; new version from review-due                                          |
+| Knowledge review     | `(tabs)/knowledge/review`     | `in_review` queue; publish or reject with reason                                                     |
+| Knowledge review due | `(tabs)/knowledge/review-due` | Published versions past review-due; open editor for a new version                                    |
+| Profile              | `(tabs)/profile`              | Subject, roles, sign out                                                                             |
+| Sign-in              | `/sign-in`                    | OIDC + MFA message                                                                                   |
 
 - **Session.** The OIDC access token lives in process memory only (never `localStorage` or SecureStore). A reload requires sign-in again. On API 401 the token is cleared; on 403 `mfa_required` the sign-in screen shows the second-factor message.
 - **Auth.** Authorization code + PKCE via `expo-auth-session` against `EXPO_PUBLIC_STAFF_ISSUER` discovery, client `EXPO_PUBLIC_STAFF_CLIENT_ID`, scopes `openid offline_access`.
 - **Data.** React Query for reads; the open escalations list polls every 15 s while focused. Contact details from `revealEscalationContact` stay in component state only, never in the query cache.
 - **UI.** Only `@birge/ui` components and tokens in screens; texts only from the `admin` namespace of `@birge/i18n`. Escalations use `Screen variant="crisis"` (no animation). No SOS entry (staff console is not the member crisis path). Knowledge 403/409 map to `knowledge.problem.*` locale keys; the client never assumes publish or review permission.
+- **Not yet served.** Members and Rooms read endpoints whose contract landed before the server code; until it lands they answer 501. `lib/not-implemented.ts` detects that; the list then shows a calm "not available on this server yet" empty state (no error banner), and the query client never retries a 501.
+- **Moderation.** Reason codes (`holdReason`, `reportReason`) are shown only through `moderation.holdReason.*` / `moderation.reportReason.*`; an unknown code gets the generic label. `blockAuthor` and `legalHold` are offered only for reports and held chat messages, and suspending the author is confirmed once more. The API does not expose whether a message is on legal hold, so "Put on legal hold" and "Release legal hold" are two explicit, confirmed actions on the message (`objectId`).
+- **Members and mentors.** Member names stay in screen data only (query keys carry status and district ID). Lifting a suspension is admin only; on 403 the screen says so. Assigning a mentor answers 409 when she does not hold the mentor role; the screen explains it. Room titles are locale keys resolved with the mom app's `chat:roomTitle.*` and `reference:*` texts (`lib/room-title.ts`), so staff and members see the same name.

@@ -1,10 +1,12 @@
-// React Query setup. Retries only what a retry can fix; 401 ends the local
-// session; 403 mfa_required clears the token and flags step-up.
+// React Query setup. Retries only what a retry can fix (never a 501: the
+// server does not serve that route yet); 401 ends the local session; 403
+// mfa_required clears the token and flags step-up.
 import { ApiError, isRetryable } from '@birge/api';
 import { focusManager, MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 import { AppState, Platform } from 'react-native';
 
 import { expireAccessToken, requireMfa } from './auth';
+import { isNotImplemented } from './not-implemented';
 
 function handleAuthError(error: unknown): void {
   if (!(error instanceof ApiError)) return;
@@ -15,6 +17,12 @@ function handleAuthError(error: unknown): void {
   if (error.status === 403 && error.code === 'mfa_required') requireMfa();
 }
 
+function shouldRetry(count: number, error: unknown): boolean {
+  if (error instanceof ApiError && (error.status === 401 || error.code === 'mfa_required')) return false;
+  if (isNotImplemented(error)) return false;
+  return isRetryable(error) && count < 2;
+}
+
 /** createQueryClient builds the admin query client. */
 export function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -23,10 +31,7 @@ export function createQueryClient(): QueryClient {
     defaultOptions: {
       queries: {
         staleTime: 60_000,
-        retry: (count, error) =>
-          error instanceof ApiError && (error.status === 401 || error.code === 'mfa_required')
-            ? false
-            : isRetryable(error) && count < 2,
+        retry: shouldRetry,
       },
       mutations: { retry: false },
     },

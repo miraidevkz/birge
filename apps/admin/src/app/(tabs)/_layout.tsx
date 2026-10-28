@@ -38,6 +38,8 @@ export default function TabsLayout() {
         name="moderation"
         options={{ title: t('tabs.moderation'), tabBarIcon: icon('shield-checkmark-outline') }}
       />
+      <Tabs.Screen name="members" options={{ title: t('tabs.members'), tabBarIcon: icon('people-outline') }} />
+      <Tabs.Screen name="rooms" options={{ title: t('tabs.rooms'), tabBarIcon: icon('chatbubbles-outline') }} />
       <Tabs.Screen name="duty" options={{ title: t('tabs.duty'), tabBarIcon: icon('calendar-outline') }} />
       <Tabs.Screen name="knowledge" options={{ title: t('tabs.knowledge'), tabBarIcon: icon('library-outline') }} />
       <Tabs.Screen name="profile" options={{ title: t('tabs.profile'), tabBarIcon: icon('person-outline') }} />
