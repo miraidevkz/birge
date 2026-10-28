@@ -47,6 +47,7 @@ const (
 	EventVerificationRequested = "membership.VerificationRequested"
 	EventMemberVerified        = "membership.MemberVerified"
 	EventMentorRoleChanged     = "membership.MentorRoleChanged"
+	EventMemberActiveDay       = "membership.MemberActiveDay"
 	EventModerationDecided     = "moderation.Decided"
 )
 

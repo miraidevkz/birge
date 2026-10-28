@@ -75,7 +75,7 @@ A fresh deployment can start with no configuration or reference data files: when
 | `BIRGE_STAFF_ROLE_MAP` | api | each role to itself | `<idp value>=<role>` comma-separated; roles `psychologist`, `moderator`, `lawyer`, `admin`; unmapped values are ignored |
 | `BIRGE_STAFF_MFA_ACR`, `BIRGE_STAFF_MFA_AMR` | api | one required with staff auth | MFA is required on every staff request: `acr` in the first list, or `amr` containing a value of the second (e.g. `mfa,webauthn,hwk`); read at the top level, else under `ext` (Hydra). Without MFA: 403 `mfa_required` |
 | `BIRGE_QUESTIONNAIRE_FILE` | api | EXAMPLE preset | path to the wellbeing questionnaire JSON (version, questions with locale keys, reverse-score ids, crisis item, thresholds, feedback). Unset → `presets/demo/questionnaire.json` (thresholds are placeholders for the psychologist) |
-| `BIRGE_TIME_ZONE` | api, worker | `Asia/Almaty` | deployment IANA zone for check-in reminder schedules; hosts must ship current tzdata |
+| `BIRGE_TIME_ZONE` | api, worker | `Asia/Almaty` | deployment IANA zone for check-in reminder schedules, the assistant daily limit and the member activity day (`membership.MemberActiveDay`); hosts must ship current tzdata |
 | `BIRGE_PRACTICES_BASE_URL` | api | required | in-jurisdiction object-storage base URL for practice audio (`https://…`) |
 | `NATS_URL` | api, worker | required | `nats://` or `tls://` URLs, comma-separated; the API uses NATS core for chat room fan-out, the worker uses JetStream for domain events |
 | `BIRGE_KEK_ID` | api, worker | required | id of the key-encryption key, stored with every wrapped member key; never reuse an id for other key material |

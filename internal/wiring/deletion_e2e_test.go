@@ -214,7 +214,7 @@ func seedEveryContext(t *testing.T, ctx context.Context, pool *pgxpool.Pool, her
 
 	// membership
 	exec(`INSERT INTO membership.members (id, identity_id, district_id, verification) VALUES ($1, $2, $3, 'verified')`, s.other, id(), s.district)
-	exec(`UPDATE membership.members SET district_id = $2 WHERE id = $1`, her, s.district)
+	exec(`UPDATE membership.members SET district_id = $2, last_active_day = '2026-10-27' WHERE id = $1`, her, s.district)
 	exec(`INSERT INTO membership.children (member_id, idempotency_key, birth_year, needs) VALUES ($1, $2, 2018, '{}')`, her, id())
 	exec(`INSERT INTO membership.verification_requests (member_id) VALUES ($1)`, her)
 	exec(`INSERT INTO membership.blocks (blocker, blocked) VALUES ($1, $2), ($2, $1)`, her, s.other)
@@ -626,7 +626,8 @@ func checkTombstonesAndOthers(t *testing.T, ctx context.Context, pool *pgxpool.P
 		}
 	}
 	expect("member tombstone", `SELECT count(*) FROM membership.members WHERE id = $1 AND identity_id = $2
-		AND display_name IS NULL AND district_id IS NULL AND cardinality(roles) = 0 AND deleted_at IS NOT NULL`, 1, her, identity)
+		AND display_name IS NULL AND district_id IS NULL AND cardinality(roles) = 0 AND last_active_day IS NULL
+		AND deleted_at IS NOT NULL`, 1, her, identity)
 	expect("shredded key", `SELECT count(*) FROM platform.member_keys WHERE member_id = $1 AND destroyed_at IS NOT NULL`, 1, her)
 	expect("escalation shell", `SELECT count(*) FROM safety.escalations WHERE member_id = $1 AND note IS NULL
 		AND district_id IS NULL AND outcome = 'contacted' AND status = 'closed'`, 1, her)

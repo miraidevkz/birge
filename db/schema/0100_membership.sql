@@ -52,6 +52,10 @@ CREATE TABLE membership.members (
     -- Set by account deletion: the row stays as a tombstone with id and
     -- identity_id only, so the identity is refused and never gets a new member.
     deleted_at   timestamptz,
+    -- Last calendar day (deployment time zone) the member used the app; it
+    -- only moves forward and drives membership.MemberActiveDay (ADR-0024
+    -- addendum 2026-10-28). Cleared by account deletion.
+    last_active_day date,
     CHECK ((suspended_at IS NULL) = (suspended_reason IS NULL))
 );
 

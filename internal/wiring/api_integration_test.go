@@ -296,6 +296,14 @@ func TestAPIEndToEnd(t *testing.T) {
 		t.Fatalf("GET /v1/me/inbox: %d %s", rec.Code, rec.Body)
 	}
 
+	// Every member route passes the member middleware; the activity day is
+	// recorded once however many requests she made today.
+	var activeDays int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM platform.outbox
+		WHERE event_type = 'membership.MemberActiveDay' AND payload->>'member_id' = $1`, me.ID.String()).Scan(&activeDays); err != nil || activeDays != 1 {
+		t.Fatalf("MemberActiveDay events = %d, %v; want 1", activeDays, err)
+	}
+
 	// Health endpoints sit outside /v1 and need no session.
 	if rec := do(t, h, http.MethodGet, "/readyz", "", ""); rec.Code != http.StatusNoContent {
 		t.Fatalf("/readyz: %d", rec.Code)

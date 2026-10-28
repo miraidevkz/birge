@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"birge/internal/domains/membership/model"
@@ -231,6 +232,19 @@ func (t *pgTx) SetSuspension(ctx context.Context, id uuid.UUID, at *time.Time, r
 		return model.ErrMemberNotFound
 	}
 	return nil
+}
+
+// MarkActiveDay moves last_active_day forward to day; see the query comment
+// for why "later than" makes one update per member and day across replicas.
+func (t *pgTx) MarkActiveDay(ctx context.Context, id uuid.UUID, day time.Time) (bool, error) {
+	n, err := t.q.MarkMemberActiveDay(ctx, store.MarkMemberActiveDayParams{
+		Day: pgtype.Date{Time: time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.UTC), Valid: true},
+		ID:  id,
+	})
+	if err != nil {
+		return false, fmt.Errorf("membership: mark active day: %w", err)
+	}
+	return n == 1, nil
 }
 
 // GetVerificationRequest loads a verification request by ID.

@@ -15,6 +15,7 @@ import (
 
 	"birge/internal/domains/membership/adapter"
 	"birge/internal/domains/membership/model"
+	"birge/internal/domains/membership/port"
 	"birge/internal/domains/membership/service"
 	"birge/internal/platform/auth"
 	"birge/internal/platform/staffauth"
@@ -746,5 +747,89 @@ func TestMentorRoleIntegration(t *testing.T) {
 	}
 	if err := svc.GrantMentorRole(staffCtx, suspendedID); !errors.Is(err, model.ErrSuspended) {
 		t.Errorf("grant suspended member error = %v, want %v", err, model.ErrSuspended)
+	}
+}
+
+func TestActiveDayIntegration(t *testing.T) {
+	pool, svc := setup(t)
+	ctx := context.Background()
+	pg := &adapter.Postgres{Pool: pool}
+	m, err := svc.Me(as(uuid.New()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	zone := time.FixedZone("UTC+5", 5*60*60)
+	clk := &fixedClock{t: time.Date(2026, 10, 27, 19, 30, 0, 0, time.UTC)} // 00:30 on the 28th in UTC+5
+
+	// Replicas: every caller has its own cache, so all of them reach the
+	// conditional update at once; the database lets exactly one emit.
+	const replicas = 12
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for range replicas {
+		act := service.NewActiveDays(pg, clk, zone, nil)
+		wg.Go(func() {
+			<-start
+			act.Record(ctx, m.ID)
+		})
+	}
+	close(start)
+	wg.Wait()
+	activeDays := func(day string) int {
+		t.Helper()
+		return count(t, pool, `SELECT count(*) FROM platform.outbox WHERE event_type = 'membership.MemberActiveDay'
+			AND event_version = 1 AND payload = jsonb_build_object('member_id', $1::text, 'day', $2::text)`, m.ID.String(), day)
+	}
+	if n := activeDays("2026-10-28"); n != 1 {
+		t.Errorf("MemberActiveDay events for the 28th = %d, want 1", n)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM membership.members WHERE id = $1 AND last_active_day = '2026-10-28'`, m.ID); n != 1 {
+		t.Errorf("last_active_day not stored")
+	}
+
+	mark := func(id uuid.UUID, day time.Time) bool {
+		t.Helper()
+		var updated bool
+		if err := pg.InTx(ctx, func(tx port.Tx) error {
+			var err error
+			updated, err = tx.MarkActiveDay(ctx, id, day)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return updated
+	}
+	day := func(d int) time.Time { return time.Date(2026, 10, d, 0, 0, 0, 0, time.UTC) }
+	if mark(m.ID, day(28)) {
+		t.Error("same day updated again")
+	}
+	if mark(m.ID, day(27)) {
+		t.Error("earlier day moved the stored day back")
+	}
+	if !mark(m.ID, day(29)) {
+		t.Error("next day not updated")
+	}
+	if mark(uuid.New(), day(29)) {
+		t.Error("unknown member updated")
+	}
+
+	// The next deployment day emits once more, from any replica.
+	clk.t = clk.t.Add(48 * time.Hour) // the 30th
+	act := service.NewActiveDays(pg, clk, zone, nil)
+	act.Record(ctx, m.ID)
+	act.Record(ctx, m.ID)
+	if n := activeDays("2026-10-30"); n != 1 {
+		t.Errorf("MemberActiveDay events for the 30th = %d, want 1", n)
+	}
+
+	// A deleted member's tombstone is never marked active.
+	if err := pg.EraseMember(ctx, m.ID, clk.t); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM membership.members WHERE id = $1 AND last_active_day IS NULL`, m.ID); n != 1 {
+		t.Error("account deletion kept last_active_day")
+	}
+	if mark(m.ID, day(31)) {
+		t.Error("tombstone marked active")
 	}
 }

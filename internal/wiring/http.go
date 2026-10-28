@@ -171,6 +171,10 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 		return nil, fmt.Errorf("wiring: %w", err)
 	}
 	members := membershipservice.New(&membershipadapter.Postgres{Pool: d.Pool}, DisplayNameEncryptor{Sealer: d.Envelope}, d.Clock)
+	activity, err := newActiveDays(cfg, d)
+	if err != nil {
+		return nil, err
+	}
 	privacy := &privacyservice.Service{
 		Store:    &privacyadapter.PostgresStore{Pool: d.Pool},
 		Shredder: d.Envelope,
@@ -289,7 +293,7 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	}
 
 	api := http.NewServeMux()
-	mountAPI(api, cfg, members, privacy, notify, safety, wellbeing, emergency, assistantSvc, knowledge, circle, chatSvc, sharingSvc, directorySvc, moderationSvc, d.Logger)
+	mountAPI(api, cfg, members, activity, privacy, notify, safety, wellbeing, emergency, assistantSvc, knowledge, circle, chatSvc, sharingSvc, directorySvc, moderationSvc, d.Logger)
 	staffAccounts := &staffdir.PostgresStore{Pool: d.Pool}
 	mountStaffDir(api, &staffdir.Service{Store: staffAccounts, Clock: d.Clock, Logger: d.Logger}, d.Logger)
 
@@ -398,7 +402,7 @@ func newAssistantService(
 
 // mountAPI registers the generated /v1 handlers of every API area on mux,
 // with the shared problem+json error handlers.
-func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service,
+func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service, activity activeDayRecorder,
 	privacy *privacyservice.Service, notify *notifyservice.Service,
 	safety *safetyservice.Service, wellbeing *wellbeingservice.Service,
 	emergency *emergencyservice.Service, assistant *assistantservice.Service,
@@ -428,7 +432,7 @@ func mountAPI(mux *http.ServeMux, cfg Config, members *membershipservice.Service
 		}),
 		membershipapi.StdHTTPServerOptions{BaseURL: base, BaseRouter: mux, ErrorHandlerFunc: httpapi.RequestErrorHandler},
 	)
-	toMember := memberPrincipal(members, logger)
+	toMember := memberPrincipal(members, activity, logger)
 	privacyapi.HandlerWithOptions(
 		privacyapi.NewStrictHandlerWithOptions(&privacyapi.Server{Service: privacy}, nil, privacyapi.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc: httpapi.RequestErrorHandler, ResponseErrorHandlerFunc: responseErr,
@@ -551,12 +555,37 @@ func mountStaffDir(mux *http.ServeMux, svc *staffdir.Service, logger *slog.Logge
 // apiBase is the path prefix of every HTTP route.
 const apiBase = "/v1"
 
+// activeDayRecorder is the port to membership's activity recording
+// (membershipservice.ActiveDays): the middleware hands over the member ID and
+// never touches membership tables. Record never fails the request.
+type activeDayRecorder interface {
+	Record(ctx context.Context, memberID uuid.UUID)
+}
+
+// newActiveDays builds the membership.MemberActiveDay recorder for the
+// deployment time zone (BIRGE_TIME_ZONE, already validated by the config
+// loader; empty in hand-built test configs, then the default zone).
+func newActiveDays(cfg Config, d APIDeps) (*membershipservice.ActiveDays, error) {
+	zone := cfg.TimeZone
+	if zone == "" {
+		zone = defaultTimeZone
+	}
+	loc, err := time.LoadLocation(zone)
+	if err != nil {
+		return nil, fmt.Errorf("wiring: time zone %q: %w", zone, err)
+	}
+	return membershipservice.NewActiveDays(&membershipadapter.Postgres{Pool: d.Pool}, d.Clock, loc, d.Logger), nil
+}
+
 // memberPrincipal resolves the signed-in member (creating it on first use,
 // ADR-0008 addendum) and sets auth.Principal.MemberID for the handlers of
 // contexts that key their data by member ID (privacy, notify, safety,
 // wellbeing, emergency). The identity ID stays untouched. Anonymous and staff
 // requests pass unchanged; the handlers refuse a principal without a MemberID.
-func memberPrincipal(members *membershipservice.Service, logger *slog.Logger) func(http.Handler) http.Handler {
+// Every resolved member request is reported to activity (membership.MemberActiveDay,
+// ADR-0024 addendum); the recorder answers from memory after the first request
+// of the day and never fails the request.
+func memberPrincipal(members *membershipservice.Service, activity activeDayRecorder, logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			p, ok := auth.FromContext(r.Context())
@@ -589,6 +618,7 @@ func memberPrincipal(members *membershipservice.Service, logger *slog.Logger) fu
 						return
 					}
 					p.MemberID = id
+					activity.Record(r.Context(), id)
 					next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), p)))
 					return
 				}
@@ -597,6 +627,7 @@ func memberPrincipal(members *membershipservice.Service, logger *slog.Logger) fu
 				return
 			}
 			p.MemberID = m.ID
+			activity.Record(r.Context(), m.ID)
 			next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), p)))
 		})
 	}

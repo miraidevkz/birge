@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type MembershipBlock struct {
@@ -55,6 +56,7 @@ type MembershipMember struct {
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	DeletedAt       *time.Time
+	LastActiveDay   pgtype.Date
 }
 
 type MembershipNeed struct {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const deleteMemberChildren = `-- name: DeleteMemberChildren :execrows
@@ -344,6 +345,33 @@ func (q *Queries) LockMemberForDeletion(ctx context.Context, id uuid.UUID) (Lock
 	return i, err
 }
 
+const markMemberActiveDay = `-- name: MarkMemberActiveDay :execrows
+UPDATE membership.members
+SET last_active_day = $1::date
+WHERE id = $2 AND deleted_at IS NULL
+  AND (last_active_day IS NULL OR last_active_day < $1::date)
+`
+
+type MarkMemberActiveDayParams struct {
+	Day pgtype.Date
+	ID  uuid.UUID
+}
+
+// Activity day (ADR-0024 addendum 2026-10-28). The day only moves forward:
+// concurrent requests and replicas serialize on the row lock, the WHERE is
+// re-checked after the first commit, so exactly one transaction per member and
+// day updates a row and publishes membership.MemberActiveDay. "Later than"
+// rather than "different from" also keeps a replica whose clock is still
+// before midnight from writing yesterday back and emitting it twice.
+// updated_at is a profile timestamp and stays untouched.
+func (q *Queries) MarkMemberActiveDay(ctx context.Context, arg MarkMemberActiveDayParams) (int64, error) {
+	result, err := q.db.Exec(ctx, markMemberActiveDay, arg.Day, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setMemberRoles = `-- name: SetMemberRoles :execrows
 UPDATE membership.members
 SET roles = $1,
@@ -421,7 +449,7 @@ const tombstoneMember = `-- name: TombstoneMember :execrows
 UPDATE membership.members
 SET display_name = NULL, district_id = NULL, verification = 'new', roles = '{}',
     verified_at = NULL,
-    suspended_at = NULL, suspended_reason = NULL,
+    suspended_at = NULL, suspended_reason = NULL, last_active_day = NULL,
     updated_at = $1, deleted_at = $1
 WHERE id = $2 AND deleted_at IS NULL
 `

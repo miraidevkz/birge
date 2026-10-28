@@ -77,7 +77,7 @@ FOR UPDATE;
 UPDATE membership.members
 SET display_name = NULL, district_id = NULL, verification = 'new', roles = '{}',
     verified_at = NULL,
-    suspended_at = NULL, suspended_reason = NULL,
+    suspended_at = NULL, suspended_reason = NULL, last_active_day = NULL,
     updated_at = @now, deleted_at = @now
 WHERE id = @id AND deleted_at IS NULL;
 
@@ -122,3 +122,16 @@ UPDATE membership.members
 SET roles = @roles,
     updated_at = @now
 WHERE id = @id AND deleted_at IS NULL;
+
+-- Activity day (ADR-0024 addendum 2026-10-28). The day only moves forward:
+-- concurrent requests and replicas serialize on the row lock, the WHERE is
+-- re-checked after the first commit, so exactly one transaction per member and
+-- day updates a row and publishes membership.MemberActiveDay. "Later than"
+-- rather than "different from" also keeps a replica whose clock is still
+-- before midnight from writing yesterday back and emitting it twice.
+-- updated_at is a profile timestamp and stays untouched.
+-- name: MarkMemberActiveDay :execrows
+UPDATE membership.members
+SET last_active_day = @day::date
+WHERE id = @id AND deleted_at IS NULL
+  AND (last_active_day IS NULL OR last_active_day < @day::date);

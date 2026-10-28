@@ -83,6 +83,7 @@ type state struct {
 	districts     map[uuid.UUID]uuid.UUID // district -> city
 	cities        []model.City
 	needs         []string
+	activeDays    map[uuid.UUID]time.Time // member -> last active day
 }
 
 func (s state) clone() state {
@@ -95,6 +96,7 @@ func (s state) clone() state {
 	c.auditEntries = slices.Clone(s.auditEntries)
 	c.blocks = maps.Clone(s.blocks)
 	c.events = slices.Clone(s.events)
+	c.activeDays = maps.Clone(s.activeDays)
 	return c
 }
 
@@ -112,6 +114,7 @@ func newFakeStore() *fakeStore {
 		members: map[uuid.UUID]port.MemberRecord{}, children: map[uuid.UUID]fakeChild{},
 		pending: map[uuid.UUID]uuid.UUID{}, verifications: map[uuid.UUID]model.VerificationRequest{},
 		processed: map[string]bool{}, blocks: map[blockKey]time.Time{}, districts: map[uuid.UUID]uuid.UUID{},
+		activeDays: map[uuid.UUID]time.Time{},
 	}, fail: map[string]error{}}
 }
 
@@ -601,4 +604,21 @@ func (t *fakeTx) Publish(_ context.Context, _ time.Time, e outbox.Event) error {
 	}
 	t.f.st.events = append(t.f.st.events, e)
 	return nil
+}
+
+// MarkActiveDay mirrors the conditional update: the day only moves forward,
+// and an unknown or deleted member updates nothing.
+func (t *fakeTx) MarkActiveDay(_ context.Context, id uuid.UUID, day time.Time) (bool, error) {
+	if err := t.check("MarkActiveDay"); err != nil {
+		return false, err
+	}
+	m, ok := t.f.st.members[id]
+	if !ok || m.Deleted {
+		return false, nil
+	}
+	if last, ok := t.f.st.activeDays[id]; ok && !last.Before(day) {
+		return false, nil
+	}
+	t.f.st.activeDays[id] = day
+	return true, nil
 }

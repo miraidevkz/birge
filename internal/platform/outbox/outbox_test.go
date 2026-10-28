@@ -17,6 +17,7 @@ func TestValidate(t *testing.T) {
 		wantErr bool
 	}{
 		{"valid", Event{Type: "safety.EscalationOpened", Version: 1}, false},
+		{"membership active day", Event{Type: "membership.MemberActiveDay", Version: 1}, false},
 		{"no context", Event{Type: "EscalationOpened", Version: 1}, true},
 		{"lowercase name", Event{Type: "safety.escalationOpened", Version: 1}, true},
 		{"zero version", Event{Type: "safety.EscalationOpened", Version: 0}, true},

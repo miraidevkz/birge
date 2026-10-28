@@ -115,6 +115,12 @@ type Tx interface {
 	SetRoles(ctx context.Context, id uuid.UUID, roles []string, now time.Time) error
 	// SetSuspension sets or clears staff suspension (both fields together).
 	SetSuspension(ctx context.Context, id uuid.UUID, at *time.Time, reason string, now time.Time) error
+	// MarkActiveDay stores day (a calendar date; only its year, month and day
+	// count) as the member's last active day when it is later than the stored
+	// one or none is stored. updated is false when the day was already
+	// recorded (by this or another replica) and for an unknown or deleted
+	// member. Concurrent calls for one member and day update exactly once.
+	MarkActiveDay(ctx context.Context, id uuid.UUID, day time.Time) (updated bool, err error)
 
 	// GetVerificationRequest loads a verification request by ID.
 	GetVerificationRequest(ctx context.Context, id uuid.UUID, forUpdate bool) (model.VerificationRequest, error)

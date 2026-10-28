@@ -9,7 +9,7 @@ Members, children, verification requests, blocks (ADR-0019), staff suspension an
 | `cities` | Deployment city reference | none |
 | `districts` | Districts of a city | none |
 | `needs` | Special-needs codes (labels in locale files) | none |
-| `members` | One row per identity; created lazily on first authenticated call; optional `verified_at`; optional `suspended_at` / `suspended_reason` from moderation `block_author`; after account deletion a tombstone (`deleted_at`) | `display_name` encrypted (Encryptor / ADR-0009); `identity_id` is an ID |
+| `members` | One row per identity; created lazily on first authenticated call; optional `verified_at`; optional `suspended_at` / `suspended_reason` from moderation `block_author`; `last_active_day` (activity metric, cleared on deletion); after account deletion a tombstone (`deleted_at`) | `display_name` encrypted (Encryptor / ADR-0009); `identity_id` is an ID |
 | `children` | Child cards (birth year + needs); no names | none |
 | `verification_requests` | Moderator verification queue (`reject_reason` when rejected) | none |
 | `blocks` | Mutual invisibility (ADR-0019) | none |
@@ -41,6 +41,7 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 | publishes | `membership.VerificationRequested` v1 | member asks for a call and none is pending | outbox, same transaction as pending request |
 | publishes | `membership.MemberVerified` v1 | verification approved via `moderation.Decided` | outbox, same transaction as approve; `verified_by` = moderation item id (Decided carries no staff id) |
 | publishes | `membership.MentorRoleChanged` v1 | staff granted or revoked the mentor role | outbox, same transaction as role update; published only when the role actually changed |
+| publishes | `membership.MemberActiveDay` v1 | first authenticated member request of a calendar day (`BIRGE_TIME_ZONE`) that passes the member middleware (`memberPrincipal` in wiring) | outbox, same transaction as the conditional update of `last_active_day`; at most once per member and day across requests and replicas; best effort: a failure is logged (event name, member ID) and never fails the request. Metrics only (ADR-0024) |
 | consumes | `moderation.Decided` v1 | kind `verification` | JetStream durable `membership-moderation-decided`; deduplicated via `platform.processed_events`; a deleted member (request gone) is a no-op |
 | consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `membership-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `membership.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
@@ -63,6 +64,7 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 | `service.Service.VerificationSummary(ctx, requestID)` | First name and district id for the moderation ContentSource; `ErrMemberNotFound` when gone. |
 | `service.Service.ApplyModerationDecided` | Applies `moderation.Decided` for kind verification. |
 | `service.Deletion.DeleteMember(ctx, memberID)` | Account deletion (system only, no principal). Idempotent; one transaction. |
+| `service.ActiveDays.Record(ctx, memberID)` | Called by the member middleware for every resolved member request. Returns nothing and never fails; after the first request of the day the answer comes from a per-process in-memory cache. No authorization (the middleware already resolved the member). |
 
 ## Configuration
 
@@ -74,6 +76,7 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 | `authgw.Config.AllowedPrefixes` | required | Allowed E.164 mobile prefixes |
 | `authgw.Config.PerIP` / `PerNumber` / `Global` | required | Token-bucket rates |
 | `authgw.Config.PhoneTrait` | `phone` | Registration trait holding the phone |
+| `BIRGE_TIME_ZONE` (`service.NewActiveDays` location) | `Asia/Almaty` | Zone whose calendar day defines `membership.MemberActiveDay` |
 | `adapter.Postgres.SeedReferenceIfEmpty` | — | `birge migrate` seeds DEMO cities/districts/needs from `presets/demo/reference.json` only when those tables are empty |
 | see `docs/development.md` § Configuration | | all variables, defaults and which subcommand reads them |
 
@@ -84,6 +87,7 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 - A member only reads/changes her own data; principal from `internal/platform/auth`; staff sessions refused on member routes (service + API).
 - Display name sealed via `port.Encryptor` (ADR-0009); never logged; events carry IDs only (service + `Member.LogValue`).
 - Children carry no names (schema + model).
+- `membership.MemberActiveDay` at most once per member and day: `last_active_day` only moves forward (`... AND (last_active_day IS NULL OR last_active_day < day)`), concurrent transactions serialize on the row and only the one that updated the row writes the outbox event. The in-memory cache only saves database work; it holds today's members only and is capped (`activeDayCacheMax`), so clearing it can cost an extra no-op update, never a second event. "Later than" instead of "different from" keeps a replica whose clock is still before midnight from emitting yesterday again (service + query).
 - At most one pending verification request per member (partial unique index + service).
 - Blocks: no self-block, idempotent, mutual invisibility via `IsBlocked` (schema CHECK + service; ADR-0019).
 - Suspension: `suspended_at` and `suspended_reason` both set or both null; suspended members get 403 `member_suspended` on member routes and are hidden like a block.
@@ -95,13 +99,14 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 - Database down: HTTP handlers and other contexts calling `IsBlocked`/`Member` fail; no partial member create without outbox (same transaction).
 - Outbox/broker lag: events stay in the outbox until the relay publishes (ADR-0007); domain rows are already committed.
 - Kratos unreachable: auth gateway returns upstream/timeout errors; session middleware returns 503 (platform `session`).
+- Database slow or down while recording the activity day: logged as `membership.MemberActiveDay` with the member ID, the request continues (the recording has its own 2 s deadline); the next request retries because failures are not cached. The member middleware has already read the member at that point, so a dead database fails the request there, not here.
 - Encryptor unavailable: profile updates that set a name fail; reads that need Open fail.
 - Kratos admin API down during deletion: the member data is already erased; `membership.DeleteIdentity` retries until Kratos answers, and the tombstone refuses the identity meanwhile.
 
 ## Tests
 
-- Unit: `service/service_test.go`, `service/deletion_test.go` (tombstone refuses the identity, retries), `model/model_test.go`, `authgw/authgw_test.go`, `api/server_test.go` — lazy create, idempotent children/verification/blocks, authgw PoW and rate limits, HTTP mapping.
-- Integration: `adapter/postgres_integration_test.go` — PostgreSQL store + outbox with `testinfra.Postgres`.
+- Unit: `service/service_test.go`, `service/deletion_test.go` (tombstone refuses the identity, retries), `service/activity_test.go` (once per day in the deployment zone, cache, store failures never block, replicas, payload against the event schema), `model/model_test.go`, `authgw/authgw_test.go`, `api/server_test.go` — lazy create, idempotent children/verification/blocks, authgw PoW and rate limits, HTTP mapping.
+- Integration: `adapter/postgres_integration_test.go` — PostgreSQL store + outbox with `testinfra.Postgres` (including concurrent replicas recording one active day).
 - Wiring: `internal/wiring/moderation_e2e_test.go` — verification approve and suspension after `block_author`.
 
 Suspension (moderation `block_author`) refuses every member route with 403 `member_suspended`, except the crisis and own-data routes (`crisisExempt` in wiring): help request, raising and closing her SOS, the emergency plan, consents and the deletion request (non-negotiable 1). `CrisisMemberID` resolves her for those.
