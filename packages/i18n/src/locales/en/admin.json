@@ -416,7 +416,8 @@
       "psychologist": "Psychologist",
       "moderator": "Moderator",
       "lawyer": "Lawyer",
-      "admin": "Admin"
+      "admin": "Admin",
+      "staff": "Staff (role not recorded)"
     },
     "action": {
       "escalation_take": "Took an escalation",

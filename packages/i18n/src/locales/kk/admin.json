@@ -416,7 +416,8 @@
       "psychologist": "Психолог",
       "moderator": "Модератор",
       "lawyer": "Заңгер",
-      "admin": "Әкімші"
+      "admin": "Әкімші",
+      "staff": "Қызметкер (рөлі жазылмаған)"
     },
     "action": {
       "escalation_take": "Эскалацияны алды",

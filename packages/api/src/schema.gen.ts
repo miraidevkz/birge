@@ -2433,6 +2433,11 @@ export interface components {
         AuditCode: string;
         /** @enum {string} */
         StaffRole: "psychologist" | "moderator" | "lawyer" | "admin";
+        /**
+         * @description The staff role the action was taken with; staff when the context records only that the actor was staff, not which role.
+         * @enum {string}
+         */
+        AuditActorRole: "psychologist" | "moderator" | "lawyer" | "admin" | "staff";
         AuditEntry: {
             /** Format: uuid */
             id: string;
@@ -2443,7 +2448,7 @@ export interface components {
              * @description Staff ID; open its card with getStaffAccount.
              */
             actorId: string;
-            actorRole: components["schemas"]["StaffRole"];
+            actorRole: components["schemas"]["AuditActorRole"];
             /** @description The staff account's display name when known. */
             actorName?: string;
             action: components["schemas"]["AuditCode"];
