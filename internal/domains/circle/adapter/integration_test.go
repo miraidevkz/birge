@@ -2,9 +2,11 @@ package adapter_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +65,66 @@ func count(t *testing.T, pool *pgxpool.Pool, sql string, args ...any) int {
 		t.Fatal(err)
 	}
 	return n
+}
+
+func TestTeaRequestedOutboxPostgres(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	d := uuid.Must(uuid.NewV7())
+	a := e.member(true, &d)
+	b := e.member(true, &d)
+
+	idem := key()
+	ra, err := e.svc.CreateTeaRequest(ctx, a, idem, model.FormatMeeting, model.Preferences{SameDistrict: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Replay with the same Idempotency-Key and a conflicting second open
+	// request: neither may add an event.
+	if again, err := e.svc.CreateTeaRequest(ctx, a, idem, model.FormatMeeting, model.Preferences{SameDistrict: true}); err != nil || again.ID != ra.ID {
+		t.Fatalf("replay: %v %v", again.ID, err)
+	}
+	if _, err := e.svc.CreateTeaRequest(ctx, a, key(), model.FormatCall, model.Preferences{}); !errors.Is(err, model.ErrConflict) {
+		t.Fatalf("second open: %v", err)
+	}
+	e.clock.T = e.clock.T.Add(time.Minute) // occurred_at orders the rows below
+	rb, err := e.svc.CreateTeaRequest(ctx, b, key(), model.FormatCall, model.Preferences{SharedNeeds: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := e.pool.Query(ctx, `SELECT event_version, payload FROM platform.outbox WHERE event_type=$1 ORDER BY occurred_at, id`, model.EventTeaRequested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got []model.TeaRequestedData
+	for rows.Next() {
+		var version int
+		var payload []byte
+		if err := rows.Scan(&version, &payload); err != nil {
+			t.Fatal(err)
+		}
+		if version != model.EventVersion {
+			t.Fatalf("version = %d", version)
+		}
+		testinfra.ValidateEventPayload(t, "circle.TeaRequested.v1.json", payload)
+		var data model.TeaRequestedData
+		if err := json.Unmarshal(payload, &data); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, data)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	want := []model.TeaRequestedData{
+		{RequestID: ra.ID, MemberID: a.MemberID, Format: model.FormatMeeting},
+		{RequestID: rb.ID, MemberID: b.MemberID, Format: model.FormatCall},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("TeaRequested = %+v, want %+v", got, want)
+	}
 }
 
 func TestOneOpenRequestAndTimersPostgres(t *testing.T) {

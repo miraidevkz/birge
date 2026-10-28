@@ -113,6 +113,90 @@ func TestCreateTeaRequestRules(t *testing.T) {
 	}
 }
 
+func TestCreateTeaRequestPublishesTeaRequestedOnce(t *testing.T) {
+	ctx := context.Background()
+	d := uuid.Must(uuid.NewV7())
+	for _, tc := range []struct {
+		name   string
+		format string
+		// repeat runs after the first create on the same env.
+		repeat  func(e *env, p auth.Principal, first model.TeaRequest, idem uuid.UUID) error
+		wantErr error
+	}{
+		{name: "meeting", format: model.FormatMeeting},
+		{name: "call", format: model.FormatCall},
+		{
+			name: "idempotent repeat", format: model.FormatCall,
+			repeat: func(e *env, p auth.Principal, first model.TeaRequest, idem uuid.UUID) error {
+				again, err := e.svc.CreateTeaRequest(ctx, p, idem, model.FormatCall, model.Preferences{})
+				if err == nil && again.ID != first.ID {
+					t.Fatalf("repeat returned %v, want %v", again.ID, first.ID)
+				}
+				return err
+			},
+		},
+		{
+			name: "second open request", format: model.FormatMeeting,
+			repeat: func(e *env, p auth.Principal, _ model.TeaRequest, _ uuid.UUID) error {
+				_, err := e.svc.CreateTeaRequest(ctx, p, key(), model.FormatCall, model.Preferences{})
+				return err
+			},
+			wantErr: model.ErrConflict,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			p := e.member(true, &d, 2018, fakeNeed)
+			idem := key()
+			r, err := e.svc.CreateTeaRequest(ctx, p, idem, tc.format,
+				model.Preferences{SameDistrict: true, SimilarAge: true, SharedNeeds: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.repeat != nil {
+				if err := tc.repeat(e, p, r, idem); !errors.Is(err, tc.wantErr) {
+					t.Fatalf("repeat: %v, want %v", err, tc.wantErr)
+				}
+			}
+			events := e.store.EventsOfType(model.EventTeaRequested)
+			if len(events) != 1 {
+				t.Fatalf("TeaRequested events = %d, want 1", len(events))
+			}
+			if events[0].Version != 1 {
+				t.Fatalf("version = %d", events[0].Version)
+			}
+			want := model.TeaRequestedData{RequestID: r.ID, MemberID: p.MemberID, Format: tc.format}
+			if events[0].Data != want {
+				t.Fatalf("data = %+v, want %+v", events[0].Data, want)
+			}
+		})
+	}
+}
+
+func TestCreateTeaRequestPublishFailureRollsBack(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	d := uuid.Must(uuid.NewV7())
+	p := e.member(true, &d, 2018, fakeNeed)
+	boom := errors.New("outbox down")
+	e.store.FailOn = func(method string) error {
+		if method == "Publish:"+model.EventTeaRequested {
+			return boom
+		}
+		return nil
+	}
+	if _, err := e.svc.CreateTeaRequest(ctx, p, key(), model.FormatMeeting, model.Preferences{}); !errors.Is(err, boom) {
+		t.Fatalf("create: %v", err)
+	}
+	list, err := e.svc.ListMyTeaRequests(ctx, p)
+	if err != nil || len(list) != 0 {
+		t.Fatalf("request kept without its event: %v %v", list, err)
+	}
+	if n := len(e.store.ActiveTimers()); n != 0 {
+		t.Fatalf("timers kept: %d", n)
+	}
+}
+
 func TestMatchingAndStateMachine(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)

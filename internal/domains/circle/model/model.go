@@ -55,6 +55,7 @@ const (
 
 // Events published by circle, and the notify event it asks for.
 const (
+	EventTeaRequested            = "circle.TeaRequested"
 	EventMatchAccepted           = "circle.MatchAccepted"
 	EventAcquaintanceEstablished = "circle.AcquaintanceEstablished"
 	EventDeliveryRequested       = "notify.DeliveryRequested"
@@ -271,6 +272,15 @@ type AcquaintanceView struct {
 	MemberID    uuid.UUID
 	DisplayName string
 	Since       time.Time
+}
+
+// TeaRequestedData is the payload of circle.TeaRequested v1: the first step
+// of the tea funnel metric (ADR-0024 addendum 2026-10-28). It carries only the
+// format; preferences and the district stay out of events.
+type TeaRequestedData struct {
+	RequestID uuid.UUID `json:"request_id"`
+	MemberID  uuid.UUID `json:"member_id"`
+	Format    string    `json:"format"`
 }
 
 // MatchAcceptedData is the payload of circle.MatchAccepted v1.

@@ -16,7 +16,7 @@ Operations of tag `circle` in `contracts/openapi/birge.yaml`. All are member-onl
 
 | Operation | Rules not in the contract |
 |---|---|
-| `POST /me/tea-requests` | Verified only (403). `Idempotency-Key` per member. At most one open request (409). Schedules `circle.RequestExpire` at `expires_at` and ensures `circle.MatchRun` is pending. |
+| `POST /me/tea-requests` | Verified only (403). `Idempotency-Key` per member. At most one open request (409). Schedules `circle.RequestExpire` at `expires_at` and ensures `circle.MatchRun` is pending. Publishes `circle.TeaRequested` for a new request only. |
 | `GET /me/tea-requests` | Newest 20. |
 | `POST /me/tea-requests/{id}/cancel` | Owner only; open → cancelled; cancels expiry timer; idempotent. Another member's id → 404. |
 | `GET /me/matches` | Pair cards for the caller: other first name, district id, child ages, shared needs — never contacts. |
@@ -28,6 +28,7 @@ Operations of tag `circle` in `contracts/openapi/birge.yaml`. All are member-onl
 
 | Direction | Event | When | Guarantees |
 |---|---|---|---|
+| publishes | `circle.TeaRequested` v1 | new tea request created | outbox, same transaction; `request_id`, `member_id`, `format` only (no preferences, no district); exactly once per request: an Idempotency-Key replay or a 409 second open request publishes nothing |
 | publishes | `circle.MatchAccepted` v1 | both accept | outbox, same transaction; `match_id`, `member_a`, `member_b` only |
 | publishes | `circle.AcquaintanceEstablished` v1 | both confirm met | outbox, same transaction; member ids only |
 | publishes | `notify.DeliveryRequested` v1 | match proposed (`circle.match_proposed`); AskMet fires (`circle.ask_met`); class `normal`, recipient `member_id`, params `{match_id}` | outbox, same transaction; `request_id` = SHA-1 UUID of subject + template + member |
@@ -84,7 +85,7 @@ Ports used by this context (wired in `internal/wiring`): `MemberInfo` (membershi
 
 ## Tests
 
-- Unit: `model/score_test.go` — scoring, preferences, greedy pairing, tie-break, blocks/rematch filters; `service/service_test.go` — create rules, matching and accept/met state machine, decline, blocked pairs, cancel/expire, SetRoomID, fail-closed blocks; logs and events checked for fake personal data.
+- Unit: `model/score_test.go` — scoring, preferences, greedy pairing, tie-break, blocks/rematch filters; `service/service_test.go` — create rules, `TeaRequested` once per request (replay, 409, rollback on outbox failure), matching and accept/met state machine, decline, blocked pairs, cancel/expire, SetRoomID, fail-closed blocks; logs and events checked for fake personal data.
 - HTTP: `api/handler_test.go` — 401/403/409/201/204.
-- Integration: `adapter/integration_test.go` with `testinfra.Postgres` — one open request, MatchRun timer re-schedule, expire timer, blocked pairs never matched, symmetric `Met`, no personal data in outbox payloads.
+- Integration: `adapter/integration_test.go` with `testinfra.Postgres` — one open request, MatchRun timer re-schedule, expire timer, blocked pairs never matched, symmetric `Met`, no personal data in outbox payloads, `TeaRequested` outbox rows validated against the contract (`testinfra.ValidateEventPayload`) with replay and 409 adding none.
 - Fakes: `circletest/`.

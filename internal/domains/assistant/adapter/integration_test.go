@@ -6,9 +6,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"slices"
 	"testing"
 	"time"
 
@@ -228,86 +225,6 @@ func questionAnsweredPayloads(ctx context.Context, t *testing.T, pool interface 
 	return out
 }
 
-// eventSchema is the subset of JSON Schema the flat event contracts use:
-// required keys, no additional properties, string types with an enum or the
-// uuid format. validateAgainstContract fails on any keyword it does not know,
-// so a richer contract cannot pass unchecked.
-type eventSchema struct {
-	Type                 string                    `json:"type"`
-	AdditionalProperties *bool                     `json:"additionalProperties"`
-	Required             []string                  `json:"required"`
-	Properties           map[string]map[string]any `json:"properties"`
-}
-
-// validateAgainstContract checks payload against contracts/events/<file>.
-// Hand-written on purpose: no JSON Schema library is a direct dependency.
-func validateAgainstContract(t testing.TB, file string, payload []byte) {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("go.mod not found")
-		}
-		dir = parent
-	}
-	raw, err := os.ReadFile(filepath.Join(dir, "contracts", "events", file))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var schema eventSchema
-	if err := json.Unmarshal(raw, &schema); err != nil {
-		t.Fatal(err)
-	}
-	if schema.Type != "object" || schema.AdditionalProperties == nil || *schema.AdditionalProperties {
-		t.Fatalf("%s: expected a closed object schema", file)
-	}
-	var data map[string]json.RawMessage
-	if err := json.Unmarshal(payload, &data); err != nil {
-		t.Fatalf("payload %s: %v", payload, err)
-	}
-	for _, k := range schema.Required {
-		if _, ok := data[k]; !ok {
-			t.Fatalf("payload %s: missing required %q", payload, k)
-		}
-	}
-	for k, v := range data {
-		prop, ok := schema.Properties[k]
-		if !ok {
-			t.Fatalf("payload %s: property %q not in %s", payload, k, file)
-		}
-		for kw := range prop {
-			if kw != "type" && kw != "enum" && kw != "format" && kw != "description" {
-				t.Fatalf("%s: keyword %q of %q not supported by this check", file, kw, k)
-			}
-		}
-		if prop["type"] != "string" {
-			t.Fatalf("%s: type of %q not supported by this check", file, k)
-		}
-		var str string
-		if err := json.Unmarshal(v, &str); err != nil {
-			t.Fatalf("payload %s: %q is not a string", payload, k)
-		}
-		if f, ok := prop["format"]; ok {
-			if f != "uuid" {
-				t.Fatalf("%s: format %v not supported by this check", file, f)
-			}
-			if _, err := uuid.Parse(str); err != nil {
-				t.Fatalf("payload %s: %q is not a uuid", payload, k)
-			}
-		}
-		if enum, ok := prop["enum"].([]any); ok && !slices.Contains(enum, any(str)) {
-			t.Fatalf("payload %s: %q = %q not in %v", payload, k, str, enum)
-		}
-	}
-}
-
 func TestQuestionAnsweredOutboxPostgres(t *testing.T) {
 	ctx := context.Background()
 	pool := testinfra.Postgres(t)
@@ -349,7 +266,7 @@ func TestQuestionAnsweredOutboxPostgres(t *testing.T) {
 		t.Fatalf("QuestionAnswered events = %d, want %d", len(payloads), len(want))
 	}
 	for i, p := range payloads {
-		validateAgainstContract(t, "assistant.QuestionAnswered.v1.json", p)
+		testinfra.ValidateEventPayload(t, "assistant.QuestionAnswered.v1.json", p)
 		var got model.QuestionAnsweredData
 		if err := json.Unmarshal(p, &got); err != nil {
 			t.Fatal(err)
@@ -358,45 +275,6 @@ func TestQuestionAnsweredOutboxPostgres(t *testing.T) {
 			t.Fatalf("event %d = %s, want %+v", i, p, want[i])
 		}
 	}
-}
-
-func TestQuestionAnsweredSchemaRejectsExtras(t *testing.T) {
-	// The check itself must fail on what the contract forbids; run it in a
-	// recorder, so this test proves the check is not vacuous.
-	for name, payload := range map[string]string{
-		"text":       `{"message_id":"019a2f00-0000-7000-8000-00000000000a","scope":"general","source":"knowledge","text":"x"}`,
-		"bad source": `{"message_id":"019a2f00-0000-7000-8000-00000000000a","scope":"general","source":"llm"}`,
-		"no scope":   `{"message_id":"019a2f00-0000-7000-8000-00000000000a","source":"crisis"}`,
-		"bad id":     `{"message_id":"42","scope":"rights","source":"crisis"}`,
-	} {
-		rec := &failRecorder{TB: t}
-		func() {
-			defer func() { _ = recover() }()
-			validateAgainstContract(rec, "assistant.QuestionAnswered.v1.json", []byte(payload))
-		}()
-		if !rec.failed {
-			t.Fatalf("%s: payload %s passed the contract check", name, payload)
-		}
-	}
-}
-
-// failRecorder turns Fatalf into a recorded failure that stops the check
-// (via panic) without failing the outer test.
-type failRecorder struct {
-	testing.TB
-	failed bool
-}
-
-func (r *failRecorder) Helper() {}
-
-func (r *failRecorder) Fatalf(string, ...any) {
-	r.failed = true
-	panic("contract check failed")
-}
-
-func (r *failRecorder) Fatal(...any) {
-	r.failed = true
-	panic("contract check failed")
 }
 
 func TestCrisisTurnKeptWhenQuestionAnsweredInsertFailsPostgres(t *testing.T) {

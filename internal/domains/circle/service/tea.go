@@ -14,6 +14,7 @@ import (
 
 // CreateTeaRequest creates an open tea request for a verified member.
 // One open request per member (409). Idempotent per Idempotency-Key.
+// A new request publishes circle.TeaRequested in the same transaction.
 func (s *Service) CreateTeaRequest(
 	ctx context.Context,
 	p auth.Principal,
@@ -69,6 +70,18 @@ func (s *Service) CreateTeaRequest(
 			}
 			out = existing
 			return nil
+		}
+		// Only a new row publishes: a repeated Idempotency-Key returned above
+		// and a second open request rolled back with ErrConflict, so the funnel
+		// counts each request exactly once.
+		if err := tx.Publish(ctx, now, model.Event{
+			Type:    model.EventTeaRequested,
+			Version: model.EventVersion,
+			Data: model.TeaRequestedData{
+				RequestID: created.ID, MemberID: created.MemberID, Format: created.Format,
+			},
+		}); err != nil {
+			return err
 		}
 		if _, err := tx.ScheduleRequestExpire(ctx, created.ID, created.ExpiresAt); err != nil {
 			return err
