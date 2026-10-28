@@ -75,6 +75,24 @@ func (e SosType) Valid() bool {
 	}
 }
 
+// Defines values for StaffSosStatus.
+const (
+	StaffSosStatusClosed StaffSosStatus = "closed"
+	StaffSosStatusOpen   StaffSosStatus = "open"
+)
+
+// Valid indicates whether the value is a known member of the StaffSosStatus enum.
+func (e StaffSosStatus) Valid() bool {
+	switch e {
+	case StaffSosStatusClosed:
+		return true
+	case StaffSosStatusOpen:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TrustedContactKind.
 const (
 	TrustedContactKindExternal TrustedContactKind = "external"
@@ -129,6 +147,42 @@ func (e TrustedContactInputKind) Valid() bool {
 	}
 }
 
+// Defines values for TrustedInvitationStatus.
+const (
+	TrustedInvitationConfirmed TrustedInvitationStatus = "confirmed"
+	TrustedInvitationInvited   TrustedInvitationStatus = "invited"
+)
+
+// Valid indicates whether the value is a known member of the TrustedInvitationStatus enum.
+func (e TrustedInvitationStatus) Valid() bool {
+	switch e {
+	case TrustedInvitationConfirmed:
+		return true
+	case TrustedInvitationInvited:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TrustedSosStatus.
+const (
+	TrustedSosClosed TrustedSosStatus = "closed"
+	TrustedSosOpen   TrustedSosStatus = "open"
+)
+
+// Valid indicates whether the value is a known member of the TrustedSosStatus enum.
+func (e TrustedSosStatus) Valid() bool {
+	switch e {
+	case TrustedSosClosed:
+		return true
+	case TrustedSosOpen:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SendEmergencyPlanJSONBodyConfirm.
 const (
 	SEND SendEmergencyPlanJSONBodyConfirm = "SEND"
@@ -138,6 +192,24 @@ const (
 func (e SendEmergencyPlanJSONBodyConfirm) Valid() bool {
 	switch e {
 	case SEND:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListStaffSosParamsStatus.
+const (
+	StaffSosClosed ListStaffSosParamsStatus = "closed"
+	StaffSosOpen   ListStaffSosParamsStatus = "open"
+)
+
+// Valid indicates whether the value is a known member of the ListStaffSosParamsStatus enum.
+func (e ListStaffSosParamsStatus) Valid() bool {
+	switch e {
+	case StaffSosClosed:
+		return true
+	case StaffSosOpen:
 		return true
 	default:
 		return false
@@ -225,6 +297,35 @@ type SosResponse struct {
 // SosType defines model for SosType.
 type SosType string
 
+// StaffSos defines model for StaffSos.
+type StaffSos struct {
+	ClosedAt      *time.Time          `json:"closedAt,omitempty"`
+	ClosesAt      *time.Time          `json:"closesAt,omitempty"`
+	CreatedAt     time.Time           `json:"createdAt"`
+	DisplayName   string              `json:"displayName"`
+	DistrictId    *openapi_types.UUID `json:"districtId,omitempty"`
+	Id            openapi_types.UUID  `json:"id"`
+	MemberId      openapi_types.UUID  `json:"memberId"`
+	ResponseCount int                 `json:"responseCount"`
+	SeenAt        *time.Time          `json:"seenAt,omitempty"`
+
+	// SeenBy Staff ID of the first moderator who marked it seen.
+	SeenBy           *openapi_types.UUID `json:"seenBy,omitempty"`
+	SharedToDistrict bool                `json:"sharedToDistrict"`
+	Status           StaffSosStatus      `json:"status"`
+	Text             string              `json:"text"`
+	Type             SosType             `json:"type"`
+}
+
+// StaffSosStatus defines model for StaffSos.Status.
+type StaffSosStatus string
+
+// StaffSosPage defines model for StaffSosPage.
+type StaffSosPage struct {
+	Items      []StaffSos `json:"items"`
+	NextCursor *string    `json:"nextCursor,omitempty"`
+}
+
 // TrustedContact defines model for TrustedContact.
 type TrustedContact struct {
 	DisplayName string             `json:"displayName"`
@@ -258,6 +359,36 @@ type TrustedContactInput struct {
 
 // TrustedContactInputKind defines model for TrustedContactInput.Kind.
 type TrustedContactInputKind string
+
+// TrustedInvitation defines model for TrustedInvitation.
+type TrustedInvitation struct {
+	ContactId openapi_types.UUID `json:"contactId"`
+	InvitedAt time.Time          `json:"invitedAt"`
+
+	// OwnerDisplayName First name only.
+	OwnerDisplayName string                  `json:"ownerDisplayName"`
+	Status           TrustedInvitationStatus `json:"status"`
+}
+
+// TrustedInvitationStatus defines model for TrustedInvitation.Status.
+type TrustedInvitationStatus string
+
+// TrustedSos defines model for TrustedSos.
+type TrustedSos struct {
+	ClosesAt  *time.Time         `json:"closesAt,omitempty"`
+	CreatedAt time.Time          `json:"createdAt"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// OwnerDisplayName First name only.
+	OwnerDisplayName string           `json:"ownerDisplayName"`
+	RespondedByMe    bool             `json:"respondedByMe"`
+	Status           TrustedSosStatus `json:"status"`
+	Text             string           `json:"text"`
+	Type             SosType          `json:"type"`
+}
+
+// TrustedSosStatus defines model for TrustedSos.Status.
+type TrustedSosStatus string
 
 // ArticleId defines model for ArticleId.
 type ArticleId = openapi_types.UUID
@@ -328,6 +459,15 @@ type GetSosFeedParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// ListStaffSosParams defines parameters for ListStaffSos.
+type ListStaffSosParams struct {
+	Status *ListStaffSosParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Cursor *string                   `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListStaffSosParamsStatus defines parameters for ListStaffSos.
+type ListStaffSosParamsStatus string
+
 // ViewExternalPlanJSONRequestBody defines body for ViewExternalPlan for application/json ContentType.
 type ViewExternalPlanJSONRequestBody ViewExternalPlanJSONBody
 
@@ -381,18 +521,39 @@ type ServerInterface interface {
 
 	// (DELETE /me/trusted-contacts/{contactId})
 	RemoveTrustedContact(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID)
+	// GetTrustedInvitation An invitation to be another member's trusted contact, addressed to me.
+	// (GET /me/trusted-invitations/{contactId})
+	GetTrustedInvitation(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID)
 	// AcceptTrustedInvitation Accept being another member's trusted contact.
 	// (POST /me/trusted-invitations/{contactId}/accept)
 	AcceptTrustedInvitation(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID)
+	// DeclineTrustedInvitation Decline being another member's trusted contact, or stop being one (idempotent).
+	// (POST /me/trusted-invitations/{contactId}/decline)
+	DeclineTrustedInvitation(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID)
 	// GetSosFeed Open SOS requests shared to my district (verified members; blocked members excluded both ways).
 	// (GET /sos/feed)
 	GetSosFeed(w http.ResponseWriter, r *http.Request, params GetSosFeedParams)
 	// RespondToSos "I can help" on an SOS in my district feed (idempotent).
 	// (POST /sos/{sosId}/respond)
 	RespondToSos(w http.ResponseWriter, r *http.Request, sosId SosId)
+	// ListStaffSos SOS requests for the moderator queue (requirements section 6). Audited.
+	// (GET /staff/sos)
+	ListStaffSos(w http.ResponseWriter, r *http.Request, params ListStaffSosParams)
+	// CloseSosAsStaff "Close" by a moderator (idempotent). Cancels auto-close and removes it from the district feed. Audited.
+	// (POST /staff/sos/{sosId}/close)
+	CloseSosAsStaff(w http.ResponseWriter, r *http.Request, sosId SosId)
+	// MarkSosSeen "Seen" by a moderator (idempotent; the first one is kept). Audited.
+	// (POST /staff/sos/{sosId}/seen)
+	MarkSosSeen(w http.ResponseWriter, r *http.Request, sosId SosId)
 	// GetSharedPlan The child card a member sent me, while I am her confirmed trusted contact. Audited.
 	// (GET /trusted/plans/{ownerId})
 	GetSharedPlan(w http.ResponseWriter, r *http.Request, ownerId openapi_types.UUID)
+	// GetTrustedSos An SOS raised by a member whose confirmed trusted contact I am. Audited.
+	// (GET /trusted/sos/{sosId})
+	GetTrustedSos(w http.ResponseWriter, r *http.Request, sosId SosId)
+	// RespondAsTrustedContact "I can help" on an SOS of a member whose confirmed trusted contact I am (idempotent).
+	// (POST /trusted/sos/{sosId}/respond)
+	RespondAsTrustedContact(w http.ResponseWriter, r *http.Request, sosId SosId)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -734,6 +895,32 @@ func (siw *ServerInterfaceWrapper) RemoveTrustedContact(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// GetTrustedInvitation operation middleware
+func (siw *ServerInterfaceWrapper) GetTrustedInvitation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "contactId" -------------
+	var contactId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "contactId", r.PathValue("contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTrustedInvitation(w, r, contactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // AcceptTrustedInvitation operation middleware
 func (siw *ServerInterfaceWrapper) AcceptTrustedInvitation(w http.ResponseWriter, r *http.Request) {
 
@@ -751,6 +938,32 @@ func (siw *ServerInterfaceWrapper) AcceptTrustedInvitation(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.AcceptTrustedInvitation(w, r, contactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeclineTrustedInvitation operation middleware
+func (siw *ServerInterfaceWrapper) DeclineTrustedInvitation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "contactId" -------------
+	var contactId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "contactId", r.PathValue("contactId"), &contactId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "contactId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeclineTrustedInvitation(w, r, contactId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -819,6 +1032,104 @@ func (siw *ServerInterfaceWrapper) RespondToSos(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListStaffSos operation middleware
+func (siw *ServerInterfaceWrapper) ListStaffSos(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListStaffSosParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListStaffSos(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CloseSosAsStaff operation middleware
+func (siw *ServerInterfaceWrapper) CloseSosAsStaff(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sosId" -------------
+	var sosId SosId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sosId", r.PathValue("sosId"), &sosId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sosId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CloseSosAsStaff(w, r, sosId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkSosSeen operation middleware
+func (siw *ServerInterfaceWrapper) MarkSosSeen(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sosId" -------------
+	var sosId SosId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sosId", r.PathValue("sosId"), &sosId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sosId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkSosSeen(w, r, sosId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSharedPlan operation middleware
 func (siw *ServerInterfaceWrapper) GetSharedPlan(w http.ResponseWriter, r *http.Request) {
 
@@ -836,6 +1147,58 @@ func (siw *ServerInterfaceWrapper) GetSharedPlan(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetSharedPlan(w, r, ownerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTrustedSos operation middleware
+func (siw *ServerInterfaceWrapper) GetTrustedSos(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sosId" -------------
+	var sosId SosId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sosId", r.PathValue("sosId"), &sosId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sosId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTrustedSos(w, r, sosId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RespondAsTrustedContact operation middleware
+func (siw *ServerInterfaceWrapper) RespondAsTrustedContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sosId" -------------
+	var sosId SosId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sosId", r.PathValue("sosId"), &sosId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sosId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RespondAsTrustedContact(w, r, sosId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -979,6 +1342,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/trusted-contacts/{contactId}", wrapper.RemoveTrustedContact)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/trusted-invitations/{contactId}/accept", wrapper.AcceptTrustedInvitation)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/emergency-plan/send", wrapper.SendEmergencyPlan)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/trusted/sos/{sosId}", wrapper.GetTrustedSos)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/trusted/sos/{sosId}/respond", wrapper.RespondAsTrustedContact)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/trusted-invitations/{contactId}", wrapper.GetTrustedInvitation)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/trusted-invitations/{contactId}/decline", wrapper.DeclineTrustedInvitation)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/staff/sos", wrapper.ListStaffSos)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/staff/sos/{sosId}/seen", wrapper.MarkSosSeen)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/staff/sos/{sosId}/close", wrapper.CloseSosAsStaff)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/trusted/plans/{ownerId}", wrapper.GetSharedPlan)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/external/plans/view", wrapper.ViewExternalPlan)
 
@@ -1535,6 +1905,45 @@ func (response RemoveTrustedContactdefaultApplicationProblemPlusJSONResponse) Vi
 	return err
 }
 
+type GetTrustedInvitationRequestObject struct {
+	ContactId openapi_types.UUID `json:"contactId"`
+}
+
+type GetTrustedInvitationResponseObject interface {
+	VisitGetTrustedInvitationResponse(w http.ResponseWriter) error
+}
+
+type GetTrustedInvitation200JSONResponse TrustedInvitation
+
+func (response GetTrustedInvitation200JSONResponse) VisitGetTrustedInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTrustedInvitationdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetTrustedInvitationdefaultApplicationProblemPlusJSONResponse) VisitGetTrustedInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type AcceptTrustedInvitationRequestObject struct {
 	ContactId openapi_types.UUID `json:"contactId"`
 }
@@ -1557,6 +1966,39 @@ type AcceptTrustedInvitationdefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response AcceptTrustedInvitationdefaultApplicationProblemPlusJSONResponse) VisitAcceptTrustedInvitationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeclineTrustedInvitationRequestObject struct {
+	ContactId openapi_types.UUID `json:"contactId"`
+}
+
+type DeclineTrustedInvitationResponseObject interface {
+	VisitDeclineTrustedInvitationResponse(w http.ResponseWriter) error
+}
+
+type DeclineTrustedInvitation204Response struct {
+}
+
+func (response DeclineTrustedInvitation204Response) VisitDeclineTrustedInvitationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeclineTrustedInvitationdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeclineTrustedInvitationdefaultApplicationProblemPlusJSONResponse) VisitDeclineTrustedInvitationResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -1672,6 +2114,181 @@ func (response RespondToSosdefaultApplicationProblemPlusJSONResponse) VisitRespo
 	return err
 }
 
+type ListStaffSosRequestObject struct {
+	Params ListStaffSosParams
+}
+
+type ListStaffSosResponseObject interface {
+	VisitListStaffSosResponse(w http.ResponseWriter) error
+}
+
+type ListStaffSos200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type ListStaffSos200JSONResponse struct {
+	Body    StaffSosPage
+	Headers ListStaffSos200ResponseHeaders
+}
+
+func (response ListStaffSos200JSONResponse) VisitListStaffSosResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStaffSos403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListStaffSos403ApplicationProblemPlusJSONResponse) VisitListStaffSosResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListStaffSosdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListStaffSosdefaultApplicationProblemPlusJSONResponse) VisitListStaffSosResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CloseSosAsStaffRequestObject struct {
+	SosId SosId `json:"sosId"`
+}
+
+type CloseSosAsStaffResponseObject interface {
+	VisitCloseSosAsStaffResponse(w http.ResponseWriter) error
+}
+
+type CloseSosAsStaff200JSONResponse StaffSos
+
+func (response CloseSosAsStaff200JSONResponse) VisitCloseSosAsStaffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CloseSosAsStaff403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response CloseSosAsStaff403ApplicationProblemPlusJSONResponse) VisitCloseSosAsStaffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CloseSosAsStaffdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CloseSosAsStaffdefaultApplicationProblemPlusJSONResponse) VisitCloseSosAsStaffResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkSosSeenRequestObject struct {
+	SosId SosId `json:"sosId"`
+}
+
+type MarkSosSeenResponseObject interface {
+	VisitMarkSosSeenResponse(w http.ResponseWriter) error
+}
+
+type MarkSosSeen200JSONResponse StaffSos
+
+func (response MarkSosSeen200JSONResponse) VisitMarkSosSeenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkSosSeen403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response MarkSosSeen403ApplicationProblemPlusJSONResponse) VisitMarkSosSeenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkSosSeendefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response MarkSosSeendefaultApplicationProblemPlusJSONResponse) VisitMarkSosSeenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetSharedPlanRequestObject struct {
 	OwnerId openapi_types.UUID `json:"ownerId"`
 }
@@ -1737,6 +2354,134 @@ func (response GetSharedPlandefaultApplicationProblemPlusJSONResponse) VisitGetS
 	return err
 }
 
+type GetTrustedSosRequestObject struct {
+	SosId SosId `json:"sosId"`
+}
+
+type GetTrustedSosResponseObject interface {
+	VisitGetTrustedSosResponse(w http.ResponseWriter) error
+}
+
+type GetTrustedSos200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type GetTrustedSos200JSONResponse struct {
+	Body    TrustedSos
+	Headers GetTrustedSos200ResponseHeaders
+}
+
+func (response GetTrustedSos200JSONResponse) VisitGetTrustedSosResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTrustedSos403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetTrustedSos403ApplicationProblemPlusJSONResponse) VisitGetTrustedSosResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetTrustedSosdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response GetTrustedSosdefaultApplicationProblemPlusJSONResponse) VisitGetTrustedSosResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RespondAsTrustedContactRequestObject struct {
+	SosId SosId `json:"sosId"`
+}
+
+type RespondAsTrustedContactResponseObject interface {
+	VisitRespondAsTrustedContactResponse(w http.ResponseWriter) error
+}
+
+type RespondAsTrustedContact204Response struct {
+}
+
+func (response RespondAsTrustedContact204Response) VisitRespondAsTrustedContactResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RespondAsTrustedContact403ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response RespondAsTrustedContact403ApplicationProblemPlusJSONResponse) VisitRespondAsTrustedContactResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RespondAsTrustedContact409ApplicationProblemPlusJSONResponse Problem
+
+func (response RespondAsTrustedContact409ApplicationProblemPlusJSONResponse) VisitRespondAsTrustedContactResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RespondAsTrustedContactdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response RespondAsTrustedContactdefaultApplicationProblemPlusJSONResponse) VisitRespondAsTrustedContactResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// ViewExternalPlan The child card behind a link an external trusted contact got by SMS.
@@ -1775,18 +2520,39 @@ type StrictServerInterface interface {
 
 	// (DELETE /me/trusted-contacts/{contactId})
 	RemoveTrustedContact(ctx context.Context, request RemoveTrustedContactRequestObject) (RemoveTrustedContactResponseObject, error)
+	// GetTrustedInvitation An invitation to be another member's trusted contact, addressed to me.
+	// (GET /me/trusted-invitations/{contactId})
+	GetTrustedInvitation(ctx context.Context, request GetTrustedInvitationRequestObject) (GetTrustedInvitationResponseObject, error)
 	// AcceptTrustedInvitation Accept being another member's trusted contact.
 	// (POST /me/trusted-invitations/{contactId}/accept)
 	AcceptTrustedInvitation(ctx context.Context, request AcceptTrustedInvitationRequestObject) (AcceptTrustedInvitationResponseObject, error)
+	// DeclineTrustedInvitation Decline being another member's trusted contact, or stop being one (idempotent).
+	// (POST /me/trusted-invitations/{contactId}/decline)
+	DeclineTrustedInvitation(ctx context.Context, request DeclineTrustedInvitationRequestObject) (DeclineTrustedInvitationResponseObject, error)
 	// GetSosFeed Open SOS requests shared to my district (verified members; blocked members excluded both ways).
 	// (GET /sos/feed)
 	GetSosFeed(ctx context.Context, request GetSosFeedRequestObject) (GetSosFeedResponseObject, error)
 	// RespondToSos "I can help" on an SOS in my district feed (idempotent).
 	// (POST /sos/{sosId}/respond)
 	RespondToSos(ctx context.Context, request RespondToSosRequestObject) (RespondToSosResponseObject, error)
+	// ListStaffSos SOS requests for the moderator queue (requirements section 6). Audited.
+	// (GET /staff/sos)
+	ListStaffSos(ctx context.Context, request ListStaffSosRequestObject) (ListStaffSosResponseObject, error)
+	// CloseSosAsStaff "Close" by a moderator (idempotent). Cancels auto-close and removes it from the district feed. Audited.
+	// (POST /staff/sos/{sosId}/close)
+	CloseSosAsStaff(ctx context.Context, request CloseSosAsStaffRequestObject) (CloseSosAsStaffResponseObject, error)
+	// MarkSosSeen "Seen" by a moderator (idempotent; the first one is kept). Audited.
+	// (POST /staff/sos/{sosId}/seen)
+	MarkSosSeen(ctx context.Context, request MarkSosSeenRequestObject) (MarkSosSeenResponseObject, error)
 	// GetSharedPlan The child card a member sent me, while I am her confirmed trusted contact. Audited.
 	// (GET /trusted/plans/{ownerId})
 	GetSharedPlan(ctx context.Context, request GetSharedPlanRequestObject) (GetSharedPlanResponseObject, error)
+	// GetTrustedSos An SOS raised by a member whose confirmed trusted contact I am. Audited.
+	// (GET /trusted/sos/{sosId})
+	GetTrustedSos(ctx context.Context, request GetTrustedSosRequestObject) (GetTrustedSosResponseObject, error)
+	// RespondAsTrustedContact "I can help" on an SOS of a member whose confirmed trusted contact I am (idempotent).
+	// (POST /trusted/sos/{sosId}/respond)
+	RespondAsTrustedContact(ctx context.Context, request RespondAsTrustedContactRequestObject) (RespondAsTrustedContactResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -2168,6 +2934,32 @@ func (sh *strictHandler) RemoveTrustedContact(w http.ResponseWriter, r *http.Req
 	}
 }
 
+// GetTrustedInvitation operation middleware
+func (sh *strictHandler) GetTrustedInvitation(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID) {
+	var request GetTrustedInvitationRequestObject
+
+	request.ContactId = contactId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTrustedInvitation(ctx, request.(GetTrustedInvitationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTrustedInvitation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTrustedInvitationResponseObject); ok {
+		if err := validResponse.VisitGetTrustedInvitationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // AcceptTrustedInvitation operation middleware
 func (sh *strictHandler) AcceptTrustedInvitation(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID) {
 	var request AcceptTrustedInvitationRequestObject
@@ -2187,6 +2979,32 @@ func (sh *strictHandler) AcceptTrustedInvitation(w http.ResponseWriter, r *http.
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(AcceptTrustedInvitationResponseObject); ok {
 		if err := validResponse.VisitAcceptTrustedInvitationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeclineTrustedInvitation operation middleware
+func (sh *strictHandler) DeclineTrustedInvitation(w http.ResponseWriter, r *http.Request, contactId openapi_types.UUID) {
+	var request DeclineTrustedInvitationRequestObject
+
+	request.ContactId = contactId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeclineTrustedInvitation(ctx, request.(DeclineTrustedInvitationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeclineTrustedInvitation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeclineTrustedInvitationResponseObject); ok {
+		if err := validResponse.VisitDeclineTrustedInvitationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2246,6 +3064,84 @@ func (sh *strictHandler) RespondToSos(w http.ResponseWriter, r *http.Request, so
 	}
 }
 
+// ListStaffSos operation middleware
+func (sh *strictHandler) ListStaffSos(w http.ResponseWriter, r *http.Request, params ListStaffSosParams) {
+	var request ListStaffSosRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListStaffSos(ctx, request.(ListStaffSosRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListStaffSos")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListStaffSosResponseObject); ok {
+		if err := validResponse.VisitListStaffSosResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CloseSosAsStaff operation middleware
+func (sh *strictHandler) CloseSosAsStaff(w http.ResponseWriter, r *http.Request, sosId SosId) {
+	var request CloseSosAsStaffRequestObject
+
+	request.SosId = sosId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CloseSosAsStaff(ctx, request.(CloseSosAsStaffRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CloseSosAsStaff")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CloseSosAsStaffResponseObject); ok {
+		if err := validResponse.VisitCloseSosAsStaffResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// MarkSosSeen operation middleware
+func (sh *strictHandler) MarkSosSeen(w http.ResponseWriter, r *http.Request, sosId SosId) {
+	var request MarkSosSeenRequestObject
+
+	request.SosId = sosId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.MarkSosSeen(ctx, request.(MarkSosSeenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MarkSosSeen")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MarkSosSeenResponseObject); ok {
+		if err := validResponse.VisitMarkSosSeenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetSharedPlan operation middleware
 func (sh *strictHandler) GetSharedPlan(w http.ResponseWriter, r *http.Request, ownerId openapi_types.UUID) {
 	var request GetSharedPlanRequestObject
@@ -2265,6 +3161,58 @@ func (sh *strictHandler) GetSharedPlan(w http.ResponseWriter, r *http.Request, o
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetSharedPlanResponseObject); ok {
 		if err := validResponse.VisitGetSharedPlanResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTrustedSos operation middleware
+func (sh *strictHandler) GetTrustedSos(w http.ResponseWriter, r *http.Request, sosId SosId) {
+	var request GetTrustedSosRequestObject
+
+	request.SosId = sosId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTrustedSos(ctx, request.(GetTrustedSosRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTrustedSos")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTrustedSosResponseObject); ok {
+		if err := validResponse.VisitGetTrustedSosResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RespondAsTrustedContact operation middleware
+func (sh *strictHandler) RespondAsTrustedContact(w http.ResponseWriter, r *http.Request, sosId SosId) {
+	var request RespondAsTrustedContactRequestObject
+
+	request.SosId = sosId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RespondAsTrustedContact(ctx, request.(RespondAsTrustedContactRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RespondAsTrustedContact")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RespondAsTrustedContactResponseObject); ok {
+		if err := validResponse.VisitRespondAsTrustedContactResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

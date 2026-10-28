@@ -846,6 +846,147 @@ paths:
       responses:
         '202': {description: Sending.}
         default: {$ref: '#/components/responses/Problem'}
+  /trusted/sos/{sosId}:
+    parameters:
+      - $ref: '#/components/parameters/SosId'
+    get:
+      operationId: getTrustedSos
+      tags: [emergency]
+      summary: An SOS raised by a member whose confirmed trusted contact I am. Audited.
+      description: |
+        For the member contact the SOS alert (emergency.sos_raised_contact) was sent to.
+        Every SOS type, childcare included: trusted contacts are exactly who may help with
+        her child (AGENTS.md non-negotiable 5). 403 when I am not her confirmed contact,
+        404 when the SOS does not exist. Every read writes an audit entry.
+      responses:
+        '200':
+          description: The SOS.
+          headers:
+            Cache-Control:
+              schema: {type: string, enum: [no-store]}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TrustedSos'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /trusted/sos/{sosId}/respond:
+    parameters:
+      - $ref: '#/components/parameters/SosId'
+    post:
+      operationId: respondAsTrustedContact
+      tags: [emergency]
+      summary: '"I can help" on an SOS of a member whose confirmed trusted contact I am (idempotent).'
+      description: |
+        Recorded as a response like respondToSos, so the author sees it in listSosResponses
+        and may open a private chat by accepting it. Works for childcare SOS too. 409 when
+        the SOS is closed; 403 when I am not her confirmed contact.
+      responses:
+        '204': {description: Recorded; the author is notified.}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/trusted-invitations/{contactId}:
+    parameters:
+      - name: contactId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getTrustedInvitation
+      tags: [emergency]
+      summary: An invitation to be another member's trusted contact, addressed to me.
+      description: 404 when it does not exist, is not addressed to me, or was removed.
+      responses:
+        '200':
+          description: The invitation.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TrustedInvitation'}
+        default: {$ref: '#/components/responses/Problem'}
+  /me/trusted-invitations/{contactId}/decline:
+    parameters:
+      - name: contactId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: declineTrustedInvitation
+      tags: [emergency]
+      summary: Decline being another member's trusted contact, or stop being one (idempotent).
+      description: |
+        The entry leaves the inviting member's contact list as if she had removed it (her
+        plan links to me die with it). She is not notified of the reason.
+      responses:
+        '204': {description: Declined.}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/sos:
+    get:
+      operationId: listStaffSos
+      tags: [emergency]
+      summary: SOS requests for the moderator queue (requirements section 6). Audited.
+      description: |
+        Moderators and admins. Open first by creation time; the member's display name and
+        district are shown because the moderator acts on them, the phone never.
+      security:
+        - staffOidc: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, closed]
+            default: open
+            x-enum-varnames: [StaffSosOpen, StaffSosClosed]
+        - name: cursor
+          in: query
+          required: false
+          schema: {type: string, maxLength: 128}
+      responses:
+        '200':
+          description: One page.
+          headers:
+            Cache-Control:
+              schema: {type: string, enum: [no-store]}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffSosPage'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/sos/{sosId}/seen:
+    parameters:
+      - $ref: '#/components/parameters/SosId'
+    post:
+      operationId: markSosSeen
+      tags: [emergency]
+      summary: '"Seen" by a moderator (idempotent; the first one is kept). Audited.'
+      security:
+        - staffOidc: []
+      responses:
+        '200':
+          description: The SOS as now stored.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffSos'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+  /staff/sos/{sosId}/close:
+    parameters:
+      - $ref: '#/components/parameters/SosId'
+    post:
+      operationId: closeSosAsStaff
+      tags: [emergency]
+      summary: '"Close" by a moderator (idempotent). Cancels auto-close and removes it from the district feed. Audited.'
+      security:
+        - staffOidc: []
+      responses:
+        '200':
+          description: The SOS as now stored.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StaffSos'}
+        '403': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
   /trusted/plans/{ownerId}:
     parameters:
       - name: ownerId
@@ -2429,6 +2570,66 @@ components:
         status:
           type: string
           enum: [invited, confirmed]
+    TrustedSos:
+      type: object
+      additionalProperties: false
+      required: [id, ownerDisplayName, type, text, status, createdAt, respondedByMe]
+      properties:
+        id: {type: string, format: uuid}
+        ownerDisplayName: {type: string, maxLength: 40, description: First name only.}
+        type: {$ref: '#/components/schemas/SosType'}
+        text: {type: string, maxLength: 300}
+        status:
+          type: string
+          enum: [open, closed]
+          x-enum-varnames: [TrustedSosOpen, TrustedSosClosed]
+        createdAt: {type: string, format: date-time}
+        closesAt: {type: string, format: date-time}
+        respondedByMe: {type: boolean}
+    TrustedInvitation:
+      type: object
+      additionalProperties: false
+      required: [contactId, ownerDisplayName, status, invitedAt]
+      properties:
+        contactId: {type: string, format: uuid}
+        ownerDisplayName: {type: string, maxLength: 40, description: First name only.}
+        status:
+          type: string
+          enum: [invited, confirmed]
+          x-enum-varnames: [TrustedInvitationInvited, TrustedInvitationConfirmed]
+        invitedAt: {type: string, format: date-time}
+    StaffSos:
+      type: object
+      additionalProperties: false
+      required: [id, memberId, displayName, type, text, status, sharedToDistrict, createdAt, responseCount]
+      properties:
+        id: {type: string, format: uuid}
+        memberId: {type: string, format: uuid}
+        displayName: {type: string, maxLength: 40}
+        districtId: {type: string, format: uuid}
+        type: {$ref: '#/components/schemas/SosType'}
+        text: {type: string, maxLength: 300}
+        status:
+          type: string
+          enum: [open, closed]
+          x-enum-varnames: [StaffSosStatusOpen, StaffSosStatusClosed]
+        sharedToDistrict: {type: boolean}
+        createdAt: {type: string, format: date-time}
+        closesAt: {type: string, format: date-time}
+        closedAt: {type: string, format: date-time}
+        seenAt: {type: string, format: date-time}
+        seenBy: {type: string, format: uuid, description: Staff ID of the first moderator who marked it seen.}
+        responseCount: {type: integer, minimum: 0}
+    StaffSosPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: {$ref: '#/components/schemas/StaffSos'}
+        nextCursor: {type: string, maxLength: 128}
     SharedPlan:
       type: object
       additionalProperties: false

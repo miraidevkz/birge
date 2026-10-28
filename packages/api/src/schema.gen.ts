@@ -703,6 +703,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/trusted/sos/{sosId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sosId: components["parameters"]["SosId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * An SOS raised by a member whose confirmed trusted contact I am. Audited.
+         * @description For the member contact the SOS alert (emergency.sos_raised_contact) was sent to.
+         *     Every SOS type, childcare included: trusted contacts are exactly who may help with
+         *     her child (AGENTS.md non-negotiable 5). 403 when I am not her confirmed contact,
+         *     404 when the SOS does not exist. Every read writes an audit entry.
+         */
+        get: operations["getTrustedSos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/trusted/sos/{sosId}/respond": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sosId: components["parameters"]["SosId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * "I can help" on an SOS of a member whose confirmed trusted contact I am (idempotent).
+         * @description Recorded as a response like respondToSos, so the author sees it in listSosResponses
+         *     and may open a private chat by accepting it. Works for childcare SOS too. 409 when
+         *     the SOS is closed; 403 when I am not her confirmed contact.
+         */
+        post: operations["respondAsTrustedContact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/trusted-invitations/{contactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * An invitation to be another member's trusted contact, addressed to me.
+         * @description 404 when it does not exist, is not addressed to me, or was removed.
+         */
+        get: operations["getTrustedInvitation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/trusted-invitations/{contactId}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline being another member's trusted contact, or stop being one (idempotent).
+         * @description The entry leaves the inviting member's contact list as if she had removed it (her
+         *     plan links to me die with it). She is not notified of the reason.
+         */
+        post: operations["declineTrustedInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/sos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * SOS requests for the moderator queue (requirements section 6). Audited.
+         * @description Moderators and admins. Open first by creation time; the member's display name and
+         *     district are shown because the moderator acts on them, the phone never.
+         */
+        get: operations["listStaffSos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/sos/{sosId}/seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sosId: components["parameters"]["SosId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** "Seen" by a moderator (idempotent; the first one is kept). Audited. */
+        post: operations["markSosSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff/sos/{sosId}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sosId: components["parameters"]["SosId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** "Close" by a moderator (idempotent). Cancels auto-close and removes it from the district feed. Audited. */
+        post: operations["closeSosAsStaff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/trusted/plans/{ownerId}": {
         parameters: {
             query?: never;
@@ -1943,6 +2096,63 @@ export interface components {
             phoneMasked?: string;
             /** @enum {string} */
             status: "invited" | "confirmed";
+        };
+        TrustedSos: {
+            /** Format: uuid */
+            id: string;
+            /** @description First name only. */
+            ownerDisplayName: string;
+            type: components["schemas"]["SosType"];
+            text: string;
+            /** @enum {string} */
+            status: "open" | "closed";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            closesAt?: string;
+            respondedByMe: boolean;
+        };
+        TrustedInvitation: {
+            /** Format: uuid */
+            contactId: string;
+            /** @description First name only. */
+            ownerDisplayName: string;
+            /** @enum {string} */
+            status: "invited" | "confirmed";
+            /** Format: date-time */
+            invitedAt: string;
+        };
+        StaffSos: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            memberId: string;
+            displayName: string;
+            /** Format: uuid */
+            districtId?: string;
+            type: components["schemas"]["SosType"];
+            text: string;
+            /** @enum {string} */
+            status: "open" | "closed";
+            sharedToDistrict: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            closesAt?: string;
+            /** Format: date-time */
+            closedAt?: string;
+            /** Format: date-time */
+            seenAt?: string;
+            /**
+             * Format: uuid
+             * @description Staff ID of the first moderator who marked it seen.
+             */
+            seenBy?: string;
+            responseCount: number;
+        };
+        StaffSosPage: {
+            items: components["schemas"]["StaffSos"][];
+            nextCursor?: string;
         };
         SharedPlan: {
             ownerDisplayName: string;
@@ -3662,6 +3872,172 @@ export interface operations {
                 };
                 content?: never;
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getTrustedSos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sosId: components["parameters"]["SosId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The SOS. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustedSos"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    respondAsTrustedContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sosId: components["parameters"]["SosId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recorded; the author is notified. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getTrustedInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invitation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustedInvitation"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    declineTrustedInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Declined. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listStaffSos: {
+        parameters: {
+            query?: {
+                status?: "open" | "closed";
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffSosPage"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    markSosSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sosId: components["parameters"]["SosId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The SOS as now stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffSos"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    closeSosAsStaff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sosId: components["parameters"]["SosId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The SOS as now stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffSos"];
+                };
+            };
+            403: components["responses"]["Problem"];
             default: components["responses"]["Problem"];
         };
     };
