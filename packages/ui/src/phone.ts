@@ -72,7 +72,7 @@ export function formatPhone(e164: string): string {
  * separator (same digit count, shorter text) removes the digit before the
  * deleted character at the common-prefix boundary.
  */
-export function applyPhoneEdit(previousDisplay: string, nextText: string): PhoneEditResult {
+export function applyPhoneEdit(previousDisplay: string, nextText: string, explicitPlus?: boolean): PhoneEditResult {
   const prevDigits = digitsOf(previousDisplay);
   const nextDigits = digitsOf(nextText);
 
@@ -99,8 +99,12 @@ export function applyPhoneEdit(previousDisplay: string, nextText: string): Phone
 
   // A '+' in nextText (or still carrying digits from a previous international value)
   // means do not rewrite a leading 8 as the KZ trunk prefix.
-  const explicitPlus = nextText.includes('+') || (digits.length > 0 && previousDisplay.includes('+'));
-  const e164 = digitsToE164(digits, explicitPlus, nextText);
+  // explicitPlus, when the field tracks it, says whether the member typed '+'
+  // herself. Without it, a '+' in the text is taken as hers, which misreads the
+  // '+' this field inserts: with fast typing the native text ("87") can arrive
+  // before the formatted "+7" is rendered, and a leading 8 then stayed +8.
+  const plus = explicitPlus ?? (nextText.includes('+') || (digits.length > 0 && previousDisplay.includes('+')));
+  const e164 = digitsToE164(digits, plus, nextText);
   const display = formatPhone(e164);
   const maxCaret = digitsOf(e164).length;
   const caret = caretAfterDigits(display, Math.min(Math.max(0, caretDigits), maxCaret));

@@ -90,6 +90,27 @@ describe('PhoneField', () => {
     expect(onChangePhone).toHaveBeenCalledWith('+77000000000');
   });
 
+  it('turns a leading 8 into +7 even when typing outruns the render', async () => {
+    // The native text after the second key can be "87" while the field
+    // already shows "+7": the inserted '+' must not count as the member's.
+    const onChangePhone = jest.fn();
+    const { rerender } = await render(<PhoneField label="Mobile number" value="" onChangePhone={onChangePhone} />);
+    await fireEvent.changeText(screen.getByLabelText('Mobile number'), '8');
+    expect(onChangePhone).toHaveBeenLastCalledWith('+7');
+    await rerender(<PhoneField label="Mobile number" value="+7" onChangePhone={onChangePhone} />);
+    await fireEvent.changeText(screen.getByLabelText('Mobile number'), '87');
+    expect(onChangePhone).toHaveBeenLastCalledWith('+77');
+  });
+
+  it("keeps a '+' the member typed first, so a foreign 8x code stays", async () => {
+    const onChangePhone = jest.fn();
+    const { rerender } = await render(<PhoneField label="Mobile number" value="" onChangePhone={onChangePhone} />);
+    await fireEvent.changeText(screen.getByLabelText('Mobile number'), '+');
+    await rerender(<PhoneField label="Mobile number" value="+" onChangePhone={onChangePhone} />);
+    await fireEvent.changeText(screen.getByLabelText('Mobile number'), '+86');
+    expect(onChangePhone).toHaveBeenLastCalledWith('+86');
+  });
+
   it('shows the formatted value from an E.164 prop', async () => {
     await render(<PhoneField label="Mobile number" value="+77000000000" onChangePhone={() => undefined} />);
     expect(screen.getByLabelText('Mobile number')).toHaveDisplayValue('+7 (700) 000-00-00');

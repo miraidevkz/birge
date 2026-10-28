@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { TextInputSelectionChangeEvent } from 'react-native';
 
-import { applyPhoneEdit, formatPhone } from './phone';
+import { applyPhoneEdit, digitsOf, formatPhone } from './phone';
 import { TextField, type TextFieldProps } from './text-field';
 
 /** PhoneFieldProps: TextField without raw text handlers; value is E.164-shaped. */
@@ -32,13 +32,20 @@ export type PhoneFieldProps = Omit<
 export function PhoneField({ value, onChangePhone, ...props }: PhoneFieldProps) {
   const display = formatPhone(value);
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>();
+  // explicitPlus: did the member type '+' as the first character? Decided when
+  // the field is empty and kept until it is emptied again, so the '+' this
+  // field inserts is never mistaken for hers. A prefilled value is E.164
+  // already and is never rewritten.
+  const explicitPlus = useRef(value !== '');
 
   function onSelectionChange(e: TextInputSelectionChangeEvent) {
     setSelection(e.nativeEvent.selection);
   }
 
   function onChangeText(text: string) {
-    const result = applyPhoneEdit(display, text);
+    if (digitsOf(display) === '') explicitPlus.current = text.trimStart().startsWith('+');
+    const result = applyPhoneEdit(display, text, explicitPlus.current);
+    if (result.e164 === '') explicitPlus.current = false;
     setSelection({ start: result.caret, end: result.caret });
     onChangePhone(result.e164);
   }
