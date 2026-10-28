@@ -76,7 +76,7 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [x] Staff endpoints for mentor assignment, closing reports and legal hold
 - [x] Account deletion in every context (consumers of `privacy.DataDeletionRequested`)
 - [ ] Analytics: pseudonymous events and the aggregate metrics of requirements § 9 with CSV export
-- [ ] Push (FCM/APNs) and SMS provider plugins
+- [ ] Push (FCM/APNs) and SMS provider plugins (an SMS provider in Kazakhstan, e.g. SMSC.kz, with a registered sender ID; the dev stack relays codes through `cmd/birge-devsms`, optionally via Telegram Gateway for testing only)
 - [x] Knowledge: reviewer review-due queue before expiry, export of published content to `knowledge/`
 
 ### Quality
@@ -92,7 +92,7 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 
 ### Clients
 - [x] TypeScript API client from the contract
-- [x] Mom app (Expo / React Native, kk/ru/en, design system per ADR-0014); texts need a native-speaker and psychologist review
+- [x] Mom app (Expo / React Native, kk/ru/en, design system per ADR-0014 and the warm design language of ADR-0025): onboarding, first-run setup (name, district and child, verification request), About me, home with mood, Circle and a tip, chats with avatars, brand mark and icons for every platform (`branding/`), side rail on tablets and desktops; texts follow `docs/content-style.md` and need a native-speaker and psychologist review (`docs/content-review-2026-10.md`)
 - [x] Staff admin app: escalations, moderation, duty roster, knowledge base (web, OIDC PKCE); role matrix and the remaining staff screens later
 
 ### Documentation for people
