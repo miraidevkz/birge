@@ -1,10 +1,17 @@
 // First-appearance motion (ADR-0014, ADR-0025): content fades in and rises a
-// few px when it mounts, on the UI thread (Reanimated layout animation), with
-// a timing curve from the motion tokens. It never runs again for the same
-// mounted view, never under reduce motion and never inside NoMotion.
-import { createContext, useContext, useState, type ReactNode } from 'react';
+// few px when it mounts, on the UI thread (shared values, not a layout
+// animation), with a timing curve from the motion tokens. It never runs again
+// for the same mounted view, never under reduce motion and never inside
+// NoMotion.
+//
+// Not Reanimated's `entering`: on the web a layout animation takes the view
+// out of the layout flow while it runs, and the content after it was drawn
+// over it (the language picker on top of the name card in Profile, list rows
+// on top of each other in Specialists). Opacity and a transform never change
+// layout on any platform.
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, type EntryOrExitLayoutType } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
 import { easeOut, useMotionAllowed } from './motion';
 import { tokens } from './theme';
@@ -68,11 +75,17 @@ export interface AppearProps {
   testID?: string;
 }
 
+/** AppearPlan is how content enters: after delay ms, rising or not. */
+export interface AppearPlan {
+  delay: number;
+  rise: boolean;
+}
+
 /**
  * useAppearAnimation decides once, at mount, how this content enters:
  * undefined means it appears without motion. Exported for tests.
  */
-export function useAppearAnimation(index = 0, rise = true): EntryOrExitLayoutType | undefined {
+export function useAppearAnimation(index = 0, rise = true): AppearPlan | undefined {
   const motion = useMotionAllowed();
   const scope = useContext(AppearContext);
   // Decided once per mount: a re-render (new data, a changed setting) never
@@ -80,13 +93,7 @@ export function useAppearAnimation(index = 0, rise = true): EntryOrExitLayoutTyp
   const [entering] = useState(() => {
     if (!motion || scope.inside) return undefined;
     if (scope.claim && !scope.claim(index)) return undefined;
-    const delay = Math.min(index, STAGGERED_ROWS) * STAGGER_STEP;
-    const duration = tokens.motion.base;
-    if (!rise) return FadeIn.duration(duration).delay(delay).easing(easeOut);
-    return FadeInDown.duration(duration)
-      .delay(delay)
-      .easing(easeOut)
-      .withInitialValues({ opacity: 0, transform: [{ translateY: RISE }] });
+    return { delay: Math.min(index, STAGGERED_ROWS) * STAGGER_STEP, rise };
   });
   return entering;
 }
@@ -99,11 +106,22 @@ const nested: AppearScope = { inside: true };
  * animate again on its own.
  */
 export function Appear({ children, index, rise = true, className, testID }: AppearProps) {
-  const entering = useAppearAnimation(index, rise);
+  const plan = useAppearAnimation(index, rise);
+  // Start where the plan says (hidden, a step lower) or already in place.
+  const progress = useSharedValue(plan ? 0 : 1);
+  useEffect(() => {
+    if (!plan) return;
+    progress.value = withDelay(plan.delay, withTiming(1, { duration: tokens.motion.base, easing: easeOut }));
+    // Runs once: plan is fixed at mount (useState) and progress is stable.
+  }, [plan, progress]);
+  const style = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ translateY: plan?.rise ? (1 - progress.value) * RISE : 0 }],
+  }));
   // The Reanimated view carries only the motion; NativeWind classes sit on
   // the plain view inside it (as in Sheet).
   return (
-    <Animated.View entering={entering}>
+    <Animated.View style={style}>
       <AppearContext.Provider value={nested}>
         <View className={className} testID={testID}>
           {children}
