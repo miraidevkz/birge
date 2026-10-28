@@ -20,8 +20,9 @@ Status as of 2026-10-28.
 Contract merged, code pending (answers 501):
 - [x] Staff list of group rooms with mentors (`staffListRooms`, chat)
 - [x] Staff list of verified and suspended members (`staffListMembers`, membership)
-- [ ] Mentor role: `grantMentorRole` / `revokeMentorRole` (membership) and chat dropping her from rooms on `membership.MentorRoleChanged`
-- [ ] Staff accounts and the audit log for admins (`listAuditEntries`, `listStaffAccounts`, `getStaffAccount`, platform `staffdir`; routes not mounted yet)
+- [x] Mentor role: `grantMentorRole` / `revokeMentorRole` (membership) and chat dropping her from rooms on `membership.MentorRoleChanged`
+- [x] Staff accounts and the audit log for admins (`listAuditEntries`, `listStaffAccounts`, `getStaffAccount`, platform `staffdir`)
+- [ ] Record the concrete staff role in membership and chat audit rows (today `staff`)
 - [ ] One-time link for external trusted contacts to view a sent emergency plan (`viewExternalPlan`, emergency) and its web page
 - [ ] Analytics (ADR-0024): metric input events (`membership.MemberActiveDay`, `circle.TeaRequested`, `assistant.QuestionAnswered`), wellbeing cohort aggregates, the `analytics` context with `getMetrics` and `getMetricsCsv`
 
