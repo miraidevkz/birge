@@ -39,6 +39,7 @@ CREATE TABLE membership.members (
     lang         text        NOT NULL DEFAULT 'kk' CHECK (lang IN ('kk', 'ru', 'en')),
     district_id  uuid        REFERENCES membership.districts (id),
     verification text        NOT NULL DEFAULT 'new' CHECK (verification IN ('new', 'pending', 'verified')),
+    verified_at  timestamptz,
     roles        text[]      NOT NULL DEFAULT '{mom}'
         CHECK (roles <@ ARRAY['mom', 'mentor', 'psychologist', 'lawyer', 'moderator', 'admin']::text[]),
     -- Staff suspension from moderation.block_author (ADR-0019): session refused
@@ -55,6 +56,15 @@ CREATE TABLE membership.members (
 );
 
 CREATE INDEX members_district_idx ON membership.members (district_id);
+-- Staff member list indexes: keyset order (newest verified/suspended first).
+CREATE INDEX members_staff_verified_idx ON membership.members (verified_at DESC, id DESC)
+    WHERE verification = 'verified' AND deleted_at IS NULL;
+CREATE INDEX members_staff_verified_district_idx ON membership.members (district_id, verified_at DESC, id DESC)
+    WHERE verification = 'verified' AND deleted_at IS NULL;
+CREATE INDEX members_staff_suspended_idx ON membership.members (suspended_at DESC, id DESC)
+    WHERE suspended_at IS NOT NULL AND deleted_at IS NULL;
+CREATE INDEX members_staff_suspended_district_idx ON membership.members (district_id, suspended_at DESC, id DESC)
+    WHERE suspended_at IS NOT NULL AND deleted_at IS NULL;
 
 -- Children carry no names: birth year and needs codes only.
 CREATE TABLE membership.children (

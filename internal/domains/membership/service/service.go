@@ -391,7 +391,8 @@ func (s *Service) load(ctx context.Context, tx port.Tx, rec port.MemberRecord) (
 	return model.Member{
 		ID: rec.ID, IdentityID: rec.IdentityID, DisplayName: name, Lang: rec.Lang,
 		CityID: rec.CityID, DistrictID: rec.DistrictID, Verification: rec.Verification,
-		Roles: rec.Roles, Children: children,
+		VerifiedAt: rec.VerifiedAt,
+		Roles:      rec.Roles, Children: children,
 		SuspendedAt: rec.SuspendedAt, SuspendedReason: rec.SuspendedReason,
 	}, nil
 }

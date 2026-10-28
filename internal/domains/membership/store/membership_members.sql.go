@@ -37,7 +37,7 @@ func (q *Queries) DeleteMemberVerificationRequests(ctx context.Context, memberID
 }
 
 const getMemberByID = `-- name: GetMemberByID :one
-SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles,
+SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.verified_at, m.roles,
        m.suspended_at, m.suspended_reason, m.deleted_at
 FROM membership.members m
 LEFT JOIN membership.districts d ON d.id = m.district_id
@@ -52,6 +52,7 @@ type GetMemberByIDRow struct {
 	DistrictID      *uuid.UUID
 	CityID          *uuid.UUID
 	Verification    string
+	VerifiedAt      *time.Time
 	Roles           []string
 	SuspendedAt     *time.Time
 	SuspendedReason *string
@@ -71,6 +72,7 @@ func (q *Queries) GetMemberByID(ctx context.Context, id uuid.UUID) (GetMemberByI
 		&i.DistrictID,
 		&i.CityID,
 		&i.Verification,
+		&i.VerifiedAt,
 		&i.Roles,
 		&i.SuspendedAt,
 		&i.SuspendedReason,
@@ -80,7 +82,7 @@ func (q *Queries) GetMemberByID(ctx context.Context, id uuid.UUID) (GetMemberByI
 }
 
 const getMemberByIdentity = `-- name: GetMemberByIdentity :one
-SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.roles,
+SELECT m.id, m.identity_id, m.display_name, m.lang, m.district_id, d.city_id, m.verification, m.verified_at, m.roles,
        m.suspended_at, m.suspended_reason, m.deleted_at
 FROM membership.members m
 LEFT JOIN membership.districts d ON d.id = m.district_id
@@ -95,6 +97,7 @@ type GetMemberByIdentityRow struct {
 	DistrictID      *uuid.UUID
 	CityID          *uuid.UUID
 	Verification    string
+	VerifiedAt      *time.Time
 	Roles           []string
 	SuspendedAt     *time.Time
 	SuspendedReason *string
@@ -114,6 +117,7 @@ func (q *Queries) GetMemberByIdentity(ctx context.Context, identityID uuid.UUID)
 		&i.DistrictID,
 		&i.CityID,
 		&i.Verification,
+		&i.VerifiedAt,
 		&i.Roles,
 		&i.SuspendedAt,
 		&i.SuspendedReason,
@@ -141,6 +145,134 @@ func (q *Queries) InsertMember(ctx context.Context, arg InsertMemberParams) (uui
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listStaffMembersSuspended = `-- name: ListStaffMembersSuspended :many
+SELECT id, display_name, district_id, verification, verified_at,
+       suspended_at
+FROM membership.members
+WHERE deleted_at IS NULL
+  AND suspended_at IS NOT NULL
+  AND ($1::uuid IS NULL OR district_id = $1)
+  AND (
+    $2::timestamptz IS NULL
+    OR (suspended_at, id) < ($2::timestamptz, $3::uuid)
+  )
+ORDER BY suspended_at DESC, id DESC
+LIMIT $4
+`
+
+type ListStaffMembersSuspendedParams struct {
+	DistrictID        *uuid.UUID
+	CursorSuspendedAt *time.Time
+	CursorID          *uuid.UUID
+	PageLimit         int32
+}
+
+type ListStaffMembersSuspendedRow struct {
+	ID           uuid.UUID
+	DisplayName  []byte
+	DistrictID   *uuid.UUID
+	Verification string
+	VerifiedAt   *time.Time
+	SuspendedAt  *time.Time
+}
+
+// Staff member list: suspended members (most recently suspended first).
+func (q *Queries) ListStaffMembersSuspended(ctx context.Context, arg ListStaffMembersSuspendedParams) ([]ListStaffMembersSuspendedRow, error) {
+	rows, err := q.db.Query(ctx, listStaffMembersSuspended,
+		arg.DistrictID,
+		arg.CursorSuspendedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStaffMembersSuspendedRow
+	for rows.Next() {
+		var i ListStaffMembersSuspendedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.DistrictID,
+			&i.Verification,
+			&i.VerifiedAt,
+			&i.SuspendedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStaffMembersVerified = `-- name: ListStaffMembersVerified :many
+SELECT id, display_name, district_id, verification, verified_at,
+       suspended_at
+FROM membership.members
+WHERE deleted_at IS NULL
+  AND verification = 'verified'
+  AND ($1::uuid IS NULL OR district_id = $1)
+  AND (
+    $2::timestamptz IS NULL
+    OR (verified_at, id) < ($2::timestamptz, $3::uuid)
+  )
+ORDER BY verified_at DESC, id DESC
+LIMIT $4
+`
+
+type ListStaffMembersVerifiedParams struct {
+	DistrictID       *uuid.UUID
+	CursorVerifiedAt *time.Time
+	CursorID         *uuid.UUID
+	PageLimit        int32
+}
+
+type ListStaffMembersVerifiedRow struct {
+	ID           uuid.UUID
+	DisplayName  []byte
+	DistrictID   *uuid.UUID
+	Verification string
+	VerifiedAt   *time.Time
+	SuspendedAt  *time.Time
+}
+
+// Staff member list: verified members (most recently verified first).
+func (q *Queries) ListStaffMembersVerified(ctx context.Context, arg ListStaffMembersVerifiedParams) ([]ListStaffMembersVerifiedRow, error) {
+	rows, err := q.db.Query(ctx, listStaffMembersVerified,
+		arg.DistrictID,
+		arg.CursorVerifiedAt,
+		arg.CursorID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStaffMembersVerifiedRow
+	for rows.Next() {
+		var i ListStaffMembersVerifiedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.DistrictID,
+			&i.Verification,
+			&i.VerifiedAt,
+			&i.SuspendedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listVerifiedInDistrict = `-- name: ListVerifiedInDistrict :many
@@ -240,7 +372,9 @@ func (q *Queries) SetMemberSuspension(ctx context.Context, arg SetMemberSuspensi
 
 const setMemberVerification = `-- name: SetMemberVerification :execrows
 UPDATE membership.members
-SET verification = $1, updated_at = $2
+SET verification = $1,
+    verified_at = CASE WHEN $1 = 'verified' THEN coalesce(verified_at, $2) ELSE NULL END,
+    updated_at = $2
 WHERE id = $3 AND deleted_at IS NULL
 `
 
@@ -261,6 +395,7 @@ func (q *Queries) SetMemberVerification(ctx context.Context, arg SetMemberVerifi
 const tombstoneMember = `-- name: TombstoneMember :execrows
 UPDATE membership.members
 SET display_name = NULL, district_id = NULL, verification = 'new', roles = '{}',
+    verified_at = NULL,
     suspended_at = NULL, suspended_reason = NULL,
     updated_at = $1, deleted_at = $1
 WHERE id = $2 AND deleted_at IS NULL

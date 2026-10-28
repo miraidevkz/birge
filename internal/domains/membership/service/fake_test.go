@@ -209,12 +209,19 @@ func (t *fakeTx) UpdateProfile(_ context.Context, id uuid.UUID, p port.ProfilePa
 	return nil
 }
 
-func (t *fakeTx) SetVerification(_ context.Context, id uuid.UUID, v model.Verification, _ time.Time) error {
+func (t *fakeTx) SetVerification(_ context.Context, id uuid.UUID, v model.Verification, now time.Time) error {
 	if err := t.check("SetVerification"); err != nil {
 		return err
 	}
 	m := t.f.st.members[id]
 	m.Verification = v
+	if v == model.VerificationVerified {
+		if m.VerifiedAt == nil {
+			m.VerifiedAt = &now
+		}
+	} else {
+		m.VerifiedAt = nil
+	}
 	t.f.st.members[id] = m
 	return nil
 }
@@ -432,6 +439,88 @@ func (t *fakeTx) ListVerifiedInDistrict(_ context.Context, districtID uuid.UUID)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	return out, nil
+}
+
+func (t *fakeTx) ListStaffMembers(_ context.Context, f port.StaffMemberListFilter) ([]port.StaffMemberRecord, error) {
+	if err := t.check("ListStaffMembers"); err != nil {
+		return nil, err
+	}
+	var out []port.StaffMemberRecord
+	for id, m := range t.f.st.members {
+		if m.Deleted {
+			continue
+		}
+		switch f.Status {
+		case model.StaffMemberStatusVerified:
+			if m.Verification != model.VerificationVerified {
+				continue
+			}
+		case model.StaffMemberStatusSuspended:
+			if m.SuspendedAt == nil {
+				continue
+			}
+		default:
+			return nil, errors.New("invalid status")
+		}
+		if f.DistrictID != nil {
+			if m.DistrictID == nil || *m.DistrictID != *f.DistrictID {
+				continue
+			}
+		}
+		out = append(out, port.StaffMemberRecord{
+			ID:           id,
+			SealedName:   m.SealedName,
+			DistrictID:   m.DistrictID,
+			Verification: m.Verification,
+			VerifiedAt:   m.VerifiedAt,
+			SuspendedAt:  m.SuspendedAt,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		var ti, tj time.Time
+		if f.Status == model.StaffMemberStatusVerified {
+			if out[i].VerifiedAt != nil {
+				ti = *out[i].VerifiedAt
+			}
+			if out[j].VerifiedAt != nil {
+				tj = *out[j].VerifiedAt
+			}
+		} else {
+			if out[i].SuspendedAt != nil {
+				ti = *out[i].SuspendedAt
+			}
+			if out[j].SuspendedAt != nil {
+				tj = *out[j].SuspendedAt
+			}
+		}
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		return out[i].ID.String() > out[j].ID.String()
+	})
+	if f.CursorTime != nil && f.CursorID != nil {
+		filtered := make([]port.StaffMemberRecord, 0, len(out))
+		for _, r := range out {
+			var t time.Time
+			if f.Status == model.StaffMemberStatusVerified {
+				if r.VerifiedAt != nil {
+					t = *r.VerifiedAt
+				}
+			} else {
+				if r.SuspendedAt != nil {
+					t = *r.SuspendedAt
+				}
+			}
+			if t.Before(*f.CursorTime) || (t.Equal(*f.CursorTime) && r.ID.String() < f.CursorID.String()) {
+				filtered = append(filtered, r)
+			}
+		}
+		out = filtered
+	}
+	if f.Limit > 0 && len(out) > int(f.Limit) {
+		out = out[:f.Limit]
+	}
 	return out, nil
 }
 

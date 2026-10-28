@@ -14,6 +14,7 @@ import (
 	"birge/internal/domains/membership/model"
 	"birge/internal/domains/membership/service"
 	"birge/internal/platform/auth"
+	"birge/internal/platform/staffauth"
 )
 
 const testName = "Example Name"
@@ -556,5 +557,61 @@ func TestNoPersonalDataInEvents(t *testing.T) {
 		if strings.Contains(string(b), testName) {
 			t.Errorf("%s carries the display name: %s", ev.Type, b)
 		}
+	}
+}
+
+func TestStaffListMembersAuthorizationAndAudit(t *testing.T) {
+	e := newEnv(t)
+	staffID := uuid.New()
+
+	cases := []struct {
+		name string
+		ctx  context.Context
+		want error
+	}{
+		{"anonymous", context.Background(), model.ErrUnauthenticated},
+		{"member session", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: uuid.New()}), model.ErrUnauthenticated},
+		{"staff nil identity", auth.WithPrincipal(context.Background(), auth.Principal{Staff: true, MFA: true, Roles: []string{staffauth.RoleModerator}}), model.ErrUnauthenticated},
+		{"staff without MFA", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: false, Roles: []string{staffauth.RoleModerator}}), model.ErrForbidden},
+		{"staff psychologist", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RolePsychologist}}), model.ErrForbidden},
+		{"staff lawyer", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleLawyer}}), model.ErrForbidden},
+		{"staff moderator with MFA", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleModerator}}), nil},
+		{"staff admin with MFA", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleAdmin}}), nil},
+	}
+
+	filter := model.StaffMemberListFilter{Status: model.StaffMemberStatusVerified}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := e.svc.StaffListMembers(tc.ctx, filter)
+			wantErr(t, err, tc.want)
+		})
+	}
+
+	// Validation and audit checks
+	modCtx := auth.WithPrincipal(context.Background(), auth.Principal{
+		IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleModerator},
+	})
+
+	// Invalid status
+	if _, err := e.svc.StaffListMembers(modCtx, model.StaffMemberListFilter{Status: "pending"}); !errors.Is(err, model.ErrInvalidRequest) {
+		t.Errorf("invalid status error = %v, want %v", err, model.ErrInvalidRequest)
+	}
+
+	// Invalid cursor
+	if _, err := e.svc.StaffListMembers(modCtx, model.StaffMemberListFilter{Status: model.StaffMemberStatusVerified, Cursor: "invalid-cursor"}); !errors.Is(err, model.ErrInvalidRequest) {
+		t.Errorf("invalid cursor error = %v, want %v", err, model.ErrInvalidRequest)
+	}
+
+	// Audit entry written
+	beforeAudits := e.store.st.audits
+	page, err := e.svc.StaffListMembers(modCtx, model.StaffMemberListFilter{Status: model.StaffMemberStatusVerified})
+	if err != nil {
+		t.Fatalf("StaffListMembers: %v", err)
+	}
+	if page.Items == nil {
+		t.Error("expected non-nil Items")
+	}
+	if e.store.st.audits != beforeAudits+1 {
+		t.Errorf("audits = %d, want %d", e.store.st.audits, beforeAudits+1)
 	}
 }

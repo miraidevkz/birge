@@ -48,6 +48,7 @@ type MembershipMember struct {
 	Lang            string
 	DistrictID      *uuid.UUID
 	Verification    string
+	VerifiedAt      *time.Time
 	Roles           []string
 	SuspendedAt     *time.Time
 	SuspendedReason *string

@@ -21,6 +21,14 @@ const (
 	MaxBlocks           = 1000
 	MinBirthYear        = 1990
 	MaxBirthYear        = 2100
+	MaxCursorLen        = 128
+	StaffMemberPageSize = 50
+)
+
+// Staff member status filter values.
+const (
+	StaffMemberStatusVerified  = "verified"
+	StaffMemberStatusSuspended = "suspended"
 )
 
 // Event types published by this context (contracts/events/membership.*.v1.json).
@@ -42,6 +50,7 @@ const (
 	AuditLiftSuspension     = "membership.member.lift_suspension"
 	AuditVerifyApprove      = "membership.verification.approve"
 	AuditVerifyReject       = "membership.verification.reject"
+	AuditMemberList         = "membership.member.list"
 	ActorRoleSystem         = "system"
 	ActorRoleStaff          = "staff"
 )
@@ -99,6 +108,7 @@ type Member struct {
 	CityID          *uuid.UUID
 	DistrictID      *uuid.UUID
 	Verification    Verification
+	VerifiedAt      *time.Time
 	Roles           []string
 	Children        []Child
 	SuspendedAt     *time.Time
@@ -107,6 +117,30 @@ type Member struct {
 
 // Suspended reports whether the member is currently suspended by staff.
 func (m Member) Suspended() bool { return m.SuspendedAt != nil }
+
+// StaffMember is a member returned in the staff list.
+type StaffMember struct {
+	ID          uuid.UUID
+	DisplayName string
+	DistrictID  *uuid.UUID
+	Verified    bool
+	VerifiedAt  *time.Time
+	Suspended   bool
+	SuspendedAt *time.Time
+}
+
+// StaffMemberPage is a page of staff members with an opaque next cursor.
+type StaffMemberPage struct {
+	Items      []StaffMember
+	NextCursor string
+}
+
+// StaffMemberListFilter holds the filter and paging parameters for listing members for staff.
+type StaffMemberListFilter struct {
+	Status     string // "verified" or "suspended"
+	DistrictID *uuid.UUID
+	Cursor     string
+}
 
 // Suspension is the staff view of a member's suspension state.
 type Suspension struct {

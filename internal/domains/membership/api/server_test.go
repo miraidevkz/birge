@@ -64,8 +64,21 @@ func newServer(t *testing.T) (*testServer, func(sql string, args ...any)) {
 	var logs bytes.Buffer
 	h := api.NewHTTPHandler(svc, slog.New(slog.NewTextHandler(&logs, nil)), "/v1")
 	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := auth.Principal{}
 		if id, err := uuid.Parse(r.Header.Get("X-Test-Identity")); err == nil {
-			r = r.WithContext(auth.WithPrincipal(r.Context(), auth.Principal{IdentityID: id}))
+			p.IdentityID = id
+		}
+		if r.Header.Get("X-Test-Staff") == "true" {
+			p.Staff = true
+		}
+		if r.Header.Get("X-Test-MFA") == "true" {
+			p.MFA = true
+		}
+		if roles := r.Header.Get("X-Test-Roles"); roles != "" {
+			p.Roles = strings.Split(roles, ",")
+		}
+		if p.IdentityID != uuid.Nil || p.Staff {
+			r = r.WithContext(auth.WithPrincipal(r.Context(), p))
 		}
 		h.ServeHTTP(w, r)
 	})
@@ -81,6 +94,9 @@ func newServer(t *testing.T) (*testServer, func(sql string, args ...any)) {
 type call struct {
 	method, path, body string
 	identity           uuid.UUID
+	staff              bool
+	mfa                bool
+	roles              []string
 	key                bool // send an Idempotency-Key
 	keyValue           string
 }
@@ -94,6 +110,15 @@ func (s *testServer) do(c call) (int, http.Header, []byte) {
 	req := httptest.NewRequestWithContext(context.Background(), c.method, "/v1"+c.path, body)
 	if c.identity != uuid.Nil {
 		req.Header.Set("X-Test-Identity", c.identity.String())
+	}
+	if c.staff {
+		req.Header.Set("X-Test-Staff", "true")
+	}
+	if c.mfa {
+		req.Header.Set("X-Test-MFA", "true")
+	}
+	if len(c.roles) > 0 {
+		req.Header.Set("X-Test-Roles", strings.Join(c.roles, ","))
 	}
 	if c.keyValue != "" {
 		req.Header.Set("Idempotency-Key", c.keyValue)
@@ -222,6 +247,12 @@ func TestOperations(t *testing.T) {
 		{"missing child", call{method: http.MethodPut, path: "/me/children/" + uuid.NewString(), identity: me, body: `{"birthYear":2019,"needs":[]}`}, 404, "child_not_found"},
 		{"delete missing child", call{method: http.MethodDelete, path: "/me/children/" + uuid.NewString(), identity: me}, 404, "child_not_found"},
 		{"already verified", call{method: http.MethodPost, path: "/me/verification-requests", identity: me, key: true}, 409, "already_verified"},
+		{"anonymous staff members", call{method: http.MethodGet, path: "/staff/members?status=verified"}, 401, "unauthenticated"},
+		{"member staff members", call{method: http.MethodGet, path: "/staff/members?status=verified", identity: me}, 401, "unauthenticated"},
+		{"staff members no mfa", call{method: http.MethodGet, path: "/staff/members?status=verified", identity: uuid.New(), staff: true, mfa: false, roles: []string{"moderator"}}, 403, "forbidden"},
+		{"staff members wrong role", call{method: http.MethodGet, path: "/staff/members?status=verified", identity: uuid.New(), staff: true, mfa: true, roles: []string{"psychologist"}}, 403, "forbidden"},
+		{"staff members missing status", call{method: http.MethodGet, path: "/staff/members", identity: uuid.New(), staff: true, mfa: true, roles: []string{"moderator"}}, 400, "invalid_request"},
+		{"staff members bad status", call{method: http.MethodGet, path: "/staff/members?status=invalid", identity: uuid.New(), staff: true, mfa: true, roles: []string{"moderator"}}, 400, "invalid_request"},
 	}
 	for _, tt := range problems {
 		t.Run(tt.name, func(t *testing.T) {
@@ -244,5 +275,43 @@ func TestOperations(t *testing.T) {
 
 	if strings.Contains(s.log.String(), testName) {
 		t.Errorf("logs carry the display name: %s", s.log.String())
+	}
+}
+
+func TestStaffListMembersEndpoint(t *testing.T) {
+	s, exec := newServer(t)
+	cityID, districtID := uuid.New(), uuid.New()
+	exec(`INSERT INTO membership.cities (id, code) VALUES ($1, 'city_staff')`, cityID)
+	exec(`INSERT INTO membership.districts (id, city_id, code) VALUES ($1, $2, 'dist_staff')`, districtID, cityID)
+
+	memberID := uuid.New()
+	identityID := uuid.New()
+	sealedName, err := testEncryptor{}.Seal(context.Background(), memberID, []byte("StaffTestUser"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`INSERT INTO membership.members (id, identity_id, display_name, district_id, verification, verified_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 'verified', now(), now(), now())`, memberID, identityID, sealedName, districtID)
+
+	staffID := uuid.New()
+	var page api.StaffMemberPage
+	s.json(call{
+		method:   http.MethodGet,
+		path:     "/staff/members?status=verified&districtId=" + districtID.String(),
+		identity: staffID,
+		staff:    true,
+		mfa:      true,
+		roles:    []string{"moderator"},
+	}, 200, &page)
+
+	if len(page.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(page.Items))
+	}
+	item := page.Items[0]
+	if item.Id != memberID || item.DisplayName != "StaffTestUser" || !item.Verified || item.VerifiedAt == nil || item.Suspended {
+		t.Errorf("unexpected staff member: %+v", item)
+	}
+	if item.DistrictId == nil || *item.DistrictId != districtID {
+		t.Errorf("districtId = %v, want %v", item.DistrictId, districtID)
 	}
 }

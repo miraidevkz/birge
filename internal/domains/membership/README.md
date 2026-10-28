@@ -9,7 +9,7 @@ Members, children, verification requests, blocks (ADR-0019), staff suspension an
 | `cities` | Deployment city reference | none |
 | `districts` | Districts of a city | none |
 | `needs` | Special-needs codes (labels in locale files) | none |
-| `members` | One row per identity; created lazily on first authenticated call; optional `suspended_at` / `suspended_reason` from moderation `block_author`; after account deletion a tombstone (`deleted_at`) | `display_name` encrypted (Encryptor / ADR-0009); `identity_id` is an ID |
+| `members` | One row per identity; created lazily on first authenticated call; optional `verified_at`; optional `suspended_at` / `suspended_reason` from moderation `block_author`; after account deletion a tombstone (`deleted_at`) | `display_name` encrypted (Encryptor / ADR-0009); `identity_id` is an ID |
 | `children` | Child cards (birth year + needs); no names | none |
 | `verification_requests` | Moderator verification queue (`reject_reason` when rejected) | none |
 | `blocks` | Mutual invisibility (ADR-0019) | none |
@@ -25,6 +25,7 @@ Operations of tag `membership` in `contracts/openapi/birge.yaml`:
 | `POST /me/verification-requests` | At most one pending request; repeats return the current member without a second event. |
 | `GET /me/blocks`, `PUT/DELETE /me/blocks/{memberId}` | Idempotent block/unblock; no self-block; cap `MaxBlocks` (1000). Blocked member is not notified. |
 | `GET /reference/districts`, `GET /reference/needs` | Anonymous (`security: []`). |
+| `GET /staff/members` | Staff `moderator` or `admin`, MFA. Lists verified or suspended members (`status=verified|suspended`, optional `districtId`, keyset `cursor`). Page size 50. Every read is audited as `membership.member.list` (staff ID, status filter, count; never names). Tombstoned members never appear. |
 | `GET /staff/members/{memberId}/suspension` | Staff `moderator` or `admin`, MFA. |
 | `DELETE /staff/members/{memberId}/suspension` | Staff `admin`, MFA; lifts suspension; audited. |
 
@@ -81,6 +82,7 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 - At most one pending verification request per member (partial unique index + service).
 - Blocks: no self-block, idempotent, mutual invisibility via `IsBlocked` (schema CHECK + service; ADR-0019).
 - Suspension: `suspended_at` and `suspended_reason` both set or both null; suspended members get 403 `member_suspended` on member routes and are hidden like a block.
+- Staff member list (`/staff/members`): only `displayName` and `districtId` from the member, plus `verified`/`verifiedAt`, `suspended`/`suspendedAt` (never phone, children, needs, language). Keyset paging (most recent `verified_at` / `suspended_at` first), page size 50. Every read is audited in `platform.audit_log`; deleted members never appear.
 - Account deletion (AGENTS.md N6, ADR-0009): children, verification requests and blocks in both directions are deleted; the member row becomes a tombstone that keeps only `id` and `identity_id` (`display_name`, district, roles and suspension cleared, `deleted_at` set) and is never deleted. A deleted account has no crisis exemption: `CrisisMemberID` refuses it with 401 like every other route. `moderation.Decided` for her (verification, `SuspendAuthor`) is a no-op. Why: the identity must stay refused. Every session of it gets 401 (`model.ErrAccountDeleted` in `ensure` and the session middleware) and lazy creation never makes a new member for it, also after the Kratos identity is gone and an old token is replayed. `Member(id)` does not find a tombstone. One audit entry `membership.member_deleted` (actor system). A moderation item about a deleted verification request keeps only its IDs.
 
 ## Failure modes

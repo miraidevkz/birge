@@ -75,11 +75,64 @@ func (t *pgTx) ListVerifiedInDistrict(ctx context.Context, districtID uuid.UUID)
 	return ids, nil
 }
 
+// ListStaffMembers returns members by status (verified or suspended) with keyset paging.
+func (t *pgTx) ListStaffMembers(ctx context.Context, f port.StaffMemberListFilter) ([]port.StaffMemberRecord, error) {
+	switch f.Status {
+	case model.StaffMemberStatusVerified:
+		rows, err := t.q.ListStaffMembersVerified(ctx, store.ListStaffMembersVerifiedParams{
+			DistrictID:       f.DistrictID,
+			CursorVerifiedAt: f.CursorTime,
+			CursorID:         f.CursorID,
+			PageLimit:        f.Limit,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("membership: list staff members verified: %w", err)
+		}
+		out := make([]port.StaffMemberRecord, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, port.StaffMemberRecord{
+				ID:           r.ID,
+				SealedName:   r.DisplayName,
+				DistrictID:   r.DistrictID,
+				Verification: model.Verification(r.Verification),
+				VerifiedAt:   r.VerifiedAt,
+				SuspendedAt:  r.SuspendedAt,
+			})
+		}
+		return out, nil
+	case model.StaffMemberStatusSuspended:
+		rows, err := t.q.ListStaffMembersSuspended(ctx, store.ListStaffMembersSuspendedParams{
+			DistrictID:        f.DistrictID,
+			CursorSuspendedAt: f.CursorTime,
+			CursorID:          f.CursorID,
+			PageLimit:         f.Limit,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("membership: list staff members suspended: %w", err)
+		}
+		out := make([]port.StaffMemberRecord, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, port.StaffMemberRecord{
+				ID:           r.ID,
+				SealedName:   r.DisplayName,
+				DistrictID:   r.DistrictID,
+				Verification: model.Verification(r.Verification),
+				VerifiedAt:   r.VerifiedAt,
+				SuspendedAt:  r.SuspendedAt,
+			})
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("membership: invalid staff member status %q", f.Status)
+	}
+}
+
 func memberRecord(r store.GetMemberByIDRow) port.MemberRecord {
 	rec := port.MemberRecord{
 		ID: r.ID, IdentityID: r.IdentityID, SealedName: r.DisplayName, Lang: model.Lang(r.Lang),
 		CityID: r.CityID, DistrictID: r.DistrictID, Verification: model.Verification(r.Verification),
-		Roles: r.Roles, SuspendedAt: r.SuspendedAt,
+		VerifiedAt: r.VerifiedAt,
+		Roles:      r.Roles, SuspendedAt: r.SuspendedAt,
 		Deleted: r.DeletedAt != nil,
 	}
 	if r.SuspendedReason != nil {

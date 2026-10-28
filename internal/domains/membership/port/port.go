@@ -33,6 +33,7 @@ type MemberRecord struct {
 	CityID          *uuid.UUID
 	DistrictID      *uuid.UUID
 	Verification    model.Verification
+	VerifiedAt      *time.Time
 	Roles           []string
 	SuspendedAt     *time.Time
 	SuspendedReason string
@@ -72,6 +73,25 @@ type BlockRecord struct {
 	Since      time.Time
 }
 
+// StaffMemberListFilter filters and pages staff member queries.
+type StaffMemberListFilter struct {
+	Status     string // "verified" or "suspended"
+	DistrictID *uuid.UUID
+	CursorTime *time.Time
+	CursorID   *uuid.UUID
+	Limit      int32
+}
+
+// StaffMemberRecord is a member row returned for staff queries; display name is sealed.
+type StaffMemberRecord struct {
+	ID           uuid.UUID
+	SealedName   []byte
+	DistrictID   *uuid.UUID
+	Verification model.Verification
+	VerifiedAt   *time.Time
+	SuspendedAt  *time.Time
+}
+
 // Tx is the store bound to one transaction.
 type Tx interface {
 	// MemberByIdentity returns model.ErrMemberNotFound when absent.
@@ -80,6 +100,8 @@ type Tx interface {
 	MemberByID(ctx context.Context, id uuid.UUID) (MemberRecord, error)
 	// ListVerifiedInDistrict returns the IDs of verified members in districtID.
 	ListVerifiedInDistrict(ctx context.Context, districtID uuid.UUID) ([]uuid.UUID, error)
+	// ListStaffMembers returns members by status (verified or suspended) with keyset paging.
+	ListStaffMembers(ctx context.Context, f StaffMemberListFilter) ([]StaffMemberRecord, error)
 	// LockMember locks the member row until the end of the transaction.
 	LockMember(ctx context.Context, id uuid.UUID) error
 	// InsertMember creates the member of identityID; created is false when it already exists.

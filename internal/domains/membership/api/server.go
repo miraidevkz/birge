@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"birge/internal/domains/membership/model"
@@ -201,6 +202,70 @@ func (h *Server) LiftMemberSuspension(ctx context.Context, req LiftMemberSuspens
 		return fail[LiftMemberSuspensiondefaultApplicationProblemPlusJSONResponse](err)
 	}
 	return LiftMemberSuspension204Response{}, nil
+}
+
+// StaffListMembers lists verified or suspended members for staff.
+func (h *Server) StaffListMembers(ctx context.Context, req StaffListMembersRequestObject) (StaffListMembersResponseObject, error) {
+	var districtID *uuid.UUID
+	if req.Params.DistrictId != nil {
+		id := *req.Params.DistrictId
+		districtID = &id
+	}
+	var cursor string
+	if req.Params.Cursor != nil {
+		cursor = *req.Params.Cursor
+	}
+	filter := model.StaffMemberListFilter{
+		Status:     string(req.Params.Status),
+		DistrictID: districtID,
+		Cursor:     cursor,
+	}
+	page, err := h.svc.StaffListMembers(ctx, filter)
+	if err != nil {
+		if st, c, t, ok := staffProblem(err); ok {
+			if st == http.StatusForbidden {
+				return StaffListMembers403ApplicationProblemPlusJSONResponse{
+					ProblemApplicationProblemPlusJSONResponse: ProblemApplicationProblemPlusJSONResponse(problem(st, c, t)),
+				}, nil
+			}
+			return StaffListMembersdefaultApplicationProblemPlusJSONResponse{
+				StatusCode: st,
+				Body:       problem(st, c, t),
+			}, nil
+		}
+		return fail[StaffListMembersdefaultApplicationProblemPlusJSONResponse](err)
+	}
+
+	items := make([]StaffMember, 0, len(page.Items))
+	for _, m := range page.Items {
+		item := StaffMember{
+			Id:          m.ID,
+			DisplayName: m.DisplayName,
+			Verified:    m.Verified,
+			Suspended:   m.Suspended,
+		}
+		if m.DistrictID != nil {
+			dID := *m.DistrictID
+			item.DistrictId = &dID
+		}
+		if m.VerifiedAt != nil {
+			vAt := *m.VerifiedAt
+			item.VerifiedAt = &vAt
+		}
+		if m.SuspendedAt != nil {
+			sAt := *m.SuspendedAt
+			item.SuspendedAt = &sAt
+		}
+		items = append(items, item)
+	}
+	resp := StaffMemberPage{
+		Items: items,
+	}
+	if page.NextCursor != "" {
+		c := page.NextCursor
+		resp.NextCursor = &c
+	}
+	return StaffListMembers200JSONResponse(resp), nil
 }
 
 func problem(status int, code, title string) Problem {
