@@ -77,7 +77,7 @@ var StaffModerationRoles = []string{"moderator", "admin"}
 const MentorRole = "mentor"
 
 // EscalationSource is the safety escalation source for crisis messages in
-// chats (safety model.SourceChat on main since 117e099).
+// chats (safety model.SourceChat on main since 2632013).
 const EscalationSource = "chat"
 
 // Limits fixed by the contract or the requirements.
