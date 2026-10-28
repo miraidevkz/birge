@@ -266,6 +266,17 @@ func (t *memoryTx) DeleteDevice(_ context.Context, memberID, deviceID uuid.UUID)
 	return nil
 }
 
+// DeleteRejectedDevice removes the registration while it still holds pushToken.
+func (t *memoryTx) DeleteRejectedDevice(_ context.Context, memberID, deviceID uuid.UUID, pushToken string) (bool, error) {
+	key := memberID.String() + "|" + deviceID.String()
+	d, ok := t.s.devices[key]
+	if !ok || d.PushToken != pushToken {
+		return false, nil
+	}
+	delete(t.s.devices, key)
+	return true, nil
+}
+
 // ListDevices returns every push device registered for the member.
 func (t *memoryTx) ListDevices(_ context.Context, memberID uuid.UUID) ([]model.Device, error) {
 	var out []model.Device
@@ -338,6 +349,19 @@ func (s *MemoryStore) DeliveryStatus(notificationID uuid.UUID, channel string) (
 		return "", false
 	}
 	return d.Status, true
+}
+
+// DeviceCount is a test helper: how many devices the member has registered.
+func (s *MemoryStore) DeviceCount(memberID uuid.UUID) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for _, d := range s.devices {
+		if d.MemberID == memberID {
+			n++
+		}
+	}
+	return n
 }
 
 var (

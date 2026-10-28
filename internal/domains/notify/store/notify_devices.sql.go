@@ -30,6 +30,28 @@ func (q *Queries) DeleteDevice(ctx context.Context, arg DeleteDeviceParams) (int
 	return result.RowsAffected(), nil
 }
 
+const deleteRejectedDevice = `-- name: DeleteRejectedDevice :execrows
+DELETE FROM notify.devices
+WHERE member_id = $1 AND device_id = $2 AND push_token = $3
+`
+
+type DeleteRejectedDeviceParams struct {
+	MemberID  uuid.UUID
+	DeviceID  uuid.UUID
+	PushToken string
+}
+
+// Removes a registration whose token the push provider rejected. The token
+// must still match: if the app re-registered a fresh token in the meantime,
+// the new registration stays.
+func (q *Queries) DeleteRejectedDevice(ctx context.Context, arg DeleteRejectedDeviceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRejectedDevice, arg.MemberID, arg.DeviceID, arg.PushToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listDevices = `-- name: ListDevices :many
 SELECT member_id, device_id, platform, push_token, updated_at
 FROM notify.devices

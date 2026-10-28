@@ -210,6 +210,16 @@ func (t *postgresTx) DeleteDevice(ctx context.Context, memberID, deviceID uuid.U
 	return err
 }
 
+// DeleteRejectedDevice removes the registration while it still holds pushToken.
+func (t *postgresTx) DeleteRejectedDevice(ctx context.Context, memberID, deviceID uuid.UUID, pushToken string) (bool, error) {
+	n, err := t.notify.DeleteRejectedDevice(ctx, notifystore.DeleteRejectedDeviceParams{
+		MemberID:  memberID,
+		DeviceID:  deviceID,
+		PushToken: pushToken,
+	})
+	return n > 0, err
+}
+
 // ListDevices returns every push device registered for the member.
 func (t *postgresTx) ListDevices(ctx context.Context, memberID uuid.UUID) ([]model.Device, error) {
 	rows, err := t.notify.ListDevices(ctx, memberID)

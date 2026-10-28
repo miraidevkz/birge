@@ -44,12 +44,32 @@ none (other contexts publish `notify.DeliveryRequested`; they do not call this s
 
 Ports used by this context (wired in `internal/wiring`): `Recipients` (`Resolve` for kind/ref/language only; `PhoneFor` at SMS send time), `PushSender`, `SMSSender`, `SMSLinks` (fills `{link}` at send time: the emergency plan link of an external contact, minted by emergency; optional).
 
+## Providers
+
+| Package | Implements | Notes |
+|---|---|---|
+| `adapter/push` | `PushSender`: `FCM` (HTTP v1, Android), `APNs` (token auth, HTTP/2, iOS), `Router` (by device platform) | standard library only; OAuth2 token from a self-signed RS256 service-account JWT, cached until 5 min before expiry; APNs ES256 provider token renewed every 40 min (Apple's 20–60 min window); both safe for concurrent use |
+| `adapter/smsgw` | `SMSSender`: `HTTPSender` + `Provider` interface; `SMSC` (SMSC.kz `send.php`, `fmt=3`) | a second gateway is one file implementing `Provider` (`Name`, `Request`, `Parse`) |
+| `internal/wiring` | `LogPushSender`, `LogSMSSender` | development only (`BIRGE_DELIVERY_MODE=dev`); refused at startup otherwise |
+
+Provider errors wrap one of two classes from `port`, and the service maps them onto the existing timer retry:
+
+| Provider answer | Class | Service does |
+|---|---|---|
+| FCM `UNREGISTERED`, `SENDER_ID_MISMATCH`, 404, 400 naming `message.token`; APNs 410, `Unregistered`, `BadDeviceToken`, `DeviceTokenNotForTopic` | `port.ErrTokenInvalid` | removes that device registration (`DeleteRejectedDevice`, only while it still holds the rejected token); no retry for it |
+| other 4xx (bad payload); SMSC codes 1, 5, 6, 7, 8, 9; platform without a provider | `port.ErrPermanent` | delivery `failed`, timer completes (no retry) |
+| 429, 5xx, transport errors, 401/403 (our credentials), token endpoint failures; SMSC codes 2, 3, 4 and unknown | plain error | delivery `failed`, handler returns the error, the platform timer retries with `timers.Backoff` (10 s doubling to 1 h) |
+
+Push payload: `notification_id` and the neutral `Title` (from `Config.PushTitles` in the member's language) only; the same high priority for every class, so the provider cannot tell critical from normal.
+
 ## Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `service.Config.CriticalSMSAfter` | 60s | Wait for acknowledgement before member critical SMS |
 | `service.Config.SMSTexts` | required for SMS | `template → language →` neutral fixed body (no message content); unset `BIRGE_SMS_TEXTS` → DEMO preset. `{link}` is replaced at send time through `SMSLinks`, after the guard and right before the provider; no link → the SMS is skipped (`no_link`), a transient error → the timer retries. The link is never stored or logged |
+| `service.Config.PushTitles` | `Birge` | `language →` neutral push title (`BIRGE_PUSH_TITLES`) |
+| `BIRGE_PUSH_PROVIDER`, `BIRGE_SMS_PROVIDER` and credential files | `log` in dev only | see `docs/development.md` § Configuration |
 | `guard.Config.AllowedPrefixes` | empty rejects all | E.164 prefix allow-list |
 | `guard.Config.PerNumberLimit` / `PerNumberWindow` | 0 disabled / 1h | Per-number rate limit |
 | `guard.Config.GlobalLimit` / `GlobalWindow` | 0 disabled / 1m | Process-wide rate limit |
@@ -61,7 +81,8 @@ Ports used by this context (wired in `internal/wiring`): `Recipients` (`Resolve`
 - Consumers idempotent via `processed_events`; unique `(request_id, recipient_kind, recipient_ref)` (database + service).
 - `recipient_kind=member`: inbox + push; critical SMS only after acknowledgement timeout. `external`: SMS only, no inbox/push; phone looked up via `PhoneFor` at send time outside any DB transaction, never stored (service + schema).
 - `Resolve` returns kind, ref and language only — no identity-provider I/O — so a Kratos outage cannot lose `DeliveryRequested`.
-- Push and SMS carry no message content (ADR-0013); SMS bodies from config only.
+- Push and SMS carry no message content (ADR-0013); SMS bodies from config only. Push carries the notification ID and a neutral title; template, params and class never reach a provider (adapters).
+- Provider adapters never log, and their error texts hold the HTTP status and the provider's reason code only: no token, phone, text or credential (adapters; tests grep logs and errors).
 - `sms/guard` before every SMS; critical uses `AllowCritical` (no daily budget). Guard rejects for critical → `CriticalSMSBlocked` + delivery `failed` (not `skipped`).
 - Logs and events: IDs and event names only — never text, phones or push tokens (service + ports).
 - Marking critical read acknowledges and cancels CriticalSMS (service).
@@ -72,12 +93,16 @@ Ports used by this context (wired in `internal/wiring`): `Recipients` (`Resolve`
 - Database down: inbox/device HTTP and timer handlers fail; JetStream messages are nacked/retried by the consumer.
 - Recipients unresolved: `HandleDeliveryRequested` returns `ErrRecipientUnresolved` (message retried); no partial notification for that event until resolve succeeds after `MarkProcessed` — resolve runs before the transaction.
 - `PhoneFor` failure (identity provider down): SMS timer handler returns an error; delivery stays pending and retries with backoff — never dropped silently. Empty phone → delivery `skipped`.
-- Push/SMS provider down: delivery marked `failed`; timer retry may contact the provider again (at-least-once).
+- Push/SMS provider down, 429 or 5xx: delivery marked `failed`; the handler returns the error and the timer retries with backoff (at-least-once: a provider that accepted but whose reply was lost may get the message again; SMSC answers code 9 to such a repeat within a minute, which is treated as permanent so no duplicate SMS is sent).
+- Push token rejected: that device registration is removed; the app registers a fresh token on its next start. Other devices of the member are still tried.
+- Permanent provider rejection (bad number, forbidden text, bad payload): delivery `failed`, no retry.
+- Wrong provider credentials: every send fails transiently and retries with backoff until an operator fixes the file and restarts the worker. A credential file that does not parse refuses startup.
 - Guard / missing SMS text: non-critical → `skipped`; critical guard → `failed` + `CriticalSMSBlocked` log; missing text → `skipped`.
 - Broker down: outbox from producers lags; this context's consumer stops receiving until JetStream recovers.
 
 ## Tests
 
-- Unit: `service/ladder_test.go`, `service/pagination_test.go`, `sms/guard/guard_test.go`, `api/handler` tests via notifytest fakes — ladder, idempotency, guard, cursor.
-- Integration: `adapter/integration_test.go` — PostgreSQL + NATS consumer path with `testinfra`.
+- Unit: `service/ladder_test.go`, `service/pagination_test.go`, `service/provider_errors_test.go`, `sms/guard/guard_test.go`, `api/handler` tests via notifytest fakes — ladder, idempotency, guard, cursor, provider error mapping.
+- Providers: `adapter/push` (httptest FCM with token endpoint and renewal; HTTP/2 TLS httptest APNs; error mapping; bad key files; service end to end with a log grep) and `adapter/smsgw` (httptest SMSC: form, error codes, service end to end with a log grep).
+- Integration: `adapter/integration_test.go` — PostgreSQL + NATS consumer path with `testinfra`; `DeleteRejectedDevice` keeps a re-registered token.
 - Fakes: `notifytest/` (in-memory store, fake push/SMS).

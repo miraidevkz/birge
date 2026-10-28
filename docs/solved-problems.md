@@ -14,6 +14,7 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 
 - **Side effects after commit go through a timer or the outbox created in the same transaction.** A push sent after commit is lost if the process dies in between. (dc3bffd)
 - **A consumer must not depend on a third service to accept an event.** Look external data (a phone from the identity provider) up when it is needed, outside database transactions; otherwise an outage exhausts redeliveries and loses the event. (b668657)
+- **A provider error text never comes straight from `net/http`.** `*url.Error` repeats the request URL, and the APNs URL holds the device token, so a logged transport error leaks it. Unwrap `*url.Error`, keep only the status and the provider's reason code, and test that the error text (not only the log) lacks the token, phone and credentials. (notify providers)
 - **Idempotency needs a natural key.** One pending verification request or one open escalation per member is a partial unique index; `ON CONFLICT (id)` with a fresh id makes nothing idempotent. (cbd1339)
 
 ## Safety and privacy

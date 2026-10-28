@@ -259,10 +259,9 @@ func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
 // others are stopped and the error is returned, so the orchestrator restarts
 // the process instead of running it half-working.
 func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
-	if cfg.DeliveryMode != DeliveryModeDev {
-		// Load refuses this already; checked again because silently
-		// dropping notifications is the failure this guards against.
-		return errors.New("worker: no push or SMS provider configured")
+	pushSender, smsSender, err := DeliverySenders(cfg, logger)
+	if err != nil {
+		return fmt.Errorf("worker: %w", err)
 	}
 	if cfg.Lexicon == nil {
 		return errors.New("worker: crisis lexicon is required")
@@ -311,7 +310,6 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	if cfg.DeliveryMode == DeliveryModeDev && len(cfg.SMSTexts) == 0 {
 		logger.Warn("BIRGE_SMS_TEXTS is empty: every SMS will be skipped (no text)")
 	}
-	logger.Warn("log-only delivery: push and SMS are logged, not sent", "mode", cfg.DeliveryMode)
 	circle := &circleservice.Service{
 		Store:   &circleadapter.PostgresStore{Pool: pool},
 		Members: &CircleMembers{Members: members},
@@ -334,13 +332,13 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		Recipients: &Recipients{
 			Members: members, Phones: identities, Staff: safety, Emergency: emergency, StaffLang: cfg.StaffSMSLang,
 		},
-		Push:   LogPushSender{Logger: logger},
-		SMS:    LogSMSSender{Logger: logger},
+		Push:   pushSender,
+		SMS:    smsSender,
 		Links:  &PlanSMSLinks{Emergency: emergency, PublicURL: cfg.PublicURL},
 		Guard:  guard.New(cfg.SMSGuard),
 		Clock:  clk,
 		Logger: logger,
-		Config: notifyservice.Config{CriticalSMSAfter: cfg.CriticalSMSAfter, SMSTexts: cfg.SMSTexts},
+		Config: notifyservice.Config{CriticalSMSAfter: cfg.CriticalSMSAfter, SMSTexts: cfg.SMSTexts, PushTitles: cfg.PushTitles},
 	}
 	privacy := &privacyservice.Service{
 		Store:    &privacyadapter.PostgresStore{Pool: pool},

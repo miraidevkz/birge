@@ -13,6 +13,7 @@ import (
 	"birge/internal/domains/notify/adapter"
 	"birge/internal/domains/notify/model"
 	"birge/internal/domains/notify/notifytest"
+	"birge/internal/domains/notify/port"
 	"birge/internal/domains/notify/service"
 	"birge/internal/domains/notify/sms/guard"
 	"birge/internal/platform/testinfra"
@@ -284,5 +285,45 @@ func waitMsg(ctx context.Context, cons jetstream.Consumer) (jetstream.Msg, error
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+	}
+}
+
+func TestDeleteRejectedDeviceMatchesToken(t *testing.T) {
+	ctx := context.Background()
+	store := &adapter.PostgresStore{Pool: testinfra.Postgres(t)}
+	member := uuid.Must(uuid.NewV7())
+	device := uuid.Must(uuid.NewV7())
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	register := func(token string) {
+		t.Helper()
+		if err := store.InTx(ctx, func(tx port.Tx) error {
+			return tx.UpsertDevice(ctx, model.Device{MemberID: member, DeviceID: device, Platform: model.PlatformAndroid, PushToken: token, UpdatedAt: now})
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	remove := func(token string) (removed bool, left int) {
+		t.Helper()
+		if err := store.InTx(ctx, func(tx port.Tx) error {
+			var err error
+			if removed, err = tx.DeleteRejectedDevice(ctx, member, device, token); err != nil {
+				return err
+			}
+			devices, err := tx.ListDevices(ctx, member)
+			left = len(devices)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return removed, left
+	}
+
+	register("token-old-1")
+	register("token-new-1") // the app re-registered before the rejection landed
+	if removed, left := remove("token-old-1"); removed || left != 1 {
+		t.Fatalf("stale rejection: removed=%v left=%d, want the fresh registration kept", removed, left)
+	}
+	if removed, left := remove("token-new-1"); !removed || left != 0 {
+		t.Fatalf("rejection: removed=%v left=%d, want the registration gone", removed, left)
 	}
 }

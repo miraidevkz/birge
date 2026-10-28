@@ -98,7 +98,16 @@ A fresh deployment can start with no configuration or reference data files: when
 | `BIRGE_SMS_GLOBAL_LIMIT`, `BIRGE_SMS_GLOBAL_WINDOW` | worker | `60`, `1m` | notify SMS guard: sends per process per window |
 | `BIRGE_SMS_DAILY_BUDGET` | worker | `1000` | notify SMS guard: sends per UTC day (does not block critical SMS) |
 | `BIRGE_SMS_TEXTS` | worker | DEMO preset | neutral fixed SMS bodies, JSON `{"<template>": {"kk": "...", "ru": "...", "en": "..."}}`; unset → `presets/demo/sms_texts.json`; required when `BIRGE_DELIVERY_MODE` is not `dev` and the value is an empty object; an SMS for a template without a text is skipped (and logged). The placeholder `{link}` is replaced at send time with a link the worker mints (today only `emergency.plan_sent` to an external contact); an SMS whose text has `{link}` and gets no link is skipped. Keep the rest of the text a neutral sentence |
-| `BIRGE_DELIVERY_MODE` | worker | required | `dev` only: push and SMS are logged (notification ID and channel), not sent. There are no real providers yet, so any other value refuses to start rather than drop notifications |
+| `BIRGE_DELIVERY_MODE` | worker | required | `production` or `dev`. Only `dev` may use the log-only senders (they log the notification ID and channel and send nothing); in `production` both providers below are required and `log` refuses to start rather than drop notifications |
+| `BIRGE_PUSH_PROVIDER` | worker | `log` in dev, required otherwise | `log`, or a comma list of `fcm` (Android) and `apns` (iOS). A device whose platform has no provider gets no push (delivery `failed`, device kept) |
+| `BIRGE_FCM_SERVICE_ACCOUNT_FILE` | worker | required with `fcm` | Google service-account JSON key (Firebase Cloud Messaging API enabled, role "Firebase Cloud Messaging API Admin"). Parsed at startup; the OAuth2 token is cached and renewed 5 minutes before it expires |
+| `BIRGE_APNS_KEY_FILE`, `BIRGE_APNS_KEY_ID`, `BIRGE_APNS_TEAM_ID` | worker | required with `apns` | APNs token-auth key (`.p8`) with its 10-character key ID and team ID. Parsed at startup; the provider token is renewed every 40 minutes |
+| `BIRGE_APNS_TOPIC` | worker | required with `apns` | the iOS app's bundle ID |
+| `BIRGE_APNS_ENVIRONMENT` | worker | `production` | `production` or `sandbox`; must match the app build, otherwise APNs answers `BadDeviceToken` and the device registrations are removed |
+| `BIRGE_PUSH_TITLES` | worker | `Birge` | neutral push title per language, JSON `{"kk": "...", "ru": "...", "en": "..."}`; never name the event (ADR-0013). Missing language → ru, kk, en, then `Birge` |
+| `BIRGE_SMS_PROVIDER` | worker | `log` in dev, required otherwise | `log` or `smsc` (SMSC.kz) |
+| `BIRGE_SMSC_LOGIN_FILE`, `BIRGE_SMSC_PASSWORD_FILE` | worker | required with `smsc` | files holding the SMSC.kz account login and password (trailing newline removed) |
+| `BIRGE_SMSC_SENDER` | worker | account default | registered alphanumeric sender ID, up to 11 Latin letters, digits or spaces |
 | `BIRGE_EVENTS_MAX_AGE` | worker | `720h` | JetStream EVENTS stream MaxAge (how long events are retained) |
 | `BIRGE_EVENTS_MAX_BYTES` | worker | `1073741824` (1 GiB) | JetStream EVENTS stream MaxBytes (size cap; oldest messages discarded first) |
 | `BIRGE_LLM_MODEL` | api | `claude-opus-5-5` | Anthropic model id for the assistant (logged with every reply) |

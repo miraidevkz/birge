@@ -33,7 +33,14 @@ type Config struct {
 	CriticalSMSAfter time.Duration
 	// SMSTexts maps template key -> language -> neutral fixed SMS body.
 	SMSTexts map[string]map[string]string
+	// PushTitles maps language -> neutral push title (ADR-0013: it never
+	// names the event). Empty falls back to DefaultPushTitle.
+	PushTitles map[string]string
 }
+
+// DefaultPushTitle is the push title when PushTitles has none: the product
+// name, the same in kk, ru and en, and neutral by construction.
+const DefaultPushTitle = "Birge"
 
 // Service is the notify application service.
 type Service struct {
@@ -225,9 +232,13 @@ func (s *Service) finishPush(ctx context.Context, n model.Notification, devices 
 		})
 	}
 
-	var lastErr error
-	var providerID string
-	sent := false
+	title := s.pushTitle(ctx, n)
+	var (
+		lastTransient error
+		rejected      []model.Device
+		providerID    string
+		sent          bool
+	)
 	for _, d := range devices {
 		pid, err := s.Push.Send(ctx, port.PushMessage{
 			MemberID:       d.MemberID,
@@ -235,12 +246,19 @@ func (s *Service) finishPush(ctx context.Context, n model.Notification, devices 
 			PushToken:      d.PushToken,
 			Platform:       d.Platform,
 			NotificationID: n.ID,
+			Title:          title,
 			Template:       n.Template,
 			Params:         n.Params,
 			Class:          n.Class,
 		})
 		if err != nil {
-			lastErr = err
+			switch {
+			case errors.Is(err, port.ErrTokenInvalid):
+				rejected = append(rejected, d)
+			case errors.Is(err, port.ErrPermanent):
+			default:
+				lastTransient = err
+			}
 			s.log().Error("push send failed", "event", "PushFailed", "notification_id", n.ID, "device_id", d.DeviceID, "error", err)
 			continue
 		}
@@ -249,7 +267,18 @@ func (s *Service) finishPush(ctx context.Context, n model.Notification, devices 
 		break
 	}
 
-	return s.Store.InTx(ctx, func(tx port.Tx) error {
+	err := s.Store.InTx(ctx, func(tx port.Tx) error {
+		// A rejected token is dead for every future notification too, so the
+		// registration goes even when another device received this one.
+		for _, d := range rejected {
+			removed, err := tx.DeleteRejectedDevice(ctx, d.MemberID, d.DeviceID, d.PushToken)
+			if err != nil {
+				return err
+			}
+			if removed {
+				s.log().Info("push device removed", "event", "PushDeviceRejected", "notification_id", n.ID, "device_id", d.DeviceID)
+			}
+		}
 		id, status, attempts, err := tx.GetDelivery(ctx, n.ID, model.ChannelPush)
 		if err != nil {
 			return err
@@ -265,9 +294,45 @@ func (s *Service) finishPush(ctx context.Context, n model.Notification, devices 
 			}
 			return tx.UpdateDelivery(ctx, id, model.StatusSent, attempts, pid, now)
 		}
-		_ = lastErr
 		return tx.UpdateDelivery(ctx, id, model.StatusFailed, attempts, nil, now)
 	})
+	if err != nil {
+		return err
+	}
+	if !sent && lastTransient != nil {
+		// Returning the error makes the platform timer retry with backoff
+		// (failed is not a final status for HandlePush). Rejected tokens and
+		// permanent rejections alone do not retry: nothing would change.
+		return fmt.Errorf("push: %w", lastTransient)
+	}
+	return nil
+}
+
+// pushTitle picks the neutral push title in the member's language. Resolve
+// does no identity-provider I/O; if it fails anyway, the push still goes out
+// with the default-language title rather than wait for a retry.
+func (s *Service) pushTitle(ctx context.Context, n model.Notification) string {
+	lang := ""
+	resolved, err := s.Recipients.Resolve(ctx, model.RecipientForm(n.RecipientKind, n.RecipientRef))
+	if err == nil && len(resolved) > 0 {
+		lang = resolved[0].Language
+	}
+	return PushTitle(s.Config.PushTitles, lang)
+}
+
+// PushTitle returns titles[lang], else the first of ru, kk, en that is set,
+// else DefaultPushTitle. The fallback is the product name, which needs no
+// translation, so a push never goes out with an empty title.
+func PushTitle(titles map[string]string, lang string) string {
+	if t := titles[lang]; t != "" {
+		return t
+	}
+	for _, l := range []string{"ru", "kk", "en"} {
+		if t := titles[l]; t != "" {
+			return t
+		}
+	}
+	return DefaultPushTitle
 }
 
 // HandleExternalSMS sends SMS immediately for an external recipient (any class).
@@ -476,7 +541,17 @@ func (s *Service) sendSMS(ctx context.Context, notificationID uuid.UUID, mode sm
 		_ = s.Store.InTx(ctx, func(tx port.Tx) error {
 			return tx.UpdateDelivery(ctx, deliveryID, model.StatusFailed, attempts, nil, now)
 		})
-		s.log().Error("sms send failed", "event", "SMSFailed", "notification_id", n.ID, "error", err)
+		permanent := errors.Is(err, port.ErrPermanent)
+		s.log().Error("sms send failed", "event", "SMSFailed", "notification_id", n.ID, "permanent", permanent, "error", err)
+		if permanent {
+			// The provider refused this number or text for good; retrying
+			// every hour would only repeat the refusal (and on some
+			// providers count towards an IP block). The failed delivery
+			// stays visible for operators.
+			return nil
+		}
+		// Transient (provider down, 429, out of balance, credentials being
+		// fixed): the timer retries with backoff.
 		return err
 	}
 	var pid *string

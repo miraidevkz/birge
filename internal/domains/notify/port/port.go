@@ -3,6 +3,7 @@ package port
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,17 +28,42 @@ type Recipients interface {
 	PhoneFor(ctx context.Context, kind string, ref uuid.UUID) (string, error)
 }
 
-// PushMessage is a content-free push: the client renders Template with Params.
+// PushMessage is a content-free push. Providers put only NotificationID and
+// Title on the wire (ADR-0013): the app opens the inbox, which is the source
+// of truth, and renders Template with Params there. Template, Params and
+// Class stay on this side so a provider adapter never needs them; they must
+// not be copied into a provider payload, because even the template key tells
+// Google or Apple what kind of event happened (for example an SOS).
 type PushMessage struct {
 	MemberID       uuid.UUID
 	DeviceID       uuid.UUID
 	PushToken      string
 	Platform       string
 	NotificationID uuid.UUID
-	Template       string
-	Params         map[string]string
-	Class          string
+	// Title is the neutral title in the member's language, chosen by the
+	// service from configuration. It never names the event.
+	Title    string
+	Template string
+	Params   map[string]string
+	Class    string
 }
+
+// Provider error classes. Push and SMS adapters wrap one of these with %w so
+// the service can decide without knowing the provider. Any other error is
+// transient: the delivery is marked failed and the platform timer retries it
+// with backoff (timers.Backoff). Error texts must never contain the phone
+// number, the push token, the message text or a credential.
+var (
+	// ErrTokenInvalid means the push provider says the device token no longer
+	// exists or belongs to another app. The service removes that device
+	// registration and does not retry it; the app registers a fresh token on
+	// its next start.
+	ErrTokenInvalid = errors.New("notify: push token rejected by the provider")
+	// ErrPermanent means the provider rejected this message for a reason a
+	// retry cannot fix (malformed number, forbidden text, oversized payload).
+	// The delivery is marked failed and not retried.
+	ErrPermanent = errors.New("notify: message rejected permanently by the provider")
+)
 
 // PushSender delivers a push. Implementations must not log the token.
 type PushSender interface {
@@ -103,6 +129,10 @@ type Tx interface {
 	DeleteDevice(ctx context.Context, memberID, deviceID uuid.UUID) error
 	// ListDevices returns every push device registered for the member.
 	ListDevices(ctx context.Context, memberID uuid.UUID) ([]model.Device, error)
+	// DeleteRejectedDevice removes the registration only while it still holds
+	// pushToken (the token the provider rejected), so a token the app
+	// re-registered meanwhile survives. removed is false when nothing matched.
+	DeleteRejectedDevice(ctx context.Context, memberID, deviceID uuid.UUID, pushToken string) (removed bool, err error)
 
 	// SchedulePush enqueues notify.Push (dedup key = notification id) in this transaction.
 	SchedulePush(ctx context.Context, notificationID uuid.UUID, dueAt time.Time) error

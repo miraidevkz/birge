@@ -10,12 +10,14 @@ import (
 	"birge/internal/domains/notify/port"
 )
 
-// FakePush records Send calls without talking to a provider.
+// FakePush records Send calls without talking to a provider. ErrByToken,
+// when it has the message's token, overrides Err for that device.
 type FakePush struct {
-	mu      sync.Mutex
-	Calls   []port.PushMessage
-	Err     error
-	ReplyID string
+	mu         sync.Mutex
+	Calls      []port.PushMessage
+	Err        error
+	ErrByToken map[string]error
+	ReplyID    string
 }
 
 // Send implements port.PushSender.
@@ -23,7 +25,11 @@ func (f *FakePush) Send(_ context.Context, msg port.PushMessage) (string, error)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Calls = append(f.Calls, msg)
-	if f.Err != nil {
+	if err, ok := f.ErrByToken[msg.PushToken]; ok {
+		if err != nil {
+			return "", err
+		}
+	} else if f.Err != nil {
 		return "", f.Err
 	}
 	if f.ReplyID == "" {

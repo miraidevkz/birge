@@ -63,7 +63,7 @@ Sequence diagrams and endpoint names for these flows: [scenarios.md](scenarios.m
 | Flow | Path | Guarantee |
 |---|---|---|
 | Crisis in AI chat | L1 lexicon → anonymize → retrieve → LLM → L2 flag → fixed crisis response + `EscalationOpened` | L1 and the crisis response work with the LLM down |
-| Escalation | outbox → NATS → notify: push → SMS → backup after 15 min | at-least-once, idempotent consumers, delivery receipts |
+| Escalation | outbox → NATS → notify: push (FCM / APNs) → SMS (SMSC.kz) → backup after 15 min | at-least-once, idempotent consumers, delivery receipts; provider 429/5xx retried by the platform timer with backoff, rejected push tokens remove the device |
 | SOS | client offline queue → API → outbox → moderators + trusted contacts (+ district feed on request) | the client retries until the server acknowledges |
 | Account deletion | `DataDeletionRequested` → every context deletes its rows → per-user key destroyed | done in ≤ 24 h; backups become unreadable for that user |
 

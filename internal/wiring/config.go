@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,8 @@ import (
 	assistantservice "birge/internal/domains/assistant/service"
 	"birge/internal/domains/knowledge/retrieval"
 	"birge/internal/domains/membership/authgw"
+	pushadapter "birge/internal/domains/notify/adapter/push"
+	smsadapter "birge/internal/domains/notify/adapter/smsgw"
 	"birge/internal/domains/notify/sms/guard"
 	privacymodel "birge/internal/domains/privacy/model"
 	"birge/internal/domains/safety/crisis"
@@ -53,8 +56,20 @@ const (
 	defaultQdrantScoreThresh   = float32(0.3)
 )
 
-// DeliveryModeDev enables the log-only push and SMS senders (development only).
-const DeliveryModeDev = "dev"
+// Delivery modes (BIRGE_DELIVERY_MODE). Only DeliveryModeDev may use the
+// log-only senders; production must name real providers.
+const (
+	DeliveryModeDev        = "dev"
+	DeliveryModeProduction = "production"
+)
+
+// Push and SMS provider names (BIRGE_PUSH_PROVIDER, BIRGE_SMS_PROVIDER).
+const (
+	ProviderLog  = "log"
+	ProviderFCM  = "fcm"
+	ProviderAPNs = "apns"
+	ProviderSMSC = "smsc"
+)
 
 // Upper bounds that keep a typo from disabling a guarantee.
 const (
@@ -127,6 +142,20 @@ type Config struct {
 	CriticalSMSAfter time.Duration
 	DeliveryMode     string
 	ApplyRoles       bool
+
+	// Delivery providers (worker). PushProviders is [log] or a subset of
+	// fcm and apns; SMSProvider is log or smsc. The credentials below are
+	// parsed at startup so a bad file refuses to start instead of failing
+	// every send later; they hold private keys and passwords.
+	PushProviders []string
+	SMSProvider   string
+	FCM           pushadapter.FCMCredentials
+	APNs          pushadapter.APNsCredentials
+	APNsTopic     string
+	APNsBaseURL   string
+	SMSC          smsadapter.SMSC
+	// PushTitles maps language -> neutral push title (BIRGE_PUSH_TITLES).
+	PushTitles map[string]string
 
 	// EventsMaxAge / EventsMaxBytes bound JetStream EVENTS stream retention
 	// (CreateOrUpdateStream on worker start).
@@ -291,16 +320,7 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		// Reminder scheduling needs the deployment zone; questionnaire is API-only.
 		cfg.Wellbeing.TimeZone = cfg.TimeZone
 		cfg.Wellbeing.CrisisPhones = wellbeingCrisisPhones(cfg.CrisisPhones)
-		// No real push or SMS provider exists yet. Dropping notifications
-		// silently is worse than not starting, so only the explicit
-		// development mode may run with the log-only senders.
-		switch cfg.DeliveryMode = getenv("BIRGE_DELIVERY_MODE"); cfg.DeliveryMode {
-		case DeliveryModeDev:
-		case "":
-			l.fail("BIRGE_DELIVERY_MODE: no push or SMS provider is configured; set BIRGE_DELIVERY_MODE=dev to use the log-only senders in development")
-		default:
-			l.fail("BIRGE_DELIVERY_MODE: only \"dev\" is supported until real push and SMS providers exist")
-		}
+		l.delivery(&cfg)
 		// Outside development, SMS bodies must be configured: an empty map
 		// would skip every SMS, including critical ones. Unset falls back to
 		// the DEMO preset above; an explicit empty object still fails here.
@@ -314,6 +334,148 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		return Config{}, err
 	}
 	return cfg, nil
+}
+
+// delivery loads the delivery mode, the push and SMS providers and their
+// credentials. The log-only senders drop every notification, so outside
+// development they refuse to start, the same way as missing SMS texts.
+func (l *loader) delivery(cfg *Config) {
+	switch cfg.DeliveryMode = strings.TrimSpace(l.getenv("BIRGE_DELIVERY_MODE")); cfg.DeliveryMode {
+	case DeliveryModeDev, DeliveryModeProduction:
+	case "":
+		l.fail(`BIRGE_DELIVERY_MODE is required: "production" with real push and SMS providers, or "dev" for the log-only senders`)
+	default:
+		l.fail(`BIRGE_DELIVERY_MODE: must be "dev" or "production"`)
+	}
+	dev := cfg.DeliveryMode == DeliveryModeDev
+
+	cfg.PushProviders = l.list("BIRGE_PUSH_PROVIDER")
+	if len(cfg.PushProviders) == 0 && dev {
+		cfg.PushProviders = []string{ProviderLog}
+	}
+	seen := map[string]bool{}
+	for _, p := range cfg.PushProviders {
+		switch {
+		case p == ProviderLog && len(cfg.PushProviders) == 1:
+		case p == ProviderFCM || p == ProviderAPNs:
+		default:
+			l.fail(`BIRGE_PUSH_PROVIDER: must be "log" or a comma list of "fcm" and "apns"`)
+		}
+		if seen[p] {
+			l.fail("BIRGE_PUSH_PROVIDER: " + p + " is listed twice")
+		}
+		seen[p] = true
+	}
+	switch {
+	case len(cfg.PushProviders) == 0:
+		l.fail(`BIRGE_PUSH_PROVIDER is required when BIRGE_DELIVERY_MODE is not dev ("fcm", "apns" or "fcm,apns")`)
+	case seen[ProviderLog] && !dev:
+		l.fail(`BIRGE_PUSH_PROVIDER: "log" drops every push and is refused when BIRGE_DELIVERY_MODE is not dev`)
+	}
+	if seen[ProviderFCM] {
+		if b := l.secretBytes("BIRGE_FCM_SERVICE_ACCOUNT_FILE"); b != nil {
+			creds, err := pushadapter.ParseFCMServiceAccount(b)
+			clear(b)
+			if err != nil {
+				l.fail("BIRGE_FCM_SERVICE_ACCOUNT_FILE: " + err.Error())
+			}
+			cfg.FCM = creds
+		}
+	}
+	if seen[ProviderAPNs] {
+		keyID := l.required("BIRGE_APNS_KEY_ID")
+		teamID := l.required("BIRGE_APNS_TEAM_ID")
+		cfg.APNsTopic = l.required("BIRGE_APNS_TOPIC")
+		if b := l.secretBytes("BIRGE_APNS_KEY_FILE"); b != nil && keyID != "" && teamID != "" {
+			creds, err := pushadapter.ParseAPNsKey(b, keyID, teamID)
+			clear(b)
+			if err != nil {
+				l.fail("BIRGE_APNS_KEY_FILE: " + err.Error())
+			}
+			cfg.APNs = creds
+		}
+		switch env := strings.TrimSpace(l.getenv("BIRGE_APNS_ENVIRONMENT")); env {
+		case "", "production":
+			cfg.APNsBaseURL = pushadapter.DefaultAPNsBaseURL
+		case "sandbox":
+			cfg.APNsBaseURL = pushadapter.APNsSandboxBaseURL
+		default:
+			l.fail(`BIRGE_APNS_ENVIRONMENT: must be "production" or "sandbox"`)
+		}
+	}
+	cfg.PushTitles = l.pushTitles("BIRGE_PUSH_TITLES")
+
+	cfg.SMSProvider = strings.TrimSpace(l.getenv("BIRGE_SMS_PROVIDER"))
+	if cfg.SMSProvider == "" && dev {
+		cfg.SMSProvider = ProviderLog
+	}
+	switch cfg.SMSProvider {
+	case ProviderLog:
+		if !dev {
+			l.fail(`BIRGE_SMS_PROVIDER: "log" drops every SMS, including critical ones, and is refused when BIRGE_DELIVERY_MODE is not dev`)
+		}
+	case ProviderSMSC:
+		cfg.SMSC = smsadapter.SMSC{
+			Login:    l.secretFile("BIRGE_SMSC_LOGIN_FILE"),
+			Password: l.secretFile("BIRGE_SMSC_PASSWORD_FILE"),
+			Sender:   l.smsSender("BIRGE_SMSC_SENDER"),
+		}
+	case "":
+		l.fail(`BIRGE_SMS_PROVIDER is required when BIRGE_DELIVERY_MODE is not dev ("smsc")`)
+	default:
+		l.fail(`BIRGE_SMS_PROVIDER: must be "log" or "smsc"`)
+	}
+}
+
+// secretBytes reads a credential file named by name. The caller clears the
+// bytes after parsing them.
+func (l *loader) secretBytes(name string) []byte {
+	path := strings.TrimSpace(l.getenv(name))
+	if path == "" {
+		l.fail(name + " is required (path to the credential file)")
+		return nil
+	}
+	b, err := l.readFile(path)
+	if err != nil {
+		l.fail(name + ": cannot read the credential file")
+		return nil
+	}
+	return b
+}
+
+// pushTitles parses {"<lang>": "<title>"}; unset means the product name.
+func (l *loader) pushTitles(name string) map[string]string {
+	v := strings.TrimSpace(l.getenv(name))
+	if v == "" {
+		return nil
+	}
+	var out map[string]string
+	if err := json.Unmarshal([]byte(v), &out); err != nil {
+		l.fail(name + `: must be a JSON object {"<lang>": "<title>"}`)
+		return nil
+	}
+	for lang, title := range out {
+		if lang != "kk" && lang != "ru" && lang != "en" {
+			l.fail(name + `: languages are "kk", "ru" and "en"`)
+		}
+		if strings.TrimSpace(title) == "" || len(title) > 100 {
+			l.fail(name + ": every title must be 1 to 100 bytes")
+		}
+	}
+	return out
+}
+
+var smsSenderRe = regexp.MustCompile(`^[A-Za-z0-9 ]{1,11}$`)
+
+// smsSender reads an optional sender ID: up to 11 Latin letters, digits or
+// spaces, which is what SMS gateways accept as an alphanumeric sender.
+func (l *loader) smsSender(name string) string {
+	v := strings.TrimSpace(l.getenv(name))
+	if v != "" && !smsSenderRe.MatchString(v) {
+		l.fail(name + ": up to 11 Latin letters, digits or spaces")
+		return ""
+	}
+	return v
 }
 
 // assistant loads the LLM, prompt, names dictionary and daily limit.

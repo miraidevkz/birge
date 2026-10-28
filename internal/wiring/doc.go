@@ -51,7 +51,9 @@
 //     → safety.OpenEscalation, sharing ObjectStore (platform/objectstore;
 //     Disabled when BIRGE_S3_* unset), the notify Recipients (membership,
 //     safety.ResolveStaffRole/ShiftPhone, emergency
-//     TrustedContactTarget/ContactPhone), and the log-only push and SMS senders.
+//     TrustedContactTarget/ContactPhone), and the push and SMS senders
+//     (DeliverySenders: FCM/APNs and SMSC.kz from notify/adapter, or the
+//     log-only senders in dev mode).
 //   - EVENTS stream retention (BIRGE_EVENTS_MAX_AGE / BIRGE_EVENTS_MAX_BYTES)
 //     applied in EnsureStream on worker start.
 //   - Crisis lexicon and other configuration presets: when BIRGE_* variables
@@ -66,8 +68,9 @@
 //
 // Invariants:
 //
-//   - Push and SMS are never dropped silently: the worker starts only with a
-//     real provider, or with BIRGE_DELIVERY_MODE=dev, where the log-only
+//   - Push and SMS are never dropped silently: outside BIRGE_DELIVERY_MODE=dev
+//     the worker starts only with real providers (BIRGE_PUSH_PROVIDER,
+//     BIRGE_SMS_PROVIDER) whose credential files parse; in dev the log-only
 //     senders log the notification ID and channel and nothing else.
 //   - Logs carry IDs, route patterns and event names; never phone numbers,
 //     tokens, bodies, query strings or client IPs (ADR-0021).
