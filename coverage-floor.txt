@@ -13,7 +13,7 @@ knowledge    67.4
 membership   72.2
 moderation   39.9
 notify       65.6
-platform     73.1
+platform     72.3
 privacy      72.1
 safety       86.8
 sharing      41.6
