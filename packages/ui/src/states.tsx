@@ -5,6 +5,7 @@ import { useTranslation } from '@birge/i18n';
 import { ActivityIndicator, View } from 'react-native';
 
 import { Button } from './button';
+import { Logo } from './logo';
 import { useMotionAllowed } from './motion';
 import { Heading, Text } from './text';
 import { useThemeColors } from './theme';
@@ -37,9 +38,9 @@ export interface EmptyStateProps {
 }
 
 /**
- * Mark is the soft decorative motif of empty states (ADR-0025): two sage rings
- * on a sand circle, the "together" of the name. Decorative only: hidden from
- * screen readers, and nothing about the app's subject.
+ * Mark is the soft decorative motif of empty states (ADR-0025): the brand's
+ * circle of dots on a sand circle. Decorative only: hidden from screen
+ * readers, and nothing about the app's subject.
  */
 function Mark() {
   return (
@@ -48,10 +49,7 @@ function Mark() {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      <View className="flex-row">
-        <View className="h-8 w-8 rounded-full border-4 border-primary" />
-        <View className="-ml-3 h-8 w-8 rounded-full border-4 border-primary/60" />
-      </View>
+      <Logo size="sm" />
     </View>
   );
 }
