@@ -57,8 +57,18 @@ func isLookAlike(r rune) bool {
 // exported so the lexicon loader, the evaluation tooling and tests use the
 // exact same transformation as Detect.
 func Normalize(text string) Normalized {
+	return normalize(text, true)
+}
+
+// normalize is Normalize with a switch for the message-level look-alike
+// rule: with lookAlikeChunks, a Latin-only chunk made entirely of look-alike
+// letters is read as Cyrillic when the message has Cyrillic elsewhere (so
+// "xoчу" next to Russian words is caught). Without it, only chunks that
+// themselves contain Cyrillic are mapped, so an English word such as "to"
+// in a mixed message stays Latin. Detect checks both readings.
+func normalize(text string, lookAlikeChunks bool) Normalized {
 	chunks := strings.Fields(text)
-	msgCyrillic := strings.IndexFunc(text, isCyrillic) >= 0
+	msgCyrillic := lookAlikeChunks && strings.IndexFunc(text, isCyrillic) >= 0
 
 	words := make([]string, 0, len(chunks))
 	var b strings.Builder

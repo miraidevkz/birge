@@ -1,0 +1,8 @@
+# DEMO lexicon. Illustrative entries for tests and development only; NOT the
+# production lexicon, which the project psychologist supplies and which is kept
+# outside the repository (ADR-0023). Format: see crisis.Load.
+cutting myself
+cut myself
+cutting my wrists
+hurting myself
+self harm*

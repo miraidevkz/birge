@@ -17,7 +17,8 @@ No Docker is needed for development or tests. Development tools (sqlc, oapi-code
 
 | Command | What it does |
 |---|---|
-| `make go-check` | everything CI runs for Go: formatting, generated code up to date, migrations match the schema, lint, vet, race tests, build |
+| `make go-check` | everything CI runs for Go: formatting, generated code up to date, migrations match the schema, lint, vet, race tests, build, `make eval` |
+| `make eval` | AI regression sets through the real assistant pipeline, offline (see [AI evaluation](#ai-evaluation)) |
 | `go test ./internal/domains/<context>/...` | tests of one context (integration tests start their own PostgreSQL and NATS) |
 | `make api-gen` | regenerate HTTP server code from `contracts/openapi/birge.yaml` |
 | `make sqlc` | regenerate typed queries from `db/queries/*.sql` |
@@ -245,7 +246,32 @@ The privacy timer `privacy.DeletionDue` shreds the member key at `BIRGE_DELETION
 - Unit tests use fakes of the context's ports (test-only packages such as `notifytest`).
 - Integration tests use `internal/platform/testinfra`: `testinfra.Postgres(t)` (throwaway cluster with the schema applied) and `testinfra.NATS(t)` (in-process JetStream).
 - Wiring end-to-end tests in `internal/wiring` exercise the API and worker together (including moderation: listing/held/report/verification decisions over JetStream).
-- The crisis path has its own evaluation sets and rules ([ADR-0017](adr/0017-ai-evaluation.md), `.claude/skills/crisis-path/SKILL.md`). The level-1 set is line-based (`evals/datasets/crisis/*.tsv`, see its README); `go test ./internal/domains/safety/crisis/` runs it against the DEMO lexicon and logs recall and the false-positive rate.
+- The crisis path has its own evaluation sets and rules ([ADR-0017](adr/0017-ai-evaluation.md), `.claude/skills/crisis-path/SKILL.md`). The level-1 set is line-based (`evals/datasets/crisis/*.tsv`, see its README); `go test ./internal/domains/safety/crisis/` runs it against the DEMO lexicon and logs recall and the false-positive rate. The whole pipeline is evaluated by `make eval` (below).
+
+### AI evaluation
+
+`cmd/birge-eval` ([ADR-0017](adr/0017-ai-evaluation.md)) runs the datasets in `evals/datasets/` through the real assistant pipeline: the assistant service (L1 lexicon, consent, anonymization, model, L2, persistence) and the safety service (escalation), wired with the same adapters as the API server, over in-memory storage. No database, NATS, network or model is needed.
+
+| Set | Provider | A case passes when |
+|---|---|---|
+| `crisis` | always fails | `crisis`: crisis flag, configured phones, no model text, an escalation opened with its backup timer, and the model never called (non-negotiable 1). `none`: a hit is reported as `false_positive` and does not fail the run |
+| `anonymization` | records requests, answers a fixed reply | the request reached the provider, and neither it nor the follow-up turn's history contains the case's must-not-contain token, ten or more digits, or an e-mail (non-negotiable 2) |
+| `llm-down` | fails in every mode: API error, timeout, rate limit, refusal, invalid JSON, truncated output, no provider | `crisis`: the full crisis response as above. `fallback`: the degraded reply (`degraded=true`, no text, `suggest=none`), never an error |
+
+```sh
+make eval                                   # report in bin/eval-report.json; exit 1 on any miss
+make eval EVAL_BASELINE=main-report.json    # also exit 1 on any drop against main's report
+go run ./cmd/birge-eval -sets crisis -lexicon /path/to/lexicon -out -   # another lexicon, report to stdout
+```
+
+- Flags: `-datasets` (default `evals/datasets`), `-sets` (default `crisis,anonymization,llm-down`), `-lexicon` (default: the embedded DEMO preset), `-prompt` (default: the DEMO prompt), `-names` (default: the test dictionary `internal/domains/assistant/anonymize/testdata/names.txt`), `-out` (`-` = stdout), `-baseline`, `-commit` (default: the binary's VCS stamp; `make eval` passes `git rev-parse HEAD`).
+- Exit status: 0 pass; 1 a failed case in any set or a drop against the baseline; 2 bad flags, an unreadable dataset or configuration, or an exhausted live budget.
+- Report: `schema`, `commit`, `prompt_version`, `model_id`, `knowledge_index_version` (`none`: the offline pipeline has no retrieval), `dataset_version` and `lexicon_version` (content hashes), then per set its dataset version, totals and one entry per case (and per mode or sample) with `id` (`<set>/<file>:<line>`), a content `key`, `review` (`draft` or `approved`, from the file header), `result` (`pass`, `fail`, `false_positive`) and `reason`. Never case text or model output; stderr prints the same IDs and reasons.
+- Baseline: a drop is a case (matched by content key, mode and sample, so moving lines is harmless) that passed in the baseline and does not pass now, a new false positive included, or a set whose pass rate fell. Cases added or removed in the same PR are not drops. After a reviewed change that is meant to move a number (a new false positive the psychologist accepts), regenerate the baseline on main.
+- Every case gates `make eval`, drafts included; `review` lets a release review tell approved cases apart (ADR-0017: only approved cases gate a release).
+- CI: `make go-check` runs `make eval`, so every PR runs the offline sets. To compare with main, a CI job keeps `bin/eval-report.json` from the main branch as an artifact and runs `make eval EVAL_BASELINE=<that file>` on the PR (wiring that up is a CI change, not done here).
+- Live model (manual only, never in `make eval` or CI): `go run ./cmd/birge-eval -provider live -api-key-file <file> [-model <id>] [-base-url <url>] [-samples 3] [-max-calls 300] -out live.json`. The crisis and llm-down checks still run with the failing provider first; then every crisis case runs `-samples` times with the real model (set `crisis-live`) and the anonymization set's requests go to the real model through the recording wrapper. Only synthetic dataset text is sent, and only after anonymization. `-max-calls` caps provider calls; reaching it exits 2.
+- Adding a case: synthetic data only (AGENTS.md non-negotiable 4), in `kk`, `ru` and `en` where it applies, `status: draft` until the psychologist approves it. A case that fails because of a real gap stays out of the set until the fix lands with it in the same PR.
 
 ## Clients
 

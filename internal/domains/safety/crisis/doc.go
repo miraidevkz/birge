@@ -13,7 +13,9 @@
 //     letters (a→а, e→е, o→о, p→р, c→с, x→х, y→у, k→к, 0→о, 3→з, 4→ч, 6→б, …).
 //     A word without Cyrillic letters is mapped only when it consists entirely
 //     of look-alikes and the message contains Cyrillic elsewhere; ordinary
-//     Latin words are left alone;
+//     Latin words are left alone. Because an English word such as "to" is
+//     made of look-alikes too, Detect checks a mixed message a second time
+//     with that rule off and matches if either reading does;
 //   - simple Unicode case folding (unicode.ToLower) and removal of combining
 //     marks;
 //   - Kazakh letters fold to their Russian keyboard look-alikes, because many

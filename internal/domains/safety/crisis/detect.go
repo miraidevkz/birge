@@ -25,18 +25,30 @@ func (l *Lexicon) Detect(text, lang string) Result {
 	if l == nil || l.size == 0 || strings.TrimSpace(text) == "" {
 		return Result{}
 	}
-	n := Normalize(text)
-	if len(n.Words) == 0 {
-		return Result{}
-	}
-	words := make([][]rune, len(n.Words))
-	for i, w := range n.Words {
-		words[i] = []rune(w)
+	// A message is checked in up to two readings and matches if either
+	// does. The first maps look-alike Latin chunks to Cyrillic when the
+	// message has Cyrillic (catches Russian written with Latin look-alikes);
+	// the second leaves Latin-only chunks Latin, so an English phrase mixed
+	// with Kazakh or Russian ("I want to die, шаршадым") is not turned into
+	// Cyrillic and missed. Checking both only adds matches: the crisis path
+	// errs towards a human (non-negotiable 1).
+	readings := []Normalized{normalize(text, true)}
+	if strings.IndexFunc(text, isCyrillic) >= 0 {
+		readings = append(readings, normalize(text, false))
 	}
 	for _, lg := range l.order(lang) {
-		for _, cat := range l.langs[lg] {
-			if cat.matches(n, words) {
-				return Result{Crisis: true, Category: cat.name, Lang: lg}
+		for _, n := range readings {
+			if len(n.Words) == 0 {
+				continue
+			}
+			words := make([][]rune, len(n.Words))
+			for i, w := range n.Words {
+				words[i] = []rune(w)
+			}
+			for _, cat := range l.langs[lg] {
+				if cat.matches(n, words) {
+					return Result{Crisis: true, Category: cat.name, Lang: lg}
+				}
 			}
 		}
 	}

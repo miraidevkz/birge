@@ -142,6 +142,11 @@ func TestDetectCategoriesAndLanguages(t *testing.T) {
 		{"", "ru", false, "", ""},
 		{"!!! ...", "ru", false, "", ""},
 		{"хочу умереть", "en", true, "suicide", "ru"}, // unknown language: all checked
+		// An English phrase in a message with Cyrillic must stay Latin: the
+		// look-alike reading turns "to" into "то" and missed it.
+		{"I want to die, шаршадым", "kk", true, "suicide", "en"},
+		{"шаршадым. I want to die", "ru", true, "suicide", "en"},
+		{"xочу умереть", "ru", true, "suicide", "ru"}, // look-alike reading still works
 	}
 	for _, tt := range tests {
 		got := lex.Detect(tt.text, tt.lang)

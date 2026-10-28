@@ -1,0 +1,17 @@
+# DEMO lexicon. Illustrative entries for tests and development only; NOT the
+# production lexicon, which the project psychologist supplies and which is kept
+# outside the repository (ADR-0023). Format: see crisis.Load.
+want to die
+i want to die
+do not want to live
+dont want to live
+kill myself
+killing myself
+end my life
+suicide*
+no reason to live
+no point in living
+better off without me
+children would be better without me
+jump out the window
+take all the pills

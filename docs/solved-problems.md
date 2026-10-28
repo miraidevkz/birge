@@ -61,6 +61,8 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 - **Export with `--clear` when `EXPO_PUBLIC_*` change.** Metro caches transformed modules with the inlined public env values, so a second `expo export` with a new API URL still shipped the old one (`localhost` in the bundle). `up.sh web` exports with `--clear`; release builds clear the Metro cache too. (dev stack behind a tunnel)
 - **Go targets never use a bare `./...`.** npm packages can ship Go sources (for example `flatted`), and `./...` under the module root then vets, tests and lints them as our code. The Makefile builds the package list once (`GO_PKGS`, `go list` without `node_modules`); new Go targets use it.
 
+- **A normalisation that helps one language must not hide another.** The crisis lexicon read all-look-alike Latin words as Cyrillic in a message with Cyrillic, which turned the English "to" into "то" and missed "I want to die, шаршадым". Detect now checks both readings and matches on either; the crisis path only ever gains matches. Found by the mixed-language eval cases (cmd/birge-eval).
+
 ## Process
 
 - **Merge only on the check's exit code.** A pipeline that filters output with `grep` hides a failing test; read `$?` of `make go-check` before merging. (403701b fixed what this let through.)

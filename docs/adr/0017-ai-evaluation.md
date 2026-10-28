@@ -26,3 +26,9 @@ A change to a prompt, model, knowledge base or pipeline can silently weaken cris
 
 ## Consequences
 Every bug found in production becomes a dataset case. Changing the assistant model is a normal PR whose acceptance is the eval report.
+
+## Addendum 2026-10-29: runner as built
+- **Formats:** `crisis` and `llm-down` use `expected<TAB>lang<TAB>text` (`crisis`/`none`, `crisis`/`fallback`). `anonymization` keeps its existing `input<TAB>must-not-contain` with the language from the file name (`kk.tsv`, `ru.tsv`, `en.tsv`), because the anonymize unit test already reads it.
+- **Offline gate:** `make eval` (part of `make go-check`) runs `crisis`, `anonymization` and `llm-down` with fake providers and in-memory storage; every case gates it, drafts included, as the unit tests of the lexicon and anonymizer already did. The report records each case's review status, so the release gate can still count approved cases only.
+- **Knowledge index:** the offline pipeline has no retrieval, so the report's `knowledge_index_version` is `none` until a set needs retrieval (`behavior`).
+- Usage, report fields and the baseline rule: `docs/development.md` § AI evaluation.
