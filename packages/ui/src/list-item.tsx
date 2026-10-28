@@ -4,8 +4,10 @@ import { Pressable, View } from 'react-native';
 import { cn } from './cn';
 import { Text } from './text';
 
-/** ListItemProps: a title, optional subtitle and trailing element (badge, chevron). */
+/** ListItemProps: a title, optional subtitle, leading (avatar) and trailing element (badge, chevron). */
 export interface ListItemProps {
+  /** leading sits before the text, for example an Avatar. */
+  leading?: ReactNode;
   title: string;
   subtitle?: string;
   trailing?: ReactNode;
@@ -24,6 +26,7 @@ export interface ListItemProps {
 export const ListItem = memo(function ListItem({
   title,
   subtitle,
+  leading,
   trailing,
   onPress,
   emphasis = false,
@@ -33,6 +36,7 @@ export const ListItem = memo(function ListItem({
   const label = accessibilityLabel ?? (subtitle ? `${title}, ${subtitle}` : title);
   const body = (
     <>
+      {leading}
       <View className="flex-1 gap-1">
         <Text variant={emphasis ? 'label' : 'body'}>{title}</Text>
         {subtitle ? (

@@ -3,7 +3,7 @@
 // (AGENTS.md non-negotiable 5); contacts stay private until both accept.
 import { ApiError, unwrap, type Schemas } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
-import { Banner, Button, Card, Heading, List, ListItem, Screen, Sheet, Text } from '@birge/ui';
+import { Avatar, Banner, Button, Card, Heading, List, ListItem, Screen, Sheet, Text } from '@birge/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -118,8 +118,12 @@ export function CircleScreen() {
           const busy = answer.isPending && answer.variables?.matchId === item.id;
           return (
             <Card testID={`match-${item.id}`}>
-              <Text variant="label">{item.otherDisplayName}</Text>
-              <Text tone="muted">{matchSubtitle(item, t)}</Text>
+              <ListItem
+                leading={<Avatar name={item.otherDisplayName} />}
+                title={item.otherDisplayName}
+                subtitle={matchSubtitle(item, t)}
+                emphasis
+              />
               {needsAnswer ? (
                 <>
                   <Button

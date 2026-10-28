@@ -1,10 +1,12 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import { initialsOf, tintOf } from './avatar';
 import { Button } from './button';
 import { ChoiceGroup } from './choice-group';
 import { List } from './list';
 import { ListItem } from './list-item';
+import { MessageBubble } from './message-bubble';
 import { Screen } from './screen';
 import { SosProvider } from './sos';
 import { Text } from './text';
@@ -166,5 +168,34 @@ describe('List', () => {
   it('shows the empty state for an empty result', async () => {
     await render_({ data: [] });
     expect(screen.getByText('Nothing new')).toBeTruthy();
+  });
+});
+
+describe('Avatar', () => {
+  it('shows up to two initials and keeps a stable tint per name', async () => {
+    expect(initialsOf('Айгерим Сапарова')).toBe('АС');
+    expect(initialsOf('  dana ')).toBe('D');
+    expect(initialsOf('')).toBe('·');
+    expect(tintOf('Dana')).toBe(tintOf('Dana'));
+  });
+});
+
+describe('MessageBubble', () => {
+  it('shows the author only for other people and is a button when it can be reported', async () => {
+    const onPress = jest.fn();
+    await render(
+      <MessageBubble
+        text="Hello"
+        author="Dana"
+        mine={false}
+        onPress={onPress}
+        accessibilityLabel="Dana: Hello. Report"
+      />,
+    );
+    expect(screen.getByText('Dana')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Dana: Hello. Report' }));
+    expect(onPress).toHaveBeenCalled();
+    await render(<MessageBubble text="Mine" author="Me" mine />);
+    expect(screen.queryByText('Me')).toBeNull();
   });
 });

@@ -1,5 +1,7 @@
 // @birge/ui: design tokens and the shared components every screen is built
 // from (ADR-0014). See README.md for when to use each component.
+export { Avatar, initialsOf, tintOf } from './avatar';
+export type { AvatarProps } from './avatar';
 export { Banner } from './banner';
 export type { BannerProps, BannerTone } from './banner';
 export { Button } from './button';
@@ -30,6 +32,8 @@ export { LanguagePicker } from './language-picker';
 export type { LanguagePickerProps } from './language-picker';
 export { Logo } from './logo';
 export type { LogoProps } from './logo';
+export { MessageBubble } from './message-bubble';
+export type { MessageBubbleProps } from './message-bubble';
 export { PhoneField } from './phone-field';
 export type { PhoneFieldProps } from './phone-field';
 export { applyPhoneEdit, digitsOf, formatPhone, toE164 } from './phone';

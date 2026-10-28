@@ -1,8 +1,8 @@
 // One conversation: history, send (clientId + Idempotency-Key), report.
 // When the crisis lexicon holds a message, show Help — never wait on the LLM.
 import { unwrap, type Schemas } from '@birge/api';
-import { useTranslation } from '@birge/i18n';
-import { Banner, Button, List, ListItem, Screen, Sheet, TextField } from '@birge/ui';
+import { i18n, useTranslation } from '@birge/i18n';
+import { Banner, Button, List, MessageBubble, Screen, Sheet, TextField } from '@birge/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -123,13 +123,17 @@ export function ChatRoomScreen({ roomId, title }: { roomId: string; title?: stri
         renderItem={({ item }) => {
           const body = item.text ?? '';
           const title = body.length > 0 ? body : t('room.hidden');
-          const subtitle = item.mine ? undefined : item.authorName;
           const canReport = !item.mine && item.status === 'visible' && body.length > 0;
+          const time = new Intl.DateTimeFormat(i18n.language, { hour: '2-digit', minute: '2-digit' }).format(
+            new Date(item.createdAt),
+          );
           return (
-            <ListItem
-              title={title}
-              subtitle={subtitle}
-              emphasis={item.mine}
+            <MessageBubble
+              text={title}
+              author={item.authorName}
+              mine={item.mine === true}
+              time={time}
+              muted={body.length === 0}
               onPress={canReport ? () => setReportId(item.id) : undefined}
               accessibilityLabel={canReport ? `${item.authorName}: ${body}. ${t('room.report')}` : undefined}
               testID={`message-${item.id}`}

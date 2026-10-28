@@ -1,7 +1,7 @@
 // Conversation list: rooms the member has joined, plus group rooms she may join.
 import { unwrap, type Schemas } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
-import { Button, Heading, List, ListItem, Screen, Text } from '@birge/ui';
+import { Avatar, Button, Heading, List, ListItem, Screen, Text } from '@birge/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 
@@ -48,6 +48,7 @@ export function ChatRoomsScreen() {
         keyExtractor={(r) => r.id}
         renderItem={({ item }) => (
           <ListItem
+            leading={<Avatar name={item.title} />}
             title={item.title}
             subtitle={roomSubtitle(item, t)}
             onPress={() => router.push(`/chat/${item.id}`)}
