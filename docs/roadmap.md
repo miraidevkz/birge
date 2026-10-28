@@ -18,8 +18,10 @@ Status as of 2026-10-28.
 
 ### Backend
 Contract merged, code pending (answers 501):
-- [ ] Staff list of group rooms with mentors (`staffListRooms`, chat)
-- [ ] Staff list of verified and suspended members (`staffListMembers`, membership)
+- [x] Staff list of group rooms with mentors (`staffListRooms`, chat)
+- [x] Staff list of verified and suspended members (`staffListMembers`, membership)
+- [ ] Mentor role: `grantMentorRole` / `revokeMentorRole` (membership) and chat dropping her from rooms on `membership.MentorRoleChanged`
+- [ ] Staff accounts and the audit log for admins (`listAuditEntries`, `listStaffAccounts`, `getStaffAccount`, platform `staffdir`; routes not mounted yet)
 - [ ] One-time link for external trusted contacts to view a sent emergency plan (`viewExternalPlan`, emergency) and its web page
 - [ ] Analytics (ADR-0024): metric input events (`membership.MemberActiveDay`, `circle.TeaRequested`, `assistant.QuestionAnswered`), wellbeing cohort aggregates, the `analytics` context with `getMetrics` and `getMetricsCsv`
 
@@ -43,7 +45,8 @@ No contract change needed:
 - [ ] Store builds (phased release); a release keystore for Android
 
 ### Clients
-- [ ] Admin: members, rooms and mentors, richer moderation (filters, block author, legal hold); metrics screen once analytics lands
+- [x] Admin: members, rooms and mentors, richer moderation (filters, block author, legal hold), audit log with staff cards
+- [ ] Admin: metrics screen once analytics lands
 - [ ] Mom app: success screen after account deletion; external plan page (with the backend item above)
 - [ ] Human review of texts: native Kazakh speaker and psychologist (`docs/content-review-2026-10.md`)
 
