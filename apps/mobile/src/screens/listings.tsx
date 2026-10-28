@@ -5,6 +5,7 @@ import { List, ListItem, Screen } from '@birge/ui';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import { categoryLabel } from '@/lib/reference';
 
 type Listing = Schemas['Listing'];
 
@@ -27,7 +28,7 @@ export function ListingsScreen() {
         renderItem={({ item }) => (
           <ListItem
             title={item.title}
-            subtitle={`${t(`type.${item.type}`)} · ${item.category}`}
+            subtitle={`${t(`type.${item.type}`)} · ${categoryLabel(item.category)}`}
             testID={`listing-${item.id}`}
           />
         )}

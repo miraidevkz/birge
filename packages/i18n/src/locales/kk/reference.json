@@ -11,5 +11,22 @@
   "need": {
     "autism": "Аутизм",
     "hearing": "Есту"
+  },
+  "profession": {
+    "speech_therapist": "Логопед",
+    "neuropsychologist": "Нейропсихолог",
+    "aba_therapist": "АВА-терапевт",
+    "defectologist": "Дефектолог",
+    "psychologist": "Психолог",
+    "massage_therapist": "Массажист",
+    "audiologist": "Сурдолог"
+  },
+  "category": {
+    "stroller": "Арбаша",
+    "books": "Кітаптар",
+    "transport": "Жол жүру",
+    "toys": "Ойыншықтар",
+    "equipment": "Құрал-жабдық",
+    "clothes": "Киім"
   }
 }

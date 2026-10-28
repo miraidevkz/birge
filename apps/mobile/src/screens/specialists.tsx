@@ -6,6 +6,7 @@ import { List, ListItem, Screen } from '@birge/ui';
 import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import { professionLabel } from '@/lib/reference';
 
 type Specialist = Schemas['Specialist'];
 
@@ -31,7 +32,11 @@ export function SpecialistsScreen() {
               ? t('rating', { rating: String(item.averageRating), count: String(item.reviewCount) })
               : t('noRating');
           return (
-            <ListItem title={item.name} subtitle={`${item.profession} · ${rating}`} testID={`specialist-${item.id}`} />
+            <ListItem
+              title={item.name}
+              subtitle={`${professionLabel(item.profession)} · ${rating}`}
+              testID={`specialist-${item.id}`}
+            />
           );
         }}
         empty={{ title: t('emptyTitle'), description: t('emptyDescription') }}

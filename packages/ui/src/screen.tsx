@@ -79,14 +79,23 @@ export function Screen({
       </Appear>
     );
 
-  const header = (
+  // With Back, the title gets a row of its own under Back and SOS: squeezed
+  // between them a long title ("Конфиденциальность") broke inside the word.
+  const header = onBack ? (
+    <View className="gap-2 px-5 pb-2 pt-3">
+      <View className="min-h-touch flex-row items-center justify-between gap-3">
+        <Button title={t('back')} variant="secondary" size="sm" onPress={onBack} testID="screen-back" />
+        {crisis ? null : <SosButton />}
+      </View>
+      {title && !form ? <Heading level={1}>{title}</Heading> : null}
+    </View>
+  ) : (
     <View
       className={cn(
         'min-h-touch flex-row items-center gap-3 px-5 pb-2 pt-3',
         title && !form ? 'justify-between' : 'justify-end',
       )}
     >
-      {onBack ? <Button title={t('back')} variant="secondary" size="sm" onPress={onBack} testID="screen-back" /> : null}
       {title && !form ? (
         <View className="flex-1">
           <Heading level={1}>{title}</Heading>

@@ -19,14 +19,22 @@ web)
 	# host delete untracked files and took the public site down with them.
 	web_dir=${BIRGE_WEB_DIR:-$HOME/.local/share/birge-web}
 	mkdir -p "$web_dir"
+	# Export next to the served copy and swap only after both exports
+	# succeeded: a failed export used to leave the site empty (404).
+	rm -rf "$web_dir/mobile.next" "$web_dir/admin.next"
 	(cd ../../apps/mobile &&
 		EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=$member_url/v1 \
 			EXPO_PUBLIC_KRATOS_URL=$member_url/auth \
 			EXPO_PUBLIC_DEMO_CODES_URL=$member_url/demo/code \
-			npx expo export --platform web --output-dir "$web_dir/mobile" --clear)
+			npx expo export --platform web --output-dir "$web_dir/mobile.next" --clear)
 	(cd ../../apps/admin &&
 		EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=http://localhost:8082/v1 \
-			npx expo export --platform web --output-dir "$web_dir/admin" --clear)
+			npx expo export --platform web --output-dir "$web_dir/admin.next" --clear)
+	for app in mobile admin; do
+		rm -rf "$web_dir/$app.old"
+		[ -d "$web_dir/$app" ] && mv "$web_dir/$app" "$web_dir/$app.old"
+		mv "$web_dir/$app.next" "$web_dir/$app"
+	done
 	BIRGE_WEB_DIR="$web_dir" docker compose --profile web up -d --force-recreate web
 	;;
 codes)

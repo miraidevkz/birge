@@ -8,14 +8,16 @@ import { useQuery } from '@tanstack/react-query';
 
 import { api } from './api';
 
-function label(group: 'city' | 'district' | 'need', code: string): string {
+function label(group: 'city' | 'district' | 'need' | 'profession' | 'category', code: string): string {
   return i18n.t(`reference:${group}.${code}`, { defaultValue: code });
 }
 
-/** cityLabel, districtLabel and needLabel name a reference code in the current language. */
+/** cityLabel, districtLabel, needLabel, professionLabel and categoryLabel name a reference code in the current language. */
 export const cityLabel = (code: string) => label('city', code);
 export const districtLabel = (code: string) => label('district', code);
 export const needLabel = (code: string) => label('need', code);
+export const professionLabel = (code: string) => label('profession', code);
+export const categoryLabel = (code: string) => label('category', code);
 
 /** useDistricts loads the cities and their districts; reference data changes rarely. */
 export function useDistricts() {

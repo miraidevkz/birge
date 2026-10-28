@@ -11,5 +11,22 @@
   "need": {
     "autism": "Autism",
     "hearing": "Hearing"
+  },
+  "profession": {
+    "speech_therapist": "Speech therapist",
+    "neuropsychologist": "Neuropsychologist",
+    "aba_therapist": "ABA therapist",
+    "defectologist": "Special education teacher",
+    "psychologist": "Psychologist",
+    "massage_therapist": "Massage therapist",
+    "audiologist": "Audiologist"
+  },
+  "category": {
+    "stroller": "Stroller",
+    "books": "Books",
+    "transport": "Rides",
+    "toys": "Toys",
+    "equipment": "Equipment",
+    "clothes": "Clothes"
   }
 }

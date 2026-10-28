@@ -23,6 +23,8 @@ export interface ListProps<T> {
   empty: EmptyStateProps;
   /** header scrolls with the rows (screen intro, summary cards). */
   header?: ReactElement;
+  /** footer scrolls after the rows (a secondary form); keep the Screen footer for the one primary action. */
+  footer?: ReactElement;
   testID?: string;
 }
 
@@ -42,6 +44,7 @@ export function List<T>({
   onRetry,
   empty,
   header,
+  footer,
   testID,
 }: ListProps<T>) {
   const { t } = useTranslation('ui');
@@ -84,6 +87,7 @@ export function List<T>({
             </View>
           }
           ListEmptyComponent={data !== undefined ? <EmptyState {...empty} /> : null}
+          ListFooterComponent={footer ? <View className="gap-4 pt-4">{footer}</View> : undefined}
           contentContainerStyle={{ paddingBottom: tokens.spacing[6], paddingHorizontal: tokens.spacing[5] }}
         />
       </AppearListScope>

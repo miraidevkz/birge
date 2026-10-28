@@ -144,33 +144,10 @@ export function EmergencyPlanScreen() {
       title={t('title')}
       scroll={false}
       testID="emergency-plan"
+      // Pinned: only the one primary action. The add-contact form scrolls with
+      // the content: in the footer it took most of a phone screen.
       footer={
         <>
-          <Heading>{t('contacts.addHeading')}</Heading>
-          <TextField
-            label={t('contacts.name')}
-            value={name}
-            onChangeText={setName}
-            maxLength={60}
-            testID="emergency-name"
-          />
-          <PhoneField
-            label={t('contacts.phone')}
-            hint={t('contacts.phoneHint')}
-            error={formError ?? undefined}
-            value={phone}
-            onChangePhone={setPhone}
-            testID="emergency-phone"
-          />
-          <Button
-            title={t('contacts.add')}
-            variant="secondary"
-            loading={addContact.isPending}
-            onPress={onAdd}
-            testID="emergency-add"
-          />
-          <Heading>{t('send.heading')}</Heading>
-          <Text tone="muted">{t('send.description')}</Text>
           {confirmSend ? (
             <>
               <Banner tone="warning">{t('send.confirm')}</Banner>
@@ -212,6 +189,35 @@ export function EmergencyPlanScreen() {
             }
           />
         )}
+        footer={
+          <>
+            <Heading>{t('contacts.addHeading')}</Heading>
+            <TextField
+              label={t('contacts.name')}
+              value={name}
+              onChangeText={setName}
+              maxLength={60}
+              testID="emergency-name"
+            />
+            <PhoneField
+              label={t('contacts.phone')}
+              hint={t('contacts.phoneHint')}
+              error={formError ?? undefined}
+              value={phone}
+              onChangePhone={setPhone}
+              testID="emergency-phone"
+            />
+            <Button
+              title={t('contacts.add')}
+              variant="secondary"
+              loading={addContact.isPending}
+              onPress={onAdd}
+              testID="emergency-add"
+            />
+            <Heading>{t('send.heading')}</Heading>
+            <Text tone="muted">{t('send.description')}</Text>
+          </>
+        }
         empty={{ title: t('contacts.emptyTitle'), description: t('contacts.emptyDescription') }}
         header={
           <>

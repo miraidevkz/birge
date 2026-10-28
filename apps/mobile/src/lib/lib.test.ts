@@ -2,7 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 
 import { isCrisisPhone, parseConfig } from './config';
 import { fetchDemoCode } from './demo-code';
-import { roomTitle } from './reference';
+import { categoryLabel, professionLabel, roomTitle } from './reference';
 import { nextCheckin } from './next-checkin';
 import { notificationKey } from './notification-text';
 
@@ -103,5 +103,13 @@ describe('roomTitle', () => {
     expect(roomTitle('chat.room.topic.autism')).toBe('Topic: Autism');
     expect(roomTitle('chat.room.topic.unknown_code')).toBe('Topic: unknown_code');
     expect(roomTitle('Dana')).toBe('Dana');
+  });
+});
+
+describe('reference labels', () => {
+  it('name professions and listing categories, and keep unknown codes', () => {
+    expect(professionLabel('speech_therapist')).toBe('Speech therapist');
+    expect(categoryLabel('stroller')).toBe('Stroller');
+    expect(professionLabel('new_code')).toBe('new_code');
   });
 });
