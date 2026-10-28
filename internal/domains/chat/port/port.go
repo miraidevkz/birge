@@ -123,6 +123,9 @@ type Tx interface {
 	ListJoinableGroupRooms(ctx context.Context, districtID *uuid.UUID) ([]model.Room, error)
 	// ListMemberRooms returns the rooms the member is in.
 	ListMemberRooms(ctx context.Context, memberID uuid.UUID) ([]model.MemberRoom, error)
+	// ListStaffRooms returns group rooms with member counts and active mentor IDs
+	// for staff mentor assignment. Direct rooms are never returned.
+	ListStaffRooms(ctx context.Context) ([]model.StaffRoomSummary, error)
 
 	// GetRoomMember returns the membership row (also a left one), or model.ErrNotFound.
 	GetRoomMember(ctx context.Context, roomID, memberID uuid.UUID) (model.RoomMember, error)

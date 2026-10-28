@@ -226,6 +226,69 @@ func (s *Service) ListRooms(ctx context.Context, p auth.Principal, kind string, 
 	return out, nil
 }
 
+// StaffListRooms returns group rooms with member counts and mentors, for
+// staff mentor assignment. Direct rooms are never returned: they are private
+// between two members. Like the other staff chat operations it needs the
+// moderator or admin role; MFA is enforced for every staff request by the
+// staff auth middleware. Mentors carry only their first name, read through
+// the member-info port at request time, so nothing about them is copied.
+func (s *Service) StaffListRooms(ctx context.Context, p auth.Principal) ([]model.StaffRoom, error) {
+	if !p.Staff || !model.IsStaffModerator(p.Roles) || p.IdentityID == uuid.Nil {
+		return nil, model.ErrForbidden
+	}
+	var summaries []model.StaffRoomSummary
+	if err := s.Store.InTx(ctx, func(tx port.Tx) error {
+		var err error
+		summaries, err = tx.ListStaffRooms(ctx)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	s.log().Info("chat staff rooms listed", "event", "chat.staff_rooms_listed", "staff_id", p.IdentityID)
+
+	var mentorIDs []uuid.UUID
+	seen := make(map[uuid.UUID]bool)
+	for _, sum := range summaries {
+		for _, id := range sum.MentorIDs {
+			if !seen[id] {
+				seen[id] = true
+				mentorIDs = append(mentorIDs, id)
+			}
+		}
+	}
+	var profiles map[uuid.UUID]model.Profile
+	if len(mentorIDs) > 0 {
+		var err error
+		profiles, err = s.profiles(ctx, mentorIDs...)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	out := make([]model.StaffRoom, 0, len(summaries))
+	for _, sum := range summaries {
+		mentors := make([]model.StaffRoomMentor, 0, len(sum.MentorIDs))
+		for _, mid := range sum.MentorIDs {
+			name := ""
+			if prof, ok := profiles[mid]; ok {
+				name = prof.FirstName
+			}
+			mentors = append(mentors, model.StaffRoomMentor{
+				MemberID:    mid,
+				DisplayName: name,
+			})
+		}
+		out = append(out, model.StaffRoom{
+			ID:          sum.ID,
+			Kind:        sum.Kind,
+			Title:       sum.TitleKey,
+			MemberCount: sum.MemberCount,
+			Mentors:     mentors,
+		})
+	}
+	return out, nil
+}
+
 func roomView(r model.Room, joined, muted bool) model.RoomView {
 	return model.RoomView{ID: r.ID, Kind: r.Kind, Title: r.TitleKey, Joined: joined, Muted: muted, LastSeq: r.LastSeq, SlowModeSeconds: r.SlowModeSeconds}
 }

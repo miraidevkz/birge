@@ -11,6 +11,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"birge/internal/domains/chat/model"
 	"birge/internal/domains/chat/service"
 	"birge/internal/platform/auth"
@@ -267,6 +269,36 @@ func (s *Server) AssignRoomMentor(ctx context.Context, req AssignRoomMentorReque
 		return nil, err
 	}
 	return AssignRoomMentor204Response{}, nil
+}
+
+// StaffListRooms lists group rooms with member counts and mentors (staff).
+func (s *Server) StaffListRooms(ctx context.Context, _ StaffListRoomsRequestObject) (StaffListRoomsResponseObject, error) {
+	rooms, err := s.Service.StaffListRooms(ctx, principal(ctx))
+	if err != nil {
+		if st, c, t, ok := problemFor(err); ok {
+			if st == http.StatusForbidden {
+				return StaffListRooms403ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(problem(st, c, t))}, nil
+			}
+			return StaffListRoomsdefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+		}
+		return nil, err
+	}
+	out := StaffListRooms200JSONResponse{Items: make([]StaffRoom, 0, len(rooms))}
+	for _, r := range rooms {
+		room := StaffRoom{Id: r.ID, Kind: StaffRoomKind(r.Kind), Title: r.Title, MemberCount: r.MemberCount}
+		room.Mentors = make([]struct {
+			DisplayName string    `json:"displayName"`
+			MemberId    uuid.UUID `json:"memberId"`
+		}, 0, len(r.Mentors))
+		for _, m := range r.Mentors {
+			room.Mentors = append(room.Mentors, struct {
+				DisplayName string    `json:"displayName"`
+				MemberId    uuid.UUID `json:"memberId"`
+			}{DisplayName: m.DisplayName, MemberId: m.MemberID})
+		}
+		out.Items = append(out.Items, room)
+	}
+	return out, nil
 }
 
 // RemoveRoomMentor removes a mentor from a group room (staff).

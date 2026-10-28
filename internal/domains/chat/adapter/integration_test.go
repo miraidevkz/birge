@@ -932,3 +932,50 @@ func TestRoomOpenerConsumerJetStream(t *testing.T) {
 	}
 	t.Fatalf("rooms=%d processed=%d", rooms, processed)
 }
+
+func TestStaffListRoomsPostgres(t *testing.T) {
+	e := newEnv(t, service.Settings{})
+	room := e.topicRoom("autism")
+	mentor, a, b := e.member(true, nil), e.member(true, nil), e.member(true, nil)
+	e.join(mentor, room.ID)
+	e.join(a, room.ID)
+	if _, err := e.svc.OpenDirectRoom(e.ctx, uuid.New(), model.OriginSos, uuid.New(), a.MemberID, b.MemberID); err != nil {
+		t.Fatal(err)
+	}
+	e.members.SetMentor(mentor.MemberID, true)
+	if err := e.svc.AssignMentor(e.ctx, staff("moderator"), room.ID, mentor.MemberID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range []auth.Principal{a, staff("psychologist"), staff("lawyer"), staff()} {
+		if _, err := e.svc.StaffListRooms(e.ctx, p); !errors.Is(err, model.ErrForbidden) {
+			t.Fatalf("%+v listed rooms: %v", p.Roles, err)
+		}
+	}
+	rooms, err := e.svc.StaffListRooms(e.ctx, staff("admin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got *model.StaffRoom
+	for i := range rooms {
+		if rooms[i].Kind == model.KindDirect {
+			t.Fatalf("direct room listed to staff: %+v", rooms[i])
+		}
+		if rooms[i].ID == room.ID {
+			got = &rooms[i]
+		}
+	}
+	if got == nil || got.MemberCount != 2 || got.Title != room.TitleKey ||
+		len(got.Mentors) != 1 || got.Mentors[0].MemberID != mentor.MemberID || got.Mentors[0].DisplayName != fakeName {
+		t.Fatalf("staff room = %+v", got)
+	}
+	if err := e.svc.AssignMentor(e.ctx, staff("moderator"), room.ID, mentor.MemberID, false); err != nil {
+		t.Fatal(err)
+	}
+	rooms, _ = e.svc.StaffListRooms(e.ctx, staff("moderator"))
+	for _, r := range rooms {
+		if r.ID == room.ID && len(r.Mentors) != 0 {
+			t.Fatalf("removed mentor still listed: %+v", r.Mentors)
+		}
+	}
+}

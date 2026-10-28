@@ -204,6 +204,25 @@ func (t *postgresTx) ListMemberRooms(ctx context.Context, memberID uuid.UUID) ([
 	return out, nil
 }
 
+// ListStaffRooms implements port.Tx.
+func (t *postgresTx) ListStaffRooms(ctx context.Context) ([]model.StaffRoomSummary, error) {
+	rows, err := t.q.ListStaffRooms(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list staff rooms: %w", err)
+	}
+	out := make([]model.StaffRoomSummary, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, model.StaffRoomSummary{
+			ID:          r.ID,
+			Kind:        r.Kind,
+			TitleKey:    r.TitleKey,
+			MemberCount: int(r.MemberCount),
+			MentorIDs:   r.MentorIds,
+		})
+	}
+	return out, nil
+}
+
 // GetRoomMember implements port.Tx.
 func (t *postgresTx) GetRoomMember(ctx context.Context, roomID, memberID uuid.UUID) (model.RoomMember, error) {
 	row, err := t.q.GetRoomMember(ctx, chatstore.GetRoomMemberParams{RoomID: roomID, MemberID: memberID})

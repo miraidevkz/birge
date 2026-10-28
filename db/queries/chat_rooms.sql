@@ -129,3 +129,27 @@ LIMIT 5000;
 UPDATE chat.room_members
 SET last_push_at = @pushed_at
 WHERE room_id = @room_id AND member_id = @member_id;
+
+-- name: ListStaffRooms :many
+-- Group rooms (district, topic) with member count and active mentors for
+-- staff mentor assignment. Direct rooms are never returned.
+SELECT
+    r.id,
+    r.kind,
+    COALESCE(r.title_key, '') AS title_key,
+    COUNT(m.member_id)::bigint AS member_count,
+    COALESCE(
+        (
+            SELECT ARRAY_AGG(rm.member_id ORDER BY rm.assigned_at)
+            FROM chat.room_mentors rm
+            WHERE rm.room_id = r.id AND rm.removed_at IS NULL
+        ),
+        '{}'::uuid[]
+    )::uuid[] AS mentor_ids
+FROM chat.rooms r
+LEFT JOIN chat.room_members m ON m.room_id = r.id AND m.left_at IS NULL
+WHERE r.kind IN ('district', 'topic')
+GROUP BY r.id, r.kind, r.title_key
+ORDER BY r.kind, r.title_key
+LIMIT 1000;
+

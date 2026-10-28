@@ -348,6 +348,31 @@ type RoomView struct {
 	SlowModeSeconds int
 }
 
+// StaffRoomMentor is an assigned mentor of a group room as shown to staff.
+type StaffRoomMentor struct {
+	MemberID    uuid.UUID
+	DisplayName string
+}
+
+// StaffRoom is a group room with its member count and mentors for staff mentor assignment.
+type StaffRoom struct {
+	ID          uuid.UUID
+	Kind        string
+	Title       string
+	MemberCount int
+	Mentors     []StaffRoomMentor
+}
+
+// StaffRoomSummary is what the store returns for StaffRoom: mentor IDs only;
+// the service adds their first names through the member-info port.
+type StaffRoomSummary struct {
+	ID          uuid.UUID
+	Kind        string
+	TitleKey    string
+	MemberCount int
+	MentorIDs   []uuid.UUID
+}
+
 // Profile is what chat reads about a member from membership. Never logged,
 // stored or put into events.
 type Profile struct {

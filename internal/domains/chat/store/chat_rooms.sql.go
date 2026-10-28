@@ -491,6 +491,64 @@ func (q *Queries) ListPushCandidates(ctx context.Context, arg ListPushCandidates
 	return items, nil
 }
 
+const listStaffRooms = `-- name: ListStaffRooms :many
+SELECT
+    r.id,
+    r.kind,
+    COALESCE(r.title_key, '') AS title_key,
+    COUNT(m.member_id)::bigint AS member_count,
+    COALESCE(
+        (
+            SELECT ARRAY_AGG(rm.member_id ORDER BY rm.assigned_at)
+            FROM chat.room_mentors rm
+            WHERE rm.room_id = r.id AND rm.removed_at IS NULL
+        ),
+        '{}'::uuid[]
+    )::uuid[] AS mentor_ids
+FROM chat.rooms r
+LEFT JOIN chat.room_members m ON m.room_id = r.id AND m.left_at IS NULL
+WHERE r.kind IN ('district', 'topic')
+GROUP BY r.id, r.kind, r.title_key
+ORDER BY r.kind, r.title_key
+LIMIT 1000
+`
+
+type ListStaffRoomsRow struct {
+	ID          uuid.UUID
+	Kind        string
+	TitleKey    string
+	MemberCount int64
+	MentorIds   []uuid.UUID
+}
+
+// Group rooms (district, topic) with member count and active mentors for
+// staff mentor assignment. Direct rooms are never returned.
+func (q *Queries) ListStaffRooms(ctx context.Context) ([]ListStaffRoomsRow, error) {
+	rows, err := q.db.Query(ctx, listStaffRooms)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStaffRoomsRow
+	for rows.Next() {
+		var i ListStaffRoomsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.TitleKey,
+			&i.MemberCount,
+			&i.MentorIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markPushed = `-- name: MarkPushed :exec
 UPDATE chat.room_members
 SET last_push_at = $1

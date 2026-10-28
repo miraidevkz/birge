@@ -29,6 +29,7 @@ Operations of tag `chat` in `contracts/openapi/birge.yaml`, plus the WebSocket `
 | `POST /chat/rooms/{id}/messages` | See *Sending*. 429 `rate_limited` / `slow_mode`; 403 `banned` (ban or `mute_1h`) / `not_member`. |
 | `POST /chat/messages/{id}/report` | Only a message she can see (404 otherwise, also her own → 400). One per reporter and message; the first publishes `chat.MessageReported`. |
 | `POST /chat/rooms/{id}/moderation` | Staff with role `moderator` or `admin`: every action. A member who holds the membership role `mentor` **and** is assigned to this room: `hide_message`, `restore_message`, `mute_1h` only. Anyone else 403. `ban` also removes her from the room; a crisis-held message is never restored (409). Every applied action writes `platform.audit_log` in the same transaction (actor role `staff` or `mentor`; object `chat.message`, `chat.member` or `chat.room`). |
+| `GET /staff/chat/rooms` | Staff `moderator`/`admin`, MFA. District and topic rooms with member counts and current mentors (first name from membership at request time); direct rooms are never listed. A read: logged by event name and staff ID, not audited. |
 | `PUT /staff/chat/rooms/{id}/mentors/{memberId}` | Staff `moderator`/`admin`, MFA. Member must hold the mentor role (409 otherwise); group rooms only (409). Audited `chat.room.mentor_assign`. |
 | `DELETE /staff/chat/rooms/{id}/mentors/{memberId}` | Staff `moderator`/`admin`, MFA. Audited `chat.room.mentor_remove`. |
 | `PUT /staff/chat/messages/{id}/legal-hold` | Staff `moderator`/`admin`, MFA. Audited `chat.message.legal_hold_on`. |
@@ -84,6 +85,7 @@ Fan-out (not domain events): NATS **core** subjects `birge.chat.room.<room id>` 
 | `ModerationSummary(ctx, messageID)` | Opened message text for moderation's `ContentSource` (hidden still returns text; purged/gone → `ErrNotFound`; no contacts). |
 | `CloseReports(ctx, staff, messageID)`, `SetLegalHold(ctx, staff, messageID, on)` | Staff (`moderator`/`admin`), audited; also via staff HTTP legal-hold routes. |
 | `AssignMentor(ctx, staff, roomID, memberID, assign)` | Staff, audited; the member must hold the mentor role; also via staff HTTP mentor routes. |
+| `StaffListRooms(ctx, staff)` | Staff (`moderator`/`admin`); group rooms with counts and mentors for the admin app. |
 
 Ports used (wired later): `Sealer` (platform crypto), `MemberInfo` (membership: verified, first name, language, district), `Blocks` (membership `IsBlocked`), `Mentors` (membership role `mentor`), `AuthorSuspender` (membership suspend for `block_author`), `Crisis` (safety `Detect`, `CrisisPhones`, `OpenEscalation`), `Fanout`/`Bus` (`adapter.NATSFanout`), `Authenticator` (session validator), `Store` (`adapter.PostgresStore`).
 
