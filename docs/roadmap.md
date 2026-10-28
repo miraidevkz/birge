@@ -1,83 +1,34 @@
 # Roadmap
 
-Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each task gets a brief (`docs/agents/brief-template.md`).
+Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each task gets a brief (`docs/agents/brief-template.md`). Contracts land before code (ADR-0005): an operation whose contract is merged but whose code is not answers 501 from `internal/domains/<context>/api/pending.go`.
 
-## Wave 0: foundation (critical path, done by the tech lead)
+Status as of 2026-10-28.
 
-- [x] Threat model (`docs/threat-model.md`)
-- [ ] ASVS checklist
-- [x] `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`
-- [x] Go module and `cmd/birge` skeleton with health endpoints and graceful shutdown
-- [x] `internal/platform`: db, clock, outbox + JetStream publisher, timers (sqlc)
-- [x] Integration test infra without containers (`testinfra`: throwaway PostgreSQL, in-process NATS)
-- [ ] `internal/platform`: crypto interface, telemetry
-- [x] `contracts/`: OpenAPI 3.1 skeleton, event envelope schema
-- [x] Go server codegen (oapi-codegen strict server, one package per area) + `client-config` endpoint
-- [ ] TS client codegen (with the apps, on the Mac)
-- [x] `db/schema/` for platform tables (outbox, timers, audit)
-- [x] `make migration`, `make db-check` with the destructive-operation gate (`cmd/birge-dbtool`), first migration
-- [x] Boundary test (`internal/archtest`), golangci-lint config, `make go-check`
-- [ ] Remaining CI stages per `docs/architecture.md` (govulncheck, contracts, migrations, images)
-- [x] `deploy/compose` (dev)
-- [ ] `deploy/helm` skeleton (k3s)
-- [ ] Synthetic data generator and demo mode plan
+## Done
 
-## Wave 1: identity, delivery, clients
+- **Foundation:** threat model, `SECURITY.md`/`CONTRIBUTING.md`/`CODE_OF_CONDUCT.md`, Go module with `cmd/birge api|worker|migrate|keygen|kb-reindex|kb-export`, platform packages (db, clock, outbox + JetStream, timers, crypto with Tink, audit, staff OIDC introspection, request validation, object storage, rate limits), OpenAPI 3.1 contract with Go (oapi-codegen strict server) and TypeScript codegen, event schemas, `make migration` and `make db-check` with the destructive-operation gate, boundary test, golangci-lint, CI (`.github/workflows/ci.yml`).
+- **Identity and delivery:** auth gateway in front of Kratos (PoW, number allowlist, rate limits, trusted-proxy client IP, daily SMS budget), `membership` (lazy member, children, verification, blocks, reference data, suspension), `notify` (inbox, devices, durable push/SMS delivery, critical SMS fallback, SMS guard, phone resolved at send time), EVENTS stream retention.
+- **Safety and AI:** `safety` (L1 lexicon, fixed crisis response, escalations, duty roster), `assistant` (anonymizer, retrieval, LLM provider, L2), `knowledge` (editor, review, expiry, review-due queue, export).
+- **Product modules:** `wellbeing`, `circle` + `chat` (rooms, WebSocket delivery, moderation), `emergency` (SOS, district feed, emergency plan, trusted contacts), `sharing`, `directory`, `moderation` (queue, decisions applied in every owning context, block author, legal hold), `privacy` (consents, account deletion in every context, checked by an SQL test over all tables).
+- **Clients:** TypeScript API client, mom app (Expo / React Native, kk/ru/en, ADR-0014 and ADR-0025), staff admin web app (escalations, moderation, duty roster, knowledge base; OIDC PKCE).
+- **Dev stack:** `deploy/compose` (PostgreSQL, NATS, Kratos, Hydra with a dev login app, web apps), DEMO preset with seeded rooms, specialists and listings, dev SMS relay `cmd/birge-devsms`.
+- **Documentation for people:** overview, end-to-end scenarios, staff handbook, content style guide.
 
-- [x] Auth gateway in front of Kratos (PoW, number allowlist, rate limits) and session middleware
-- [ ] Wiring: trusted-proxy client IP, API rate limit in front of the session middleware, keys from the secret store
-- [ ] Shared store for PoW replay and limiters before running more than one replica; daily SMS budget
-- [x] `membership` core (lazy member, children, verification requests, blocks, reference data)
-- [x] `notify` core (inbox, devices, durable push/SMS delivery, critical SMS fallback, SMS guard)
-- [x] Request validation against the OpenAPI schema
-- [x] Wiring: `birge api|worker|migrate` from configuration, embedded migrations, end-to-end tests
-- [x] notify: resolve the phone at send time, not at DeliveryRequested time (a Kratos outage must not lose events)
-- [x] EVENTS stream retention (MaxAge/MaxBytes); `birge keygen` for local keys
-- [ ] previous KEKs in configuration for rotation
-- [x] Require SMS texts outside dev mode
-- [ ] merge the wiring HTTP server back into platform/httpserver
-- [ ] Seed reference data (cities, districts, needs) per country; moderator side of verification
-- [ ] Kratos deployment and identity schema (development config in `deploy/compose/kratos`; courier hook to notify still open)
-- [ ] `apps/mobile` and `apps/admin` skeletons (Expo, Expo Router, NativeWind, RN Reusables, i18n kk/ru/en); low-end Android performance budget measured
+## Remaining for the pilot
 
-## Wave 2: safety and AI
+### Backend
+Contract merged, code pending (answers 501):
+- [ ] Staff list of group rooms with mentors (`staffListRooms`, chat)
+- [ ] Staff list of verified and suspended members (`staffListMembers`, membership)
+- [ ] One-time link for external trusted contacts to view a sent emergency plan (`viewExternalPlan`, emergency) and its web page
+- [ ] Analytics (ADR-0024): metric input events (`membership.MemberActiveDay`, `circle.TeaRequested`, `assistant.QuestionAnswered`), wellbeing cohort aggregates, the `analytics` context with `getMetrics` and `getMetricsCsv`
 
-- [ ] `safety` (L1 lexicon, crisis response, escalations, duty roster)
-- [ ] `assistant` (anonymizer, retrieval, LLM provider, L2) + `knowledge` (editor, review, expiry, export)
-- [ ] `cmd/birge-eval` with crisis, anonymization and llm-down sets
-- [ ] Staff admin: escalation queue, moderation queue
-
-## Wave 3: product modules
-
-- [ ] `wellbeing` (check-ins, schedules, chart, practices)
-- [ ] `circle` (tea matching, acquaintances) + `chat` (rooms, delivery, moderation)
-- [ ] `emergency` (SOS, district feed, emergency plan, trusted contacts)
-- [ ] `sharing` + `directory` + rights FAQ
-
-## Wave 4: acceptance
-
-- [ ] Acceptance checklist (`docs/requirements/mvp.md` § 10), ASVS review, load test (API, chat gateway)
-- [ ] Restore drill, key-recovery drill
-- [ ] Store builds (phased release), pilot
-
-## Follow-ups from wave 3
-
-- [ ] Wire `emergency` (settings, MemberInfo/Blocks/Acquaintances adapters, notify trusted-contact resolution through `TrustedContactTarget`/`ContactPhone`, district push on `SosShared`)
-- [ ] Endpoints for trusted contacts and moderators to read an SOS; list and decline invitations; rate limit invitation notifications
-- [ ] One-time links for external contacts to view a sent emergency plan
-- [ ] Locale keys and SMS texts for every notification template in use
-
-## Remaining for the MVP (2026-10-27)
-
-### Backend completion
-- [x] Wire chat, sharing, directory and S3 object storage
-- [x] Wire moderation: content sources per context, queue consumer
-- [x] Apply moderation decisions: chat (held and reported messages, legal hold), membership (verification approves members, emits MemberVerified), member suspension for "block author"
-- [x] Staff endpoints for mentor assignment, closing reports and legal hold
-- [x] Account deletion in every context (consumers of `privacy.DataDeletionRequested`)
-- [ ] Analytics: pseudonymous events and the aggregate metrics of requirements § 9 with CSV export
-- [ ] Push (FCM/APNs) and SMS provider plugins (an SMS provider in Kazakhstan, e.g. SMSC.kz, with a registered sender ID; the dev stack relays codes through `cmd/birge-devsms`, optionally via Telegram Gateway for testing only)
-- [x] Knowledge: reviewer review-due queue before expiry, export of published content to `knowledge/`
+No contract change needed:
+- [ ] Push (FCM, APNs) and SMS provider adapters (an SMS provider in Kazakhstan, e.g. SMSC.kz, with a registered sender ID); production refuses the log senders
+- [ ] Kratos courier hook so sign-in codes go through notify's SMS guard (the dev stack keeps `cmd/birge-devsms`)
+- [ ] More than one API replica: shared store for rate limits and PoW replay, previous KEKs in configuration for rotation, merge the wiring HTTP server back into `platform/httpserver`
+- [ ] Reference data (cities, districts, needs) for the pilot country, seeded by `migrate`
+- [ ] Role matrix for staff and a deny-by-default test generated from the contract (decided to come after the demo)
 
 ### Quality
 - [ ] Evaluation runner `cmd/birge-eval` and the AI stage in CI (ADR-0017)
@@ -87,16 +38,17 @@ Work is done in waves; within a wave, at most 2–3 tasks run in parallel. Each 
 - [ ] ASVS checklist, threat-model review, load test of API and chat gateway
 
 ### Deployment
-- [ ] Helm charts (k3s); Compose dev stack done (PostgreSQL, NATS, Kratos, Hydra with a dev login app, web apps): PostgreSQL (CloudNativePG), NATS, Kratos with the phone identity schema and courier hook, Hydra, Garage, TEI, Qdrant, OpenBao, observability
+- [ ] Helm charts (k3s): API, worker, migrate job, web apps; CloudNativePG, NATS, Kratos with the phone identity schema and courier hook, Hydra, Garage, TEI, Qdrant, OpenBao, observability
 - [ ] Backup and restore drill, key-recovery drill
+- [ ] Store builds (phased release); a release keystore for Android
 
 ### Clients
-- [x] TypeScript API client from the contract
-- [x] Mom app (Expo / React Native, kk/ru/en, design system per ADR-0014 and the warm design language of ADR-0025): onboarding, first-run setup (name, district and child, verification request), About me, home with mood, Circle and a tip, chats with avatars, brand mark and icons for every platform (`branding/`), side rail on tablets and desktops; texts follow `docs/content-style.md` and need a native-speaker and psychologist review (`docs/content-review-2026-10.md`)
-- [x] Staff admin app: escalations, moderation, duty roster, knowledge base (web, OIDC PKCE); role matrix and the remaining staff screens later
+- [ ] Admin: members, rooms and mentors, richer moderation (filters, block author, legal hold); metrics screen once analytics lands
+- [ ] Mom app: success screen after account deletion; external plan page (with the backend item above)
+- [ ] Human review of texts: native Kazakh speaker and psychologist (`docs/content-review-2026-10.md`)
 
-### Documentation for people
-- [x] Overview, end-to-end scenarios with diagrams, moderator handbook (`docs/overview.md`, `docs/scenarios.md`, `docs/handbook/staff.md`)
+### Acceptance
+- [ ] Acceptance checklist (`docs/requirements/mvp.md` § 10), pilot
 
 ## After the MVP
 

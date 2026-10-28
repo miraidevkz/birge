@@ -25,7 +25,7 @@ Roles come from the IdP claim map (`psychologist`, `moderator`, `lawyer`, `admin
 - **Rights and self-help** — reviewed articles; lawyers publish rights, psychologists publish self-help; expiry and review-due.
 - **Account deletion** — member requests deletion; every context that stores her data erases it; her encryption key is shredded within about 24 hours.
 
-Push and SMS provider plugins, Helm production charts, analytics CSV export and some admin screens are still open — see [roadmap.md](roadmap.md).
+Still open (see [roadmap.md](roadmap.md)): push and SMS providers, the Kratos courier hook, analytics with CSV export, the link for external trusted contacts, staff lists of members and rooms (contracts merged, servers answer 501 until done), Helm production charts and some admin screens.
 
 ## Non-negotiables (plain words)
 
