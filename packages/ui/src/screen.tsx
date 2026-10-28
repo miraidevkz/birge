@@ -83,7 +83,16 @@ export function Screen({
   const formBody = (
     <KeyboardAwareScrollView
       className="flex-1"
-      contentContainerClassName="flex-grow justify-center gap-5 px-5 py-6"
+      // Style, not contentContainerClassName: NativeWind does not map class
+      // names onto this third-party component on the web, and the form lost
+      // its gutters and gaps there.
+      contentContainerStyle={{
+        flexGrow: 1,
+        justifyContent: 'center',
+        gap: tokens.spacing[5],
+        paddingHorizontal: tokens.spacing[5],
+        paddingVertical: tokens.spacing[6],
+      }}
       keyboardShouldPersistTaps="handled"
       // Room under the focused field for its hint and the primary button.
       bottomOffset={tokens.touchTarget + tokens.spacing[16]}
