@@ -31,6 +31,10 @@ type Settings struct {
 	// AutoCloseAfter is how long an SOS stays open before it closes by itself
 	// (default 24 hours, § 4.6 "конфиг").
 	AutoCloseAfter time.Duration
+	// PlanLinkKey is the HMAC key of external plan link tokens
+	// (BIRGE_PLAN_LINK_KEY_FILE, at least 32 bytes). Rotating it kills every
+	// live link, which only means asking for the plan to be sent again.
+	PlanLinkKey []byte
 }
 
 // Service is the emergency application service.

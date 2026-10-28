@@ -272,7 +272,8 @@ func (s *Service) checkMemberContact(ctx context.Context, owner, member uuid.UUI
 
 // RemoveTrustedContact removes one of the caller's contacts. The row is kept
 // with removed_at (no deletion path, AGENTS.md 6); notify's lookups return
-// ErrNotFound for it from then on. Removing twice is fine; another member's
+// ErrNotFound for it from then on and her external plan links are revoked
+// in the same transaction. Removing twice is fine; another member's
 // contact is model.ErrNotFound.
 func (s *Service) RemoveTrustedContact(ctx context.Context, p auth.Principal, id uuid.UUID) error {
 	owner, err := memberOf(p)
@@ -289,7 +290,11 @@ func (s *Service) RemoveTrustedContact(ctx context.Context, p auth.Principal, id
 		if c.OwnerID != owner {
 			return model.ErrNotFound
 		}
-		removed, err = tx.RemoveTrustedContact(ctx, id, owner, now)
+		if removed, err = tx.RemoveTrustedContact(ctx, id, owner, now); err != nil {
+			return err
+		}
+		// Her SMS link dies with the contact (contract: removal revokes).
+		_, err = tx.RevokeContactPlanLinks(ctx, id, now)
 		return err
 	})
 	if err != nil {
@@ -367,7 +372,9 @@ func (s *Service) AcceptTrustedInvitation(ctx context.Context, p auth.Principal,
 // after the explicit confirmation "SEND": one notify.DeliveryRequested per
 // confirmed contact (class normal, template emergency.plan_sent, params
 // {owner_id}), emergency.PlanSent, and the send time on the card and on
-// each contact, in one transaction. A repeated Idempotency-Key does nothing.
+// each contact, in one transaction; earlier external plan links are revoked
+// in it. An external contact's SMS carries a link minted at send time
+// (ExternalPlanLink), never one stored in the event. A repeated Idempotency-Key does nothing.
 // No card or no confirmed contact is model.ErrConflict; more than
 // model.MaxPlanSendsPerHour sends per hour is model.ErrRateLimited (external
 // contacts get an SMS).
@@ -419,6 +426,11 @@ func (s *Service) SendPlan(ctx context.Context, p auth.Principal, idempotencyKey
 		if _, inserted, err := tx.InsertPlanSend(ctx, model.PlanSend{
 			ID: sendID, MemberID: memberID, IdempotencyKey: idempotencyKey, ContactCount: len(confirmed), SentAt: now,
 		}); err != nil || !inserted {
+			return err
+		}
+		// A new send revokes the links of the previous one; the new links
+		// are minted when notify sends each SMS (ExternalPlanLink).
+		if _, err := tx.RevokeOwnerPlanLinks(ctx, memberID, now); err != nil {
 			return err
 		}
 		if _, err := tx.MarkContactsPlanSent(ctx, memberID, now); err != nil {

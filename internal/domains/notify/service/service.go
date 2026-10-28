@@ -41,10 +41,13 @@ type Service struct {
 	Recipients port.Recipients
 	Push       port.PushSender
 	SMS        port.SMSSender
-	Guard      *guard.Guard
-	Clock      clock.Clock
-	Logger     *slog.Logger
-	Config     Config
+	// Links fills the {link} placeholder of an SMS text at send time; nil
+	// skips every SMS whose text has one.
+	Links  port.SMSLinks
+	Guard  *guard.Guard
+	Clock  clock.Clock
+	Logger *slog.Logger
+	Config Config
 }
 
 func (s *Service) criticalAfter() time.Duration {
@@ -441,6 +444,24 @@ func (s *Service) sendSMS(ctx context.Context, notificationID uuid.UUID, mode sm
 		}
 	}
 
+	if strings.Contains(text, model.SMSLinkPlaceholder) {
+		// The link is minted only now, after every other check, so a token
+		// exists only in this SMS: never in an event, a table or a log.
+		link, err := s.smsLink(ctx, n)
+		if errors.Is(err, model.ErrNotFound) {
+			_ = s.Store.InTx(ctx, func(tx port.Tx) error {
+				return tx.UpdateDelivery(ctx, deliveryID, model.StatusSkipped, attempts, nil, s.Clock.Now().UTC())
+			})
+			s.log().Info("sms skipped", "event", "ExternalSMSSkipped", "notification_id", notificationID, "reason", "no_link")
+			return nil
+		}
+		if err != nil {
+			// Leave delivery pending so the timer retries with backoff.
+			return fmt.Errorf("link for sms: %w", err)
+		}
+		text = strings.ReplaceAll(text, model.SMSLinkPlaceholder, link)
+	}
+
 	if s.SMS == nil {
 		return errors.New("notify: sms sender not configured")
 	}
@@ -473,6 +494,16 @@ func (s *Service) sendSMS(ctx context.Context, notificationID uuid.UUID, mode sm
 	}
 	s.log().Info("sms sent", "event", event, "notification_id", n.ID)
 	return nil
+}
+
+// smsLink asks the SMSLinks port for the link of this notification;
+// without the port no link can be made (model.ErrNotFound: the SMS is
+// skipped rather than sent with a dead placeholder).
+func (s *Service) smsLink(ctx context.Context, n model.Notification) (string, error) {
+	if s.Links == nil {
+		return "", model.ErrNotFound
+	}
+	return s.Links.LinkFor(ctx, n.Template, n.RecipientKind, n.RecipientRef)
 }
 
 func (s *Service) smsText(template, lang string) string {

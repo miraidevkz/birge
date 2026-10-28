@@ -253,6 +253,42 @@ func (rc *Recipients) PhoneFor(ctx context.Context, kind string, ref uuid.UUID) 
 	}
 }
 
+// PlanLinkMinter is the part of emergency the plan SMS link needs.
+type PlanLinkMinter interface {
+	ExternalPlanLink(ctx context.Context, trustedContactID uuid.UUID) (string, error)
+}
+
+// PlanSMSLinks implements notify's SMSLinks port: the emergency.plan_sent SMS
+// of an external trusted contact carries PublicURL + "/plan#" + token. The
+// token is in the fragment, so it never reaches a server or an access log
+// when the link is opened (the page posts it to viewExternalPlan). The link
+// is returned to notify only for the SMS body; nothing here logs it.
+type PlanSMSLinks struct {
+	Emergency PlanLinkMinter
+	// PublicURL is the member web app origin (BIRGE_PUBLIC_URL), without a
+	// trailing slash.
+	PublicURL string
+}
+
+var _ notifyport.SMSLinks = (*PlanSMSLinks)(nil)
+
+// LinkFor mints the plan link for an external contact's emergency.plan_sent
+// SMS; any other template or recipient has no link (ErrNotFound).
+func (p *PlanSMSLinks) LinkFor(ctx context.Context, template, kind string, ref uuid.UUID) (string, error) {
+	if template != emergencymodel.TemplatePlanSent || kind != notifymodel.RecipientKindExternal || ref == uuid.Nil ||
+		p.Emergency == nil || p.PublicURL == "" {
+		return "", notifymodel.ErrNotFound
+	}
+	token, err := p.Emergency.ExternalPlanLink(ctx, ref)
+	if errors.Is(err, emergencyservice.ErrNotFound) {
+		return "", notifymodel.ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("plan sms link: trusted contact %s: %w", ref, err)
+	}
+	return strings.TrimRight(p.PublicURL, "/") + "/plan#" + token, nil
+}
+
 // EmergencyMembers implements emergency's MemberInfo from membership.
 // DisplayName is the first name only (contract: never address or location):
 // membership's full display name is split at the first space.

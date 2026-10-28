@@ -351,3 +351,31 @@ func (s *Server) GetSharedPlan(ctx context.Context, req GetSharedPlanRequestObje
 		Headers: GetSharedPlan200ResponseHeaders{CacheControl: &cc},
 	}, nil
 }
+
+// ViewExternalPlan serves the child card behind an SMS link (security: [],
+// no session). Every failure of the token is the same 404 problem, so a
+// token cannot be probed; the per-IP limit (429) sits in front of this
+// handler in the wiring. The token is never echoed, logged or put into an
+// error. Cache-Control: no-store.
+func (s *Server) ViewExternalPlan(ctx context.Context, req ViewExternalPlanRequestObject) (ViewExternalPlanResponseObject, error) {
+	notFound := func() ViewExternalPlanResponseObject {
+		st, c, t, _ := problemFor(model.ErrNotFound)
+		return ViewExternalPlan404ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(problem(st, c, t))}
+	}
+	if req.Body == nil {
+		st, c, t := invalid()
+		return ViewExternalPlandefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+	}
+	plan, err := s.Service.ViewExternalPlan(ctx, req.Body.Token)
+	if err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			return notFound(), nil
+		}
+		return nil, err
+	}
+	cc := noStore
+	return ViewExternalPlan200JSONResponse{
+		Body:    SharedPlan{OwnerDisplayName: plan.OwnerDisplayName, ChildCard: plan.ChildCard, SentAt: plan.SentAt},
+		Headers: ViewExternalPlan200ResponseHeaders{CacheControl: &cc},
+	}, nil
+}

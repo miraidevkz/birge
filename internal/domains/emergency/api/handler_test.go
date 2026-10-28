@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -27,6 +28,7 @@ const (
 type harness struct {
 	h       http.Handler
 	members *emergencytest.FakeMembers
+	svc     *service.Service
 }
 
 func newHarness() *harness {
@@ -39,8 +41,9 @@ func newHarness() *harness {
 		Acquaintances: members,
 		Clock:         &emergencytest.Clock{T: time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)},
 		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Settings:      service.Settings{PlanLinkKey: []byte("test-plan-link-key-0123456789abcdef")},
 	}
-	return &harness{h: api.Handler(api.NewStrictHandler(&api.Server{Service: svc}, nil)), members: members}
+	return &harness{h: api.Handler(api.NewStrictHandler(&api.Server{Service: svc}, nil)), members: members, svc: svc}
 }
 
 func (hs *harness) member(verified bool, district *uuid.UUID) *auth.Principal {
@@ -201,5 +204,45 @@ func TestPlanOverHTTP(t *testing.T) {
 	}
 	if rec := hs.do(t, nil, http.MethodGet, "/me/emergency-plan", ""); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous = %d", rec.Code)
+	}
+}
+
+// TestExternalPlanOverHTTP: the SMS link opens the card without a principal,
+// with Cache-Control: no-store; unknown, malformed and revoked tokens get the
+// very same 404 problem body.
+func TestExternalPlanOverHTTP(t *testing.T) {
+	hs := newHarness()
+	owner := hs.member(false, nil)
+	hs.do(t, owner, http.MethodPut, "/me/emergency-plan/child-card", `{"text":"`+fakeCard+`"}`)
+	ext := decode[api.TrustedContact](t, hs.do(t, owner, http.MethodPost, "/me/trusted-contacts",
+		`{"kind":"external","name":"Example Contact","phone":"`+fakePhone+`"}`, key, uuid.NewString()))
+	if rec := hs.do(t, owner, http.MethodPost, "/me/emergency-plan/send", `{"confirm":"SEND"}`, key, uuid.NewString()); rec.Code != http.StatusAccepted {
+		t.Fatalf("send = %d", rec.Code)
+	}
+	token, err := hs.svc.ExternalPlanLink(context.Background(), ext.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := hs.do(t, nil, http.MethodPost, "/external/plans/view", `{"token":"`+token+`"}`)
+	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("view = %d %q %s", rec.Code, rec.Header().Get("Cache-Control"), rec.Body)
+	}
+	if sp := decode[api.SharedPlan](t, rec); sp.ChildCard != fakeCard || sp.OwnerDisplayName != "Example" {
+		t.Fatalf("shared plan = %+v", sp)
+	}
+
+	unknown := hs.do(t, nil, http.MethodPost, "/external/plans/view", `{"token":"`+strings.Repeat("A", 43)+`"}`)
+	malformed := hs.do(t, nil, http.MethodPost, "/external/plans/view", `{"token":"short"}`)
+	if rec := hs.do(t, owner, http.MethodDelete, "/me/trusted-contacts/"+ext.Id.String(), ""); rec.Code != http.StatusNoContent {
+		t.Fatalf("remove = %d", rec.Code)
+	}
+	revoked := hs.do(t, nil, http.MethodPost, "/external/plans/view", `{"token":"`+token+`"}`)
+	for name, r := range map[string]*httptest.ResponseRecorder{"unknown": unknown, "malformed": malformed, "revoked": revoked} {
+		if r.Code != http.StatusNotFound || r.Body.String() != unknown.Body.String() {
+			t.Errorf("%s = %d %s; want the unknown-token 404 %s", name, r.Code, r.Body, unknown.Body)
+		}
+		if strings.Contains(r.Body.String(), token) || strings.Contains(r.Body.String(), fakeCard) {
+			t.Errorf("%s leaks the token or the card: %s", name, r.Body)
+		}
 	}
 }

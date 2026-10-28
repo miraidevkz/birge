@@ -31,6 +31,38 @@ func (q *Queries) CountPlanSendsSince(ctx context.Context, arg CountPlanSendsSin
 	return column_1, err
 }
 
+const deleteExpiredPlanLink = `-- name: DeleteExpiredPlanLink :execrows
+DELETE FROM emergency.plan_links
+WHERE id = $1
+  AND expires_at <= $2
+`
+
+type DeleteExpiredPlanLinkParams struct {
+	ID     uuid.UUID
+	Cutoff time.Time
+}
+
+// Retention (emergency.PlanLinkPurge): only a link that expired before cutoff.
+func (q *Queries) DeleteExpiredPlanLink(ctx context.Context, arg DeleteExpiredPlanLinkParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredPlanLink, arg.ID, arg.Cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteOwnerPlanLinks = `-- name: DeleteOwnerPlanLinks :execrows
+DELETE FROM emergency.plan_links WHERE owner_id = $1
+`
+
+func (q *Queries) DeleteOwnerPlanLinks(ctx context.Context, ownerID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOwnerPlanLinks, ownerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getChildCard = `-- name: GetChildCard :one
 SELECT member_id, content, updated_at, last_sent_at
 FROM emergency.child_cards
@@ -45,6 +77,37 @@ func (q *Queries) GetChildCard(ctx context.Context, memberID uuid.UUID) (Emergen
 		&i.Content,
 		&i.UpdatedAt,
 		&i.LastSentAt,
+	)
+	return i, err
+}
+
+const getLivePlanLink = `-- name: GetLivePlanLink :one
+SELECT id, token_hash, contact_id, owner_id, sent_at, created_at, expires_at, revoked_at
+FROM emergency.plan_links
+WHERE token_hash = $1
+  AND revoked_at IS NULL
+  AND expires_at > $2
+`
+
+type GetLivePlanLinkParams struct {
+	TokenHash []byte
+	Now       time.Time
+}
+
+// One query for every failure (unknown, revoked, expired), so they cannot be
+// told apart by status or by the number of round trips.
+func (q *Queries) GetLivePlanLink(ctx context.Context, arg GetLivePlanLinkParams) (EmergencyPlanLink, error) {
+	row := q.db.QueryRow(ctx, getLivePlanLink, arg.TokenHash, arg.Now)
+	var i EmergencyPlanLink
+	err := row.Scan(
+		&i.ID,
+		&i.TokenHash,
+		&i.ContactID,
+		&i.OwnerID,
+		&i.SentAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.RevokedAt,
 	)
 	return i, err
 }
@@ -72,6 +135,34 @@ func (q *Queries) GetPlanSendByIdempotencyKey(ctx context.Context, arg GetPlanSe
 		&i.SentAt,
 	)
 	return i, err
+}
+
+const insertPlanLink = `-- name: InsertPlanLink :exec
+INSERT INTO emergency.plan_links (id, token_hash, contact_id, owner_id, sent_at, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type InsertPlanLinkParams struct {
+	ID        uuid.UUID
+	TokenHash []byte
+	ContactID uuid.UUID
+	OwnerID   uuid.UUID
+	SentAt    time.Time
+	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
+func (q *Queries) InsertPlanLink(ctx context.Context, arg InsertPlanLinkParams) error {
+	_, err := q.db.Exec(ctx, insertPlanLink,
+		arg.ID,
+		arg.TokenHash,
+		arg.ContactID,
+		arg.OwnerID,
+		arg.SentAt,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
 }
 
 const insertPlanSend = `-- name: InsertPlanSend :one
@@ -109,6 +200,30 @@ func (q *Queries) InsertPlanSend(ctx context.Context, arg InsertPlanSendParams) 
 	return i, err
 }
 
+const listOwnerPlanLinkIDs = `-- name: ListOwnerPlanLinkIDs :many
+SELECT id FROM emergency.plan_links WHERE owner_id = $1
+`
+
+func (q *Queries) ListOwnerPlanLinkIDs(ctx context.Context, ownerID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOwnerPlanLinkIDs, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markChildCardSent = `-- name: MarkChildCardSent :exec
 UPDATE emergency.child_cards
 SET last_sent_at = $1
@@ -123,6 +238,46 @@ type MarkChildCardSentParams struct {
 func (q *Queries) MarkChildCardSent(ctx context.Context, arg MarkChildCardSentParams) error {
 	_, err := q.db.Exec(ctx, markChildCardSent, arg.SentAt, arg.MemberID)
 	return err
+}
+
+const revokeContactPlanLinks = `-- name: RevokeContactPlanLinks :execrows
+UPDATE emergency.plan_links
+SET revoked_at = $1
+WHERE contact_id = $2
+  AND revoked_at IS NULL
+`
+
+type RevokeContactPlanLinksParams struct {
+	RevokedAt *time.Time
+	ContactID uuid.UUID
+}
+
+func (q *Queries) RevokeContactPlanLinks(ctx context.Context, arg RevokeContactPlanLinksParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeContactPlanLinks, arg.RevokedAt, arg.ContactID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const revokeOwnerPlanLinks = `-- name: RevokeOwnerPlanLinks :execrows
+UPDATE emergency.plan_links
+SET revoked_at = $1
+WHERE owner_id = $2
+  AND revoked_at IS NULL
+`
+
+type RevokeOwnerPlanLinksParams struct {
+	RevokedAt *time.Time
+	OwnerID   uuid.UUID
+}
+
+func (q *Queries) RevokeOwnerPlanLinks(ctx context.Context, arg RevokeOwnerPlanLinksParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeOwnerPlanLinks, arg.RevokedAt, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertChildCard = `-- name: UpsertChildCard :exec

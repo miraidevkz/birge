@@ -17,6 +17,17 @@ type EmergencyChildCard struct {
 	LastSentAt *time.Time
 }
 
+type EmergencyPlanLink struct {
+	ID        uuid.UUID
+	TokenHash []byte
+	ContactID uuid.UUID
+	OwnerID   uuid.UUID
+	SentAt    time.Time
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	RevokedAt *time.Time
+}
+
 type EmergencyPlanSend struct {
 	ID             uuid.UUID
 	MemberID       uuid.UUID

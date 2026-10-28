@@ -2,7 +2,8 @@
 -- ADR-0009 and ADR-0019. SOS texts, child cards and external contacts' names
 -- and phones are sealed with the owner's data key; members are IDs only.
 -- Rows are never deleted: SOS requests are closed, trusted contacts removed
--- (removed_at), so the only deletion path stays the account-deletion flow.
+-- (removed_at), so the only deletion paths are the account-deletion flow and
+-- the retention of expired plan links (ADR-0023: 7 days after expiry).
 
 CREATE SCHEMA IF NOT EXISTS emergency;
 
@@ -128,3 +129,32 @@ CREATE UNIQUE INDEX plan_sends_member_idempotency_uidx
     ON emergency.plan_sends (member_id, idempotency_key);
 CREATE INDEX plan_sends_member_sent_idx
     ON emergency.plan_sends (member_id, sent_at DESC);
+
+-- One-time links to the child card for external trusted contacts (no
+-- account), sent in the plan SMS as <public URL>/plan#<token>. The token
+-- itself is never stored: only HMAC-SHA256(BIRGE_PLAN_LINK_KEY_FILE, token),
+-- so a database dump cannot open a plan. A link lives 24 hours from the plan
+-- send (expires_at = sent_at + 24h) and is revoked earlier when the owner
+-- sends again, removes the contact or mints a new link for the contact. The
+-- emergency.PlanLinkPurge timer deletes the row 7 days after expires_at
+-- (ADR-0023); nothing refers to it, so no tombstone is kept.
+CREATE TABLE emergency.plan_links (
+    id         uuid        PRIMARY KEY,
+    token_hash bytea       NOT NULL CHECK (octet_length(token_hash) = 32),
+    contact_id uuid        NOT NULL REFERENCES emergency.trusted_contacts (id),
+    owner_id   uuid        NOT NULL,
+    -- The plan send this link belongs to (trusted_contacts.plan_sent_at at mint time).
+    sent_at    timestamptz NOT NULL,
+    created_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL,
+    revoked_at timestamptz,
+    CONSTRAINT plan_links_expiry_check CHECK (expires_at > sent_at)
+);
+
+-- The lookup of viewExternalPlan, by keyed hash only.
+CREATE UNIQUE INDEX plan_links_token_hash_uidx ON emergency.plan_links (token_hash);
+-- Revocation per contact (resend, removal, new link).
+CREATE INDEX plan_links_contact_active_idx
+    ON emergency.plan_links (contact_id) WHERE revoked_at IS NULL;
+-- Revocation on resend and account deletion per owner.
+CREATE INDEX plan_links_owner_idx ON emergency.plan_links (owner_id);

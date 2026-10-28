@@ -42,14 +42,14 @@ Delivery is not HTTP: JetStream consumer `notify.DeliveryRequested` → `service
 
 none (other contexts publish `notify.DeliveryRequested`; they do not call this service directly).
 
-Ports used by this context (wired in `internal/wiring`): `Recipients` (`Resolve` for kind/ref/language only; `PhoneFor` at SMS send time), `PushSender`, `SMSSender`.
+Ports used by this context (wired in `internal/wiring`): `Recipients` (`Resolve` for kind/ref/language only; `PhoneFor` at SMS send time), `PushSender`, `SMSSender`, `SMSLinks` (fills `{link}` at send time: the emergency plan link of an external contact, minted by emergency; optional).
 
 ## Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `service.Config.CriticalSMSAfter` | 60s | Wait for acknowledgement before member critical SMS |
-| `service.Config.SMSTexts` | required for SMS | `template → language →` neutral fixed body (no message content); unset `BIRGE_SMS_TEXTS` → DEMO preset |
+| `service.Config.SMSTexts` | required for SMS | `template → language →` neutral fixed body (no message content); unset `BIRGE_SMS_TEXTS` → DEMO preset. `{link}` is replaced at send time through `SMSLinks`, after the guard and right before the provider; no link → the SMS is skipped (`no_link`), a transient error → the timer retries. The link is never stored or logged |
 | `guard.Config.AllowedPrefixes` | empty rejects all | E.164 prefix allow-list |
 | `guard.Config.PerNumberLimit` / `PerNumberWindow` | 0 disabled / 1h | Per-number rate limit |
 | `guard.Config.GlobalLimit` / `GlobalWindow` | 0 disabled / 1m | Process-wide rate limit |

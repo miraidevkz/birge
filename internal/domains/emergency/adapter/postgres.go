@@ -1,6 +1,7 @@
 // Package adapter implements the emergency ports on PostgreSQL (schema
 // emergency, sqlc in ../store) and the platform hooks it needs: outbox
-// events, the SOS auto-close timer, the audit log and the timer handler.
+// events, the SOS auto-close and plan-link purge timers, the audit log and
+// the timer handlers.
 // Ports onto other contexts (membership profiles and blocks, the circle's
 // "met in person") are wired later.
 package adapter

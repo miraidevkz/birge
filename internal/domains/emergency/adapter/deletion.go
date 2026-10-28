@@ -44,6 +44,18 @@ func (s *PostgresStore) EraseMember(ctx context.Context, memberID uuid.UUID, now
 		if _, err := q.DeleteMemberChildCard(ctx, memberID); err != nil {
 			return fmt.Errorf("emergency: delete child card: %w", err)
 		}
+		// Links reference her contacts (foreign key): they go first, with
+		// their purge timers.
+		linkIDs, err := q.ListOwnerPlanLinkIDs(ctx, memberID)
+		if err != nil {
+			return fmt.Errorf("emergency: list plan links: %w", err)
+		}
+		if _, err := timers.CancelSubjects(ctx, platform, now, []string{model.TimerPlanLinkPurge}, linkIDs); err != nil {
+			return err
+		}
+		if _, err := q.DeleteOwnerPlanLinks(ctx, memberID); err != nil {
+			return fmt.Errorf("emergency: delete plan links: %w", err)
+		}
 		if _, err := q.DeleteMemberTrustedContacts(ctx, memberID); err != nil {
 			return fmt.Errorf("emergency: delete trusted contacts: %w", err)
 		}

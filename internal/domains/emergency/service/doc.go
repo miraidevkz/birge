@@ -9,7 +9,21 @@
 //   - ContactPhone: the phone and SMS language of an external trusted
 //     contact, opened at send time; ErrNotFound once the contact is removed;
 //   - TrustedContactTarget: whether a trusted_contact_id is a member (and
-//     which) or an external contact; ErrNotFound when removed or unconfirmed.
+//     which) or an external contact; ErrNotFound when removed or unconfirmed;
+//   - ExternalPlanLink: the one-time link token of an external contact,
+//     minted when notify sends the plan SMS; ErrNotFound when there is no
+//     live plan send for the contact.
+//
+// # External plan links
+//
+// An external contact (no account) reads the child card through
+// <public URL>/plan#<token> (viewExternalPlan, no session). The token is 32
+// random bytes; only its HMAC-SHA256 under Settings.PlanLinkKey is stored.
+// A link works for model.PlanLinkTTL after the plan send and is revoked by a
+// new send, by removing the contact and by minting a new link; every
+// failure is the same ErrNotFound. Every view is audited with the contact
+// and owner ids, never the token or the IP. Expired rows are deleted
+// model.PlanLinkRetention later by the emergency.PlanLinkPurge timer.
 //
 // # Atomicity
 //

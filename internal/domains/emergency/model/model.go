@@ -109,11 +109,31 @@ const (
 // delay (ADR-0020); subject and dedup key are the SOS id.
 const TimerSosAutoClose = "emergency.SosAutoClose"
 
+// TimerPlanLinkPurge deletes an external plan link PlanLinkRetention after it
+// expired (ADR-0023); subject and dedup key are the link id.
+const TimerPlanLinkPurge = "emergency.PlanLinkPurge"
+
+// External plan links (viewExternalPlan).
+const (
+	// PlanLinkTTL is how long a link works after the plan send (contract: 24 hours).
+	PlanLinkTTL = 24 * time.Hour
+	// PlanLinkRetention is how long an expired link row is kept before the
+	// purge timer deletes it (ADR-0023).
+	PlanLinkRetention = 7 * 24 * time.Hour
+	// PlanLinkTokenBytes is the token's entropy: 32 random bytes, 43
+	// characters of unpadded base64url.
+	PlanLinkTokenBytes = 32
+)
+
 // Audit codes written to platform.audit_log.
 const (
 	AuditActorMember     = "member"
 	AuditObjectChildCard = "emergency.child_card"
 	AuditViewSharedPlan  = "emergency_plan.view_shared"
+	// AuditActorExternalContact is the actor role of a view through an SMS
+	// link: the actor id is the trusted contact id (she has no account).
+	AuditActorExternalContact = "external_contact"
+	AuditViewExternalPlan     = "emergency_plan.view_external"
 )
 
 // Associated-data field names for sealed columns (crypto.AssociatedData).
@@ -130,6 +150,8 @@ const (
 	LockSos      = "emergency.sos"
 	LockContacts = "emergency.trusted_contacts"
 	LockPlan     = "emergency.plan"
+	// LockPlanLink serialises link minting per trusted contact (key = contact id).
+	LockPlanLink = "emergency.plan_link"
 )
 
 var (
@@ -353,6 +375,20 @@ type SharedPlan struct {
 	OwnerDisplayName string
 	ChildCard        string
 	SentAt           time.Time
+}
+
+// PlanLink is one stored external plan link. TokenHash is
+// HMAC-SHA256(plan link key, token); the token itself is never stored.
+type PlanLink struct {
+	ID        uuid.UUID
+	TokenHash []byte
+	ContactID uuid.UUID
+	OwnerID   uuid.UUID
+	// SentAt is the plan send the link belongs to; ExpiresAt = SentAt + PlanLinkTTL.
+	SentAt    time.Time
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	RevokedAt *time.Time
 }
 
 // PlanSend records one "send the plan" confirmation.

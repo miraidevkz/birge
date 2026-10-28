@@ -11,12 +11,13 @@ SOS and the emergency plan («SOS», «План ЧС»): a member raises an SOS 
 | `child_cards` | One child card per member; `last_sent_at` | `content` sealed with the member's key (AD `emergency.child_cards.text\|<member id>`) |
 | `trusted_contacts` | Up to 3 active contacts per owner: `member` (invited → confirmed) or `external` (confirmed at once); `plan_sent_at`; removed with `removed_at`, never deleted | external `name` and `phone` sealed with the owner's key (AD `emergency.trusted_contacts.name\|<id>`, `….phone\|<id>`); `lang` |
 | `plan_sends` | One row per confirmed «Отправить план» (Idempotency-Key); also the plan-send rate limit | IDs and counts only |
+| `plan_links` | One-time links of external contacts: `token_hash` (HMAC-SHA256 of the token under `Settings.PlanLinkKey`; the token is never stored), contact, owner, `sent_at`, `expires_at = sent_at + 24h`, `revoked_at`. Deleted 7 days after expiry (`emergency.PlanLinkPurge`, ADR-0023) and on account deletion | IDs and a keyed hash only |
 
 Writes to `platform.audit_log` through the `Auditor` port (`internal/platform/audit`).
 
 ## API
 
-Operations of tag `emergency` in `contracts/openapi/birge.yaml`. All are member-only: the caller is `auth.Principal.MemberID`; staff, anonymous and sessions without a member id → 401. Another member's SOS or contact → 404 (existence is not revealed).
+Operations of tag `emergency` in `contracts/openapi/birge.yaml`. All except `viewExternalPlan` are member-only: the caller is `auth.Principal.MemberID`; staff, anonymous and sessions without a member id → 401. Another member's SOS or contact → 404 (existence is not revealed).
 
 | Operation | Rules not in the contract |
 |---|---|
@@ -31,9 +32,10 @@ Operations of tag `emergency` in `contracts/openapi/birge.yaml`. All are member-
 | `GET /me/emergency-plan` | Card (`""` when none), active contacts (member contacts: display name from membership; external: opened name and `phoneMasked` such as `+7 *** *** 00 01`; never the full number), `lastSentAt`. |
 | `PUT /me/emergency-plan/child-card` | ≤ 2000 characters; sealed. |
 | `POST /me/trusted-contacts` | `Idempotency-Key` per owner. At most 3 active (invited + confirmed) under a per-owner lock → 409; a member already active → 409. `member`: needs `memberId` only, `Acquaintances.Met(owner, member)` (403 otherwise, also when blocked either way), status `invited`, invitation delivery to her (`member_id`, class `normal`, template `emergency.trusted_invitation`, params `{contact_id}`). `external`: needs `name` (1..60) and E.164 `phone` only; sealed; `confirmed` at once; SMS language = the owner's language when added. |
-| `DELETE /me/trusted-contacts/{id}` | Owner only; sets `removed_at` (no deletion path); idempotent. |
+| `DELETE /me/trusted-contacts/{id}` | Owner only; sets `removed_at` (no deletion path) and revokes her plan links in the same transaction; idempotent. |
 | `POST /me/trusted-invitations/{id}/accept` | Only the invited member (anyone else, or a removed invitation → 404). Re-checks `Met` (403) and blocks (404). Idempotent. |
-| `POST /me/emergency-plan/send` | `confirm: SEND`; `Idempotency-Key` per member. Needs a card and ≥ 1 confirmed contact (409). At most 3 sends per hour (429: external contacts get an SMS). One transaction: `plan_sends` row, `plan_sent_at` on confirmed contacts, `last_sent_at`, `emergency.PlanSent`, a delivery per confirmed contact (class `normal`, template `emergency.plan_sent`, params `{owner_id}`). |
+| `POST /me/emergency-plan/send` | `confirm: SEND`; `Idempotency-Key` per member. Needs a card and ≥ 1 confirmed contact (409). At most 3 sends per hour (429: external contacts get an SMS). One transaction: `plan_sends` row, earlier plan links revoked, `plan_sent_at` on confirmed contacts, `last_sent_at`, `emergency.PlanSent`, a delivery per confirmed contact (class `normal`, template `emergency.plan_sent`, params `{owner_id}`). An external contact's link is minted later, when notify sends her SMS (`ExternalPlanLink`). |
+| `POST /external/plans/view` | `security: []` (in `wiring.AnonymousOperations`); its own per-IP bucket in the wiring (`BIRGE_PLAN_LINK_RATE_PER_IP`, 429) in front of the session middleware. One lookup by keyed hash of a live link (not revoked, `expires_at > now`); unknown, expired, revoked and malformed tokens → the same 404 problem. Audit `emergency_plan.view_external` (actor = contact id, role `external_contact`, object `emergency.child_card` / owner id) in the same transaction, before the card is opened; never the token or IP. Same `SharedPlan` as `getSharedPlan`, `sentAt` = the send of the link. `Cache-Control: no-store`. The token is never logged or echoed. |
 | `GET /trusted/plans/{ownerId}` | Only an active, confirmed member contact of that owner whose `plan_sent_at` is set; anything else → 403 without saying why. Audit `emergency_plan.view_shared` (actor = member, object `emergency.child_card` / owner id) is written in the same transaction as the access check, before the card is opened; a failed audit returns nothing. `Cache-Control: no-store`. Shows the owner's current card. |
 
 ## Events
@@ -52,6 +54,7 @@ Operations of tag `emergency` in `contracts/openapi/birge.yaml`. All are member-
 
 | Kind | Scheduled when | Handler does | Idempotency |
 |---|---|---|---|
+| `emergency.PlanLinkPurge` | link minted; due at `expires_at + 7 days`; subject and dedup key = link id | `HandlePlanLinkPurge` deletes the row if it expired at least 7 days ago | gone (account deletion) or not yet due → nothing; cancelled by account deletion |
 | `emergency.SosAutoClose` | SOS raised; due at `closes_at` (`Settings.AutoCloseAfter`, 24 h); subject and dedup key = SOS id | `adapter.TimerHandlers.SosAutoClose` → `HandleAutoClose` in the worker's transaction: an open SOS is closed (`auto`) and `SosClosed` published; closed or unknown → nothing | cancelled when the author closes; row locked `FOR UPDATE`; the feed also hides SOS past `closes_at` if the worker is late |
 
 ## Service API for other contexts
@@ -61,7 +64,9 @@ Operations of tag `emergency` in `contracts/openapi/birge.yaml`. All are member-
 | `Service.SosAuthor(ctx, sosID) (uuid.UUID, err)` | Member who raised the SOS (`service.ErrNotFound` when unknown). For the SosShared district-push consumer. |
 | `Service.ContactPhone(ctx, trustedContactID) (phone, lang, err)` | For notify at SMS send time: the external contact's E.164 phone (opened with the owner's key) and SMS language (`kk`/`ru`). `service.ErrNotFound` when unknown, removed or a member contact. Never log or store the phone. |
 | `Service.TrustedContactTarget(ctx, id) (memberID *uuid.UUID, external bool, err)` | What a `trusted_contact_id` stands for: a confirmed member contact (`memberID`) or an external one (`external`). `service.ErrNotFound` when unknown, removed or still invited. |
+| `Service.ExternalPlanLink(ctx, trustedContactID) (token, err)` | For notify (through `wiring.PlanSMSLinks`) at plan SMS send time: a new 43-character token for an active, confirmed external contact whose plan was sent less than 24 h ago; revokes her earlier links; expiry = send + 24 h. `service.ErrNotFound` otherwise (the SMS is skipped). Never log or store the token. |
 | `Service.HandleAutoClose(ctx, tx, sosID)` | Timer handler; used by `adapter.TimerHandlers`. |
+| `Service.HandlePlanLinkPurge(ctx, tx, linkID)` | Timer handler; used by `adapter.TimerHandlers`. |
 
 Ports used by this context (wired later): `Sealer` (platform crypto), `MemberInfo` (membership: verification, district, display name, language), `Blocks` (membership `IsBlocked`, both directions), `Acquaintances` (circle `Met`), `Store`/`Auditor` (PostgreSQL adapter).
 
@@ -70,8 +75,11 @@ Ports used by this context (wired later): `Sealer` (platform crypto), `MemberInf
 | Variable | Default | Meaning |
 |---|---|---|
 | `service.Settings.AutoCloseAfter` | 24h | Time after which an open SOS closes by itself (§ 4.6 «конфиг»); env `BIRGE_SOS_AUTO_CLOSE_AFTER` |
+| `service.Settings.PlanLinkKey` | required | HMAC key of plan link tokens; env `BIRGE_PLAN_LINK_KEY_FILE` (api and worker) |
+| `wiring.PlanSMSLinks.PublicURL` | required (worker) | link origin, `BIRGE_PUBLIC_URL`; link = `<origin>/plan#<token>` |
+| `BIRGE_PLAN_LINK_RATE_PER_IP` | `10/1m` | per-IP limit of `viewExternalPlan` (wiring) |
 
-Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS per hour, 3 trusted contacts, 2000 characters per child card; plan sends 3 per hour.
+Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS per hour, 3 trusted contacts, 2000 characters per child card; plan sends 3 per hour; plan links 24 h (contract), kept 7 days after expiry (ADR-0023).
 
 ## Invariants
 
@@ -84,8 +92,9 @@ Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS 
 - The shared plan is readable only by a confirmed, active member contact after a send, and every read is audited first (service; tests).
 - Sealed fields only: SOS text, child card, external name and phone (service; schema comments; `TestRaiseSosAtomicPostgres` checks with the real envelope that no plaintext is in the tables or the outbox).
 - No text, name or phone in events, notifications or logs; logs carry IDs and event names (service; `newEnv` cleanup in unit tests checks logs and all event payloads).
-- Nothing is deleted in normal operation: SOS are closed, contacts removed with `removed_at`. The only delete queries belong to account deletion.
-- Account deletion (AGENTS.md N6): her SOS requests with every response to them, her own responses to other members' requests, her child card, her trusted contacts, the entries in which she is another owner's member contact, and her plan sends are deleted; the auto-close timers of her requests are cancelled, all in one transaction. Nothing is tombstoned: the other owner's contact list simply loses her, and a direct chat opened from an accepted response is kept by chat. One audit entry `emergency.member_deleted` (actor system); earlier `view_shared_plan` audit entries stay (append-only).
+- External plan links: the token exists only in the SMS (minted at send time, never in an event, the outbox, notify or a log); the database has only its keyed hash. Unknown, expired and revoked tokens are one `ErrNotFound` after the same single lookup (`TestExternalPlanFailuresLookAlike`). Resend, contact removal and a newer link revoke (`TestExternalPlanLinkLifecycle`, `TestExternalPlanLinkRevokedOnContactRemoval`, `TestExternalPlanLinksPostgres`, `wiring.TestExternalPlanLinkEndToEnd`, which also proves the operation is the only anonymous emergency route and greps the logs for the token).
+- Nothing is deleted in normal operation: SOS are closed, contacts removed with `removed_at`. The only delete queries belong to account deletion and to the retention purge of expired plan links.
+- Account deletion (AGENTS.md N6): her SOS requests with every response to them, her own responses to other members' requests, her child card, her trusted contacts, the entries in which she is another owner's member contact, her plan sends and her plan links are deleted; the auto-close timers of her requests and the purge timers of her links are cancelled, all in one transaction. Nothing is tombstoned: the other owner's contact list simply loses her, and a direct chat opened from an accepted response is kept by chat. One audit entry `emergency.member_deleted` (actor system); earlier `view_shared_plan` audit entries stay (append-only).
 
 ## Failure modes
 
@@ -99,12 +108,15 @@ Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS 
 ## Tests
 
 - Unit: `service/service_test.go` with fakes from `emergencytest/` — atomic raise and rollback, idempotency, rate limit, validation and auth, close and auto-close, share rules (childcare, unverified, closed, no district), feed visibility (childcare, own, blocked both ways, district, expiry) and pagination, respond/responses/accept, trusted contact rules (unmet, blocked, duplicate, max 3, acceptance by the right member only, re-check of `Met`), notify lookups, plan send and shared-plan access and audit, fail-closed blocks, phone masking; logs and events are checked for fake personal data.
-- HTTP: `api/handler_test.go` — status codes (401, 403, 409, 429), `Cache-Control: no-store`, no full phone in responses.
+- Unit (links): `service/links_test.go` — mint, view, expiry from the send, revocation on resend/removal/new link, identical failures, audit-first, rollback, purge, missing key; the cleanup greps logs and stored hashes for every minted token.
+- HTTP: `api/handler_test.go` — status codes (401, 403, 409, 429), `Cache-Control: no-store`, no full phone in responses, the anonymous external view and its single 404 body.
 - Integration: `adapter/integration_test.go` with `testinfra.Postgres` — atomic raise with injected failures and the real envelope (no plaintext in tables or outbox; payloads match the `notify.DeliveryRequested` contract), concurrent rate limit and replays, childcare refused by service, store and table check, feed SQL filter, respond idempotency, auto-close timer worker, concurrent contact limit, shared-plan audit rows, schema constraints.
 
 ## Open questions
 
-- **External one-time plan links are out of scope.** The contract promises external contacts an SMS with a 24-hour one-time link to the plan; this context requests the `emergency.plan_sent` delivery for them, but no link exists yet (needs a token table, a public endpoint and its rate limit).
+- The plan link page (`apps/mobile` web route `plan`) is a separate task; until it ships the link in the SMS leads to the app's not-found page.
+- A link is "one-time" in the sense of one per send and contact: it can be opened repeatedly within its 24 hours (the contract does not ask for single use).
+- The dev SMS sender logs only the notification id, so in the compose stack the link cannot be read anywhere (by design).
 - Contact alerts on raise use class `critical` (member contacts get the SMS fallback); the brief fixed the class only for the moderator alert.
 - There is no endpoint for a trusted contact to read the SOS text, for moderators to see SOS in the admin, or for an invited member to list or decline invitations (she learns the `contact_id` from the invitation notification).
 - The shared plan shows the owner's current card, not a snapshot of the sent one.

@@ -98,6 +98,13 @@ type Config struct {
 	PoWKey        []byte
 	HashKey       []byte
 	PoWMaxNumber  int64
+	// PlanLinkKey is the HMAC key of external plan link tokens
+	// (BIRGE_PLAN_LINK_KEY_FILE): the API looks links up with it, the worker
+	// mints them when it sends the plan SMS.
+	PlanLinkKey []byte
+	// PublicURL is the public origin of the member web app
+	// (BIRGE_PUBLIC_URL, worker): plan SMS links are PublicURL + "/plan#" + token.
+	PublicURL string
 
 	// SMSPrefixes are the allowed E.164 mobile prefixes, shared by the auth
 	// gateway and the notify SMS guard.
@@ -108,6 +115,8 @@ type Config struct {
 
 	AuthPerIP, AuthPerNumber, AuthGlobal authgw.Rate
 	APIPerIP                             ratelimit.Rate
+	// PlanLinkPerIP limits viewExternalPlan per client IP (BIRGE_PLAN_LINK_RATE_PER_IP).
+	PlanLinkPerIP ratelimit.Rate
 
 	// TrustedProxyHeader, when set, names the header whose right-most value
 	// is the client IP (set by the ingress); otherwise RemoteAddr is used.
@@ -231,6 +240,7 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 	// Kratos admin is needed on the API for staff contact reveal (MemberDirectory)
 	// and on the worker for member SMS PhoneFor.
 	cfg.KratosAdminURL = l.httpURL("KRATOS_ADMIN_URL", true)
+	cfg.PlanLinkKey = l.keyFile("BIRGE_PLAN_LINK_KEY_FILE", true)
 	l.crisisPhonesOrDemo(&cfg)
 
 	if api {
@@ -241,11 +251,15 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		if cfg.PoWKey != nil && bytes.Equal(cfg.PoWKey, cfg.HashKey) {
 			l.fail("BIRGE_POW_KEY_FILE and BIRGE_HASH_KEY_FILE must hold different keys")
 		}
+		if cfg.PlanLinkKey != nil && (bytes.Equal(cfg.PlanLinkKey, cfg.HashKey) || bytes.Equal(cfg.PlanLinkKey, cfg.PoWKey)) {
+			l.fail("BIRGE_PLAN_LINK_KEY_FILE must hold its own key, not the PoW or hash key")
+		}
 		cfg.PoWMaxNumber = int64(l.positiveInt("BIRGE_AUTH_POW_MAX_NUMBER", 100_000))
 		cfg.AuthPerIP = authgw.Rate(l.rate("BIRGE_AUTH_RATE_PER_IP", "20/1m"))
 		cfg.AuthPerNumber = authgw.Rate(l.rate("BIRGE_AUTH_RATE_PER_NUMBER", "3/10m"))
 		cfg.AuthGlobal = authgw.Rate(l.rate("BIRGE_AUTH_RATE_GLOBAL", "20/1s"))
 		cfg.APIPerIP = l.rate("BIRGE_API_RATE_PER_IP", "300/100ms")
+		cfg.PlanLinkPerIP = l.rate("BIRGE_PLAN_LINK_RATE_PER_IP", "10/1m")
 		cfg.ConsentVersions = l.consentVersionsOrDemo(&cfg)
 		cfg.QuestionnaireFile = strings.TrimSpace(getenv("BIRGE_QUESTIONNAIRE_FILE"))
 		cfg.Wellbeing = l.questionnaireOrDemo(&cfg)
@@ -261,6 +275,7 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 	}
 	if worker {
 		cfg.NATSURL = l.natsURL("NATS_URL")
+		cfg.PublicURL = l.httpURL("BIRGE_PUBLIC_URL", true)
 		l.objectStore(&cfg)
 		cfg.SMSGuard = guard.Config{
 			AllowedPrefixes: cfg.SMSPrefixes,

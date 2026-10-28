@@ -20,7 +20,7 @@ import (
 	"birge/internal/domains/emergency/port"
 )
 
-// Timer is a recorded auto-close timer.
+// Timer is a recorded auto-close or plan-link purge timer.
 type Timer struct {
 	DueAt     time.Time
 	Cancelled bool
@@ -33,6 +33,8 @@ type state struct {
 	cards     map[uuid.UUID]model.ChildCard
 	contacts  map[uuid.UUID]model.TrustedContact
 	sends     map[uuid.UUID]model.PlanSend
+	links     map[uuid.UUID]model.PlanLink
+	purges    map[uuid.UUID]Timer
 	events    []model.Event
 	timers    map[uuid.UUID]Timer
 	audit     []model.AuditEntry
@@ -45,6 +47,8 @@ func (s *state) clone() *state {
 		cards:     maps.Clone(s.cards),
 		contacts:  maps.Clone(s.contacts),
 		sends:     maps.Clone(s.sends),
+		links:     maps.Clone(s.links),
+		purges:    maps.Clone(s.purges),
 		events:    slices.Clone(s.events),
 		timers:    maps.Clone(s.timers),
 		audit:     slices.Clone(s.audit),
@@ -70,6 +74,8 @@ func NewMemoryStore() *MemoryStore {
 		cards:     map[uuid.UUID]model.ChildCard{},
 		contacts:  map[uuid.UUID]model.TrustedContact{},
 		sends:     map[uuid.UUID]model.PlanSend{},
+		links:     map[uuid.UUID]model.PlanLink{},
+		purges:    map[uuid.UUID]Timer{},
 		timers:    map[uuid.UUID]Timer{},
 	}}
 }
@@ -129,6 +135,26 @@ func (m *MemoryStore) Timer(sosID uuid.UUID) (Timer, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t, ok := m.st.timers[sosID]
+	return t, ok
+}
+
+// PlanLinks returns the committed external plan links.
+func (m *MemoryStore) PlanLinks() []model.PlanLink {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]model.PlanLink, 0, len(m.st.links))
+	for _, l := range m.st.links {
+		out = append(out, l)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out
+}
+
+// PurgeTimer returns the emergency.PlanLinkPurge timer of the link.
+func (m *MemoryStore) PurgeTimer(linkID uuid.UUID) (Timer, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.st.purges[linkID]
 	return t, ok
 }
 
@@ -646,6 +672,88 @@ func (t *memoryTx) CancelAutoClose(_ context.Context, sosID uuid.UUID, _ time.Ti
 	cur.Cancelled = true
 	t.st.timers[sosID] = cur
 	return 1, nil
+}
+
+// InsertPlanLink implements port.Tx with the unique token hash.
+func (t *memoryTx) InsertPlanLink(_ context.Context, l model.PlanLink) error {
+	if err := t.fail("InsertPlanLink"); err != nil {
+		return err
+	}
+	for _, cur := range t.st.links {
+		if bytes.Equal(cur.TokenHash, l.TokenHash) {
+			return errors.New("emergencytest: duplicate token hash")
+		}
+	}
+	l.TokenHash = bytes.Clone(l.TokenHash)
+	t.st.links[l.ID] = l
+	return nil
+}
+
+func (t *memoryTx) revokeLinks(match func(model.PlanLink) bool, at time.Time) int64 {
+	var n int64
+	for id, l := range t.st.links {
+		if l.RevokedAt == nil && match(l) {
+			at := at
+			l.RevokedAt = &at
+			t.st.links[id] = l
+			n++
+		}
+	}
+	return n
+}
+
+// RevokeContactPlanLinks implements port.Tx.
+func (t *memoryTx) RevokeContactPlanLinks(_ context.Context, contactID uuid.UUID, at time.Time) (int64, error) {
+	if err := t.fail("RevokeContactPlanLinks"); err != nil {
+		return 0, err
+	}
+	return t.revokeLinks(func(l model.PlanLink) bool { return l.ContactID == contactID }, at), nil
+}
+
+// RevokeOwnerPlanLinks implements port.Tx.
+func (t *memoryTx) RevokeOwnerPlanLinks(_ context.Context, ownerID uuid.UUID, at time.Time) (int64, error) {
+	if err := t.fail("RevokeOwnerPlanLinks"); err != nil {
+		return 0, err
+	}
+	return t.revokeLinks(func(l model.PlanLink) bool { return l.OwnerID == ownerID }, at), nil
+}
+
+// GetLivePlanLink implements port.Tx with the same filter as the SQL query.
+func (t *memoryTx) GetLivePlanLink(_ context.Context, tokenHash []byte, now time.Time) (model.PlanLink, error) {
+	if err := t.fail("GetLivePlanLink"); err != nil {
+		return model.PlanLink{}, err
+	}
+	for _, l := range t.st.links {
+		if bytes.Equal(l.TokenHash, tokenHash) && l.RevokedAt == nil && l.ExpiresAt.After(now) {
+			return l, nil
+		}
+	}
+	return model.PlanLink{}, model.ErrNotFound
+}
+
+// DeleteExpiredPlanLink implements port.Tx.
+func (t *memoryTx) DeleteExpiredPlanLink(_ context.Context, linkID uuid.UUID, cutoff time.Time) (int64, error) {
+	if err := t.fail("DeleteExpiredPlanLink"); err != nil {
+		return 0, err
+	}
+	l, ok := t.st.links[linkID]
+	if !ok || l.ExpiresAt.After(cutoff) {
+		return 0, nil
+	}
+	delete(t.st.links, linkID)
+	return 1, nil
+}
+
+// SchedulePlanLinkPurge implements port.Tx (dedup on an active timer).
+func (t *memoryTx) SchedulePlanLinkPurge(_ context.Context, linkID uuid.UUID, dueAt time.Time) (bool, error) {
+	if err := t.fail("SchedulePlanLinkPurge"); err != nil {
+		return false, err
+	}
+	if cur, ok := t.st.purges[linkID]; ok && !cur.Cancelled {
+		return false, nil
+	}
+	t.st.purges[linkID] = Timer{DueAt: dueAt}
+	return true, nil
 }
 
 // FakeSealer "seals" by prefixing the subject and associated data, so tests

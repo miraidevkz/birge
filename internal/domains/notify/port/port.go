@@ -51,6 +51,18 @@ type SMSMessage struct {
 	Text           string
 }
 
+// SMSLinks makes the link an SMS text carries in place of
+// model.SMSLinkPlaceholder (the emergency plan link of an external trusted
+// contact). It is called at send time, right before the provider, outside
+// any database transaction. The link may hold a one-time secret: callers
+// must never log or store it.
+type SMSLinks interface {
+	// LinkFor returns the absolute URL for the notification's template and
+	// recipient, model.ErrNotFound when there is none (the SMS is skipped),
+	// or another error for a transient failure (the timer retries).
+	LinkFor(ctx context.Context, template, recipientKind string, recipientRef uuid.UUID) (string, error)
+}
+
 // SMSSender delivers an SMS. Implementations must not log the phone number or text.
 type SMSSender interface {
 	Send(ctx context.Context, msg SMSMessage) (providerMessageID string, err error)

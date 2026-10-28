@@ -102,6 +102,8 @@ func validEnv(t *testing.T) map[string]string {
 		"BIRGE_KEK_KEYSET_FILE":       "/keys/kek.json",
 		"BIRGE_POW_KEY_FILE":          "/keys/pow",
 		"BIRGE_HASH_KEY_FILE":         "/keys/hash",
+		"BIRGE_PLAN_LINK_KEY_FILE":    "/keys/plan-link",
+		"BIRGE_PUBLIC_URL":            "https://app.example.invalid/",
 		"BIRGE_SMS_ALLOWED_PREFIXES":  "+7700, +7701",
 		"BIRGE_CONSENT_VERSIONS":      "data_processing=v1,ai_crossborder=v1,research=v2",
 		"BIRGE_DELIVERY_MODE":         "dev",
@@ -119,6 +121,7 @@ func validFiles(t *testing.T) fakeFiles {
 		"/keys/kek.json":           testKeysetJSON(t),
 		"/keys/pow":                append(randomKey(t), '\n'),
 		"/keys/hash":               randomKey(t),
+		"/keys/plan-link":          randomKey(t),
 		"/keys/questionnaire.json": testQuestionnaireJSON(),
 		"/keys/assistant.v1.md":    []byte("# TEST assistant prompt\n\nReply in JSON only.\n"),
 	}
@@ -154,6 +157,9 @@ func TestLoadValid(t *testing.T) {
 			if cfg.DeletionDelay != 24*time.Hour || cfg.CriticalSMSAfter != 60*time.Second {
 				t.Errorf("defaults: deletion %s, critical sms %s", cfg.DeletionDelay, cfg.CriticalSMSAfter)
 			}
+			if len(cfg.PlanLinkKey) < minKeyBytes {
+				t.Error("plan link key not loaded")
+			}
 			if strings.Join(cfg.SMSPrefixes, ",") != "+7700,+7701" {
 				t.Errorf("prefixes = %v", cfg.SMSPrefixes)
 			}
@@ -164,7 +170,7 @@ func TestLoadValid(t *testing.T) {
 				if cfg.KratosPublicURL != "http://kratos.example.invalid:4433" {
 					t.Errorf("KratosPublicURL = %q", cfg.KratosPublicURL)
 				}
-				if cfg.ConsentVersions["research"] != "v2" || !cfg.APIPerIP.Valid() || cfg.AuthGlobal.Burst != 20 {
+				if cfg.ConsentVersions["research"] != "v2" || !cfg.APIPerIP.Valid() || cfg.AuthGlobal.Burst != 20 || cfg.PlanLinkPerIP.Burst != 10 {
 					t.Error("API settings not loaded")
 				}
 				if cfg.Wellbeing.Questionnaire.Version != "test-v1" || cfg.PracticesBaseURL == "" {
@@ -172,7 +178,7 @@ func TestLoadValid(t *testing.T) {
 				}
 			}
 			if cmd == CommandWorker {
-				if cfg.NATSURL == "" || cfg.SMSGuard.DailyBudget != 1000 {
+				if cfg.NATSURL == "" || cfg.SMSGuard.DailyBudget != 1000 || cfg.PublicURL != "https://app.example.invalid" {
 					t.Error("worker settings not loaded")
 				}
 				if cfg.EventsMaxAge != defaultEventsMaxAge || cfg.EventsMaxBytes != defaultEventsMaxBytes {
@@ -199,6 +205,10 @@ func TestLoadRejects(t *testing.T) {
 		{"missing pow file", CommandAPI, nil, func(f fakeFiles) { delete(f, "/keys/pow") }, "BIRGE_POW_KEY_FILE: cannot read"},
 		{"short key", CommandAPI, nil, func(f fakeFiles) { f["/keys/hash"] = []byte("short") }, "BIRGE_HASH_KEY_FILE: the key must be at least 32 bytes"},
 		{"same keys", CommandAPI, nil, func(f fakeFiles) { f["/keys/hash"] = bytes.TrimSpace(f["/keys/pow"]) }, "must hold different keys"},
+		{"missing plan link key", CommandWorker, map[string]string{"BIRGE_PLAN_LINK_KEY_FILE": ""}, nil, "BIRGE_PLAN_LINK_KEY_FILE is required"},
+		{"plan link key is the hash key", CommandAPI, nil, func(f fakeFiles) { f["/keys/plan-link"] = f["/keys/hash"] }, "BIRGE_PLAN_LINK_KEY_FILE must hold its own key"},
+		{"missing public url", CommandWorker, map[string]string{"BIRGE_PUBLIC_URL": ""}, nil, "BIRGE_PUBLIC_URL is required"},
+		{"bad plan link rate", CommandAPI, map[string]string{"BIRGE_PLAN_LINK_RATE_PER_IP": "x"}, nil, "BIRGE_PLAN_LINK_RATE_PER_IP"},
 		{"bad keyset", CommandAPI, nil, func(f fakeFiles) { f["/keys/kek.json"] = []byte(`{"key":[]}`) }, "BIRGE_KEK_KEYSET_FILE"},
 		{"bad kek id", CommandWorker, map[string]string{"BIRGE_KEK_ID": "Bad ID"}, nil, "BIRGE_KEK_ID/BIRGE_KEK_KEYSET_FILE: crypto: invalid KEK id"},
 		{"bad prefix", CommandAPI, map[string]string{"BIRGE_SMS_ALLOWED_PREFIXES": "7700"}, nil, "BIRGE_SMS_ALLOWED_PREFIXES"},

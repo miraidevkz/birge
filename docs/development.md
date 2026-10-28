@@ -83,6 +83,9 @@ A fresh deployment can start with no configuration or reference data files: when
 | `BIRGE_BLIND_INDEX_KEY_FILE` | api, worker | optional | key for blind indexes; validated when set, not used by any context yet |
 | `BIRGE_POW_KEY_FILE` | api | required | key that signs the proof-of-work challenges of the auth gateway |
 | `BIRGE_HASH_KEY_FILE` | api | required | key of the hashes of numbers and IPs in gateway logs and limiters; must differ from the PoW key |
+| `BIRGE_PLAN_LINK_KEY_FILE` | api, worker | required | HMAC key of the one-time plan links of external trusted contacts (at least 32 bytes): the worker mints links when it sends the plan SMS, the API finds them by keyed hash; only the hash is stored. Must differ from the PoW and hash keys. Replacing it kills every live link (the member sends the plan again) |
+| `BIRGE_PUBLIC_URL` | worker | required | public origin of the member web app (`https://…`, no credentials); the plan SMS link is `<this>/plan#<token>`. The compose stack defaults to `http://localhost:8081` |
+| `BIRGE_PLAN_LINK_RATE_PER_IP` | api | `10/1m` | per-IP token bucket of `POST /v1/external/plans/view` (anonymous), `<burst>/<interval>`; over it → 429. In memory, per replica |
 | `BIRGE_SMS_ALLOWED_PREFIXES` | api, worker | required | allowed E.164 mobile prefixes, comma-separated (`+7700,+7701`); used by the gateway and the notify SMS guard |
 | `BIRGE_AUTH_POW_MAX_NUMBER` | api | `100000` | proof-of-work difficulty |
 | `BIRGE_AUTH_RATE_PER_IP`, `BIRGE_AUTH_RATE_PER_NUMBER`, `BIRGE_AUTH_RATE_GLOBAL` | api | `20/1m`, `3/10m`, `20/1s` | gateway token buckets as `<burst>/<interval>`: burst tokens, one more every interval |
@@ -94,7 +97,7 @@ A fresh deployment can start with no configuration or reference data files: when
 | `BIRGE_SMS_PER_NUMBER_LIMIT`, `BIRGE_SMS_PER_NUMBER_WINDOW` | worker | `5`, `1h` | notify SMS guard: sends per number per window |
 | `BIRGE_SMS_GLOBAL_LIMIT`, `BIRGE_SMS_GLOBAL_WINDOW` | worker | `60`, `1m` | notify SMS guard: sends per process per window |
 | `BIRGE_SMS_DAILY_BUDGET` | worker | `1000` | notify SMS guard: sends per UTC day (does not block critical SMS) |
-| `BIRGE_SMS_TEXTS` | worker | DEMO preset | neutral fixed SMS bodies, JSON `{"<template>": {"kk": "...", "ru": "...", "en": "..."}}`; unset → `presets/demo/sms_texts.json`; required when `BIRGE_DELIVERY_MODE` is not `dev` and the value is an empty object; an SMS for a template without a text is skipped (and logged) |
+| `BIRGE_SMS_TEXTS` | worker | DEMO preset | neutral fixed SMS bodies, JSON `{"<template>": {"kk": "...", "ru": "...", "en": "..."}}`; unset → `presets/demo/sms_texts.json`; required when `BIRGE_DELIVERY_MODE` is not `dev` and the value is an empty object; an SMS for a template without a text is skipped (and logged). The placeholder `{link}` is replaced at send time with a link the worker mints (today only `emergency.plan_sent` to an external contact); an SMS whose text has `{link}` and gets no link is skipped. Keep the rest of the text a neutral sentence |
 | `BIRGE_DELIVERY_MODE` | worker | required | `dev` only: push and SMS are logged (notification ID and channel), not sent. There are no real providers yet, so any other value refuses to start rather than drop notifications |
 | `BIRGE_EVENTS_MAX_AGE` | worker | `720h` | JetStream EVENTS stream MaxAge (how long events are retained) |
 | `BIRGE_EVENTS_MAX_BYTES` | worker | `1073741824` (1 GiB) | JetStream EVENTS stream MaxBytes (size cap; oldest messages discarded first) |
@@ -149,13 +152,13 @@ Sign-in limits are looser than in production so testers can retry from one numbe
 
 Staff sign in through a development Ory Hydra (issuer `http://localhost:4444/`) and `cmd/birge-devlogin` on `http://localhost:3000`, which lists one fixed account per staff role and signs in without a password. Its tokens carry `amr` `dev` in place of a second factor, and only this stack's API accepts that (`BIRGE_STAFF_MFA_AMR=dev`); never deploy it. The admin app is the public client `birge-admin` (authorization code with PKCE, redirect `http://localhost:8082/`, see `deploy/compose/hydra/admin-client.json`). From another machine forward ports 4444, 3000 and 8082 as well.
 
-To show the member app outside the machine, publish only port 8081 through an HTTPS tunnel or reverse proxy, then run `BIRGE_PUBLIC_URL=https://<host> BIRGE_CHAT_WS_ORIGINS=<host> deploy/compose/up.sh web` and build the APK with `EXPO_PUBLIC_API_URL=https://<host>/v1 EXPO_PUBLIC_KRATOS_URL=https://<host>/auth`. Never publish the admin (8082), Hydra (4444) or the development login app (3000): the login app signs anyone in as any staff role. A tunnel that terminates TLS outside the deployment's jurisdiction is for synthetic demo data only (non-negotiable 3).
+To show the member app outside the machine, publish only port 8081 through an HTTPS tunnel or reverse proxy, then run `BIRGE_PUBLIC_URL=https://<host> BIRGE_CHAT_WS_ORIGINS=<host> deploy/compose/up.sh` (the worker puts `BIRGE_PUBLIC_URL` into plan SMS links) and the same with `web` and build the APK with `EXPO_PUBLIC_API_URL=https://<host>/v1 EXPO_PUBLIC_KRATOS_URL=https://<host>/auth`. Never publish the admin (8082), Hydra (4444) or the development login app (3000): the login app signs anyone in as any staff role. A tunnel that terminates TLS outside the deployment's jurisdiction is for synthetic demo data only (non-negotiable 3).
 
 To run the binaries yourself instead, start PostgreSQL, NATS with JetStream and Kratos however you like. Create local development keys under `secrets/` (git-ignored; never commit keys). Production keys come from the secret store, not from `keygen`:
 
 ```sh
 go run ./cmd/birge keygen -dir secrets
-# writes kek.json, pow.key, hash.key, blind-index.key (mode 0600) and prints BIRGE_KEK_ID=local-1
+# writes kek.json, pow.key, hash.key, blind-index.key, plan-link.key (mode 0600) and prints BIRGE_KEK_ID=local-1
 # refuses to overwrite an existing file
 ```
 

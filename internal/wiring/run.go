@@ -327,7 +327,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		Acquaintances: &CircleMet{Circle: circle},
 		Clock:         clk,
 		Logger:        logger,
-		Settings:      emergencyservice.Settings{AutoCloseAfter: cfg.SosAutoCloseAfter},
+		Settings:      emergencyservice.Settings{AutoCloseAfter: cfg.SosAutoCloseAfter, PlanLinkKey: cfg.PlanLinkKey},
 	}
 	notify := &notifyservice.Service{
 		Store: &notifyadapter.PostgresStore{Pool: pool},
@@ -336,6 +336,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		},
 		Push:   LogPushSender{Logger: logger},
 		SMS:    LogSMSSender{Logger: logger},
+		Links:  &PlanSMSLinks{Emergency: emergency, PublicURL: cfg.PublicURL},
 		Guard:  guard.New(cfg.SMSGuard),
 		Clock:  clk,
 		Logger: logger,

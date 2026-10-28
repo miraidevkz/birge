@@ -163,3 +163,29 @@ func TestDirectoryAndListingsDemoMarked(t *testing.T) {
 		}
 	}
 }
+
+// TestSMSTextsLinkOnlyInPlanSent: the {link} placeholder (a one-time plan
+// link, notify model.SMSLinkPlaceholder) belongs only to the plan SMS of
+// external contacts; every language of that text carries it exactly once.
+func TestSMSTextsLinkOnlyInPlanSent(t *testing.T) {
+	texts, err := presets.SMSTexts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for tmpl, byLang := range texts {
+		for lang, body := range byLang {
+			n := strings.Count(body, "{link}")
+			if tmpl == "emergency.plan_sent" && n != 1 {
+				t.Errorf("%s/%s: {link} %d times, want once", tmpl, lang, n)
+			}
+			if tmpl != "emergency.plan_sent" && n != 0 {
+				t.Errorf("%s/%s: unexpected {link}", tmpl, lang)
+			}
+		}
+	}
+	for _, lang := range []string{"kk", "ru", "en"} {
+		if texts["emergency.plan_sent"][lang] == "" {
+			t.Errorf("emergency.plan_sent/%s missing", lang)
+		}
+	}
+}

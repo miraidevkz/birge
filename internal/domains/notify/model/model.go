@@ -71,10 +71,16 @@ const (
 // ConsumerDeliveryRequested is the durable consumer name for processed_events dedup.
 const ConsumerDeliveryRequested = "notify.DeliveryRequested"
 
+// SMSLinkPlaceholder in a configured SMS text (BIRGE_SMS_TEXTS) is replaced
+// at send time with the link from port.SMSLinks; an SMS whose text has it
+// and that gets no link is skipped. The rest of the text stays a neutral
+// fixed sentence (ADR-0013).
+const SMSLinkPlaceholder = "{link}"
+
 var (
 	// ErrUnauthorized means the caller has no member session.
 	ErrUnauthorized = errors.New("notify: unauthorized")
-	// ErrNotFound means the notification, delivery or device was not found.
+	// ErrNotFound means the notification, delivery, device or SMS link was not found.
 	ErrNotFound = errors.New("notify: not found")
 	// ErrInvalidInput means a request or event failed validation.
 	ErrInvalidInput = errors.New("notify: invalid input")

@@ -81,7 +81,13 @@ var AnonymousOperations = []string{
 	"GET /v1/meta/client-config",
 	"GET /v1/reference/districts",
 	"GET /v1/reference/needs",
+	externalPlanView,
 }
+
+// externalPlanView is viewExternalPlan: the SMS link of an external trusted
+// contact, who has no account. It is anonymous and has its own per-IP limit
+// in front of the session middleware.
+const externalPlanView = "POST /v1/external/plans/view"
 
 // APIDeps are the resources the API handler is built from.
 type APIDeps struct {
@@ -165,6 +171,10 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wiring: API rate limit: %w", err)
 	}
+	planLinkLimiter, err := ratelimit.New(cfg.PlanLinkPerIP, ratelimit.Options{Clock: d.Clock})
+	if err != nil {
+		return nil, fmt.Errorf("wiring: plan link rate limit: %w", err)
+	}
 
 	identities, err := NewKratosIdentities(cfg.KratosAdminURL, "phone", kratosClient)
 	if err != nil {
@@ -226,7 +236,7 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 		Acquaintances: &CircleMet{Circle: circle},
 		Clock:         d.Clock,
 		Logger:        d.Logger,
-		Settings:      emergencyservice.Settings{AutoCloseAfter: cfg.SosAutoCloseAfter},
+		Settings:      emergencyservice.Settings{AutoCloseAfter: cfg.SosAutoCloseAfter, PlanLinkKey: cfg.PlanLinkKey},
 	}
 	knowledge := &knowledgeservice.Service{
 		Store:  &knowledgeadapter.PostgresStore{Pool: d.Pool},
@@ -332,6 +342,9 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	byAudience.Handle("GET /v1/chat/ws", chatGW)
 	byAudience.Handle("/v1/staff/", staff)
 	byAudience.Handle("/v1/", sessions.Wrap(validated))
+	// The SMS link page posts its token here without a session; the tighter
+	// per-IP bucket answers 429 before anything else runs.
+	byAudience.Handle(externalPlanView, ratelimit.Middleware(planLinkLimiter, clientIP)(sessions.Wrap(validated)))
 	v1 := ratelimit.Middleware(limiter, clientIP)(byAudience)
 
 	root := http.NewServeMux()

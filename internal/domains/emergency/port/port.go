@@ -1,7 +1,7 @@
 // Package port defines the interfaces the emergency service needs: its store
 // (SOS requests, responses, child cards, trusted contacts, plan sends,
-// outbox, timers, audit), field sealing, and what it reads from other
-// contexts (member profiles and blocks from membership, "met in person"
+// external plan links, outbox, timers, audit), field sealing, and what it
+// reads from other contexts (member profiles and blocks from membership, "met in person"
 // from the circle). Adapters for the other contexts are wired later; tests
 // use the fakes in emergencytest.
 package port
@@ -136,6 +136,24 @@ type Tx interface {
 	GetPlanSendByIdempotencyKey(ctx context.Context, memberID, key uuid.UUID) (model.PlanSend, error)
 	// CountPlanSendsSince counts the member's plan sends after since.
 	CountPlanSendsSince(ctx context.Context, memberID uuid.UUID, since time.Time) (int, error)
+
+	// InsertPlanLink stores a new external plan link (keyed hash only).
+	InsertPlanLink(ctx context.Context, l model.PlanLink) error
+	// RevokeContactPlanLinks revokes the contact's links that are not
+	// revoked yet; returns how many.
+	RevokeContactPlanLinks(ctx context.Context, contactID uuid.UUID, at time.Time) (int64, error)
+	// RevokeOwnerPlanLinks revokes every unrevoked link of the owner's contacts.
+	RevokeOwnerPlanLinks(ctx context.Context, ownerID uuid.UUID, at time.Time) (int64, error)
+	// GetLivePlanLink returns the link with tokenHash that is neither revoked
+	// nor expired at now, or model.ErrNotFound for every other case (one
+	// lookup, so the failures cannot be told apart).
+	GetLivePlanLink(ctx context.Context, tokenHash []byte, now time.Time) (model.PlanLink, error)
+	// DeleteExpiredPlanLink deletes the link when it expired at or before
+	// cutoff; returns how many rows went (0 or 1).
+	DeleteExpiredPlanLink(ctx context.Context, linkID uuid.UUID, cutoff time.Time) (int64, error)
+	// SchedulePlanLinkPurge schedules emergency.PlanLinkPurge for the link
+	// (dedup key = link id).
+	SchedulePlanLinkPurge(ctx context.Context, linkID uuid.UUID, dueAt time.Time) (bool, error)
 
 	// Publish enqueues e in this transaction's outbox (ADR-0007).
 	Publish(ctx context.Context, now time.Time, e model.Event) error

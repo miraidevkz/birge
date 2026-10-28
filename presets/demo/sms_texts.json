@@ -36,9 +36,9 @@
     "en": "[DEMO] Birge: trusted-contact invitation. Open the app."
   },
   "emergency.plan_sent": {
-    "kk": "[DEMO] Birge: zhedel zhosparynyz. Qosymshany ashynyz.",
-    "ru": "[DEMO] Birge: plan chrezvychaynykh situatsiy. Otkroyte prilozhenie.",
-    "en": "[DEMO] Birge: emergency plan. Open the app."
+    "kk": "[DEMO] Birge: sizge silteme zhiberildi, 24 sagat zharamdy: {link}",
+    "ru": "[DEMO] Birge: vam otpravili ssylku, ona deystvuet 24 chasa: {link}",
+    "en": "[DEMO] Birge: you were sent a link, valid for 24 hours: {link}"
   },
   "wellbeing.checkin_reminder": {
     "kk": "[DEMO] Birge: aptalyq tekseru. Qosymshany ashynyz.",
