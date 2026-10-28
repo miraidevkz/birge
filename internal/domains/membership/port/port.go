@@ -90,6 +90,7 @@ type StaffMemberRecord struct {
 	Verification model.Verification
 	VerifiedAt   *time.Time
 	SuspendedAt  *time.Time
+	Roles        []string
 }
 
 // Tx is the store bound to one transaction.
@@ -110,6 +111,8 @@ type Tx interface {
 	UpdateProfile(ctx context.Context, id uuid.UUID, p ProfilePatch, now time.Time) error
 	// SetVerification writes the member's verification state.
 	SetVerification(ctx context.Context, id uuid.UUID, v model.Verification, now time.Time) error
+	// SetRoles updates the member's roles.
+	SetRoles(ctx context.Context, id uuid.UUID, roles []string, now time.Time) error
 	// SetSuspension sets or clears staff suspension (both fields together).
 	SetSuspension(ctx context.Context, id uuid.UUID, at *time.Time, reason string, now time.Time) error
 

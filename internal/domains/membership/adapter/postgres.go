@@ -97,6 +97,7 @@ func (t *pgTx) ListStaffMembers(ctx context.Context, f port.StaffMemberListFilte
 				Verification: model.Verification(r.Verification),
 				VerifiedAt:   r.VerifiedAt,
 				SuspendedAt:  r.SuspendedAt,
+				Roles:        r.Roles,
 			})
 		}
 		return out, nil
@@ -119,6 +120,7 @@ func (t *pgTx) ListStaffMembers(ctx context.Context, f port.StaffMemberListFilte
 				Verification: model.Verification(r.Verification),
 				VerifiedAt:   r.VerifiedAt,
 				SuspendedAt:  r.SuspendedAt,
+				Roles:        r.Roles,
 			})
 		}
 		return out, nil
@@ -190,6 +192,22 @@ func (t *pgTx) SetVerification(ctx context.Context, id uuid.UUID, v model.Verifi
 	n, err := t.q.SetMemberVerification(ctx, store.SetMemberVerificationParams{Verification: string(v), Now: now, ID: id})
 	if err != nil {
 		return fmt.Errorf("membership: set verification: %w", err)
+	}
+	if n == 0 {
+		return model.ErrMemberNotFound
+	}
+	return nil
+}
+
+// SetRoles updates the member's roles.
+func (t *pgTx) SetRoles(ctx context.Context, id uuid.UUID, roles []string, now time.Time) error {
+	n, err := t.q.SetMemberRoles(ctx, store.SetMemberRolesParams{
+		Roles: roles,
+		Now:   now,
+		ID:    id,
+	})
+	if err != nil {
+		return fmt.Errorf("membership: set roles: %w", err)
 	}
 	if n == 0 {
 		return model.ErrMemberNotFound

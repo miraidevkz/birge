@@ -31,11 +31,22 @@ const (
 	StaffMemberStatusSuspended = "suspended"
 )
 
+// Member role values.
+const (
+	RoleMom          = "mom"
+	RoleMentor       = "mentor"
+	RolePsychologist = "psychologist"
+	RoleLawyer       = "lawyer"
+	RoleModerator    = "moderator"
+	RoleAdmin        = "admin"
+)
+
 // Event types published by this context (contracts/events/membership.*.v1.json).
 const (
 	EventMemberRegistered      = "membership.MemberRegistered"
 	EventVerificationRequested = "membership.VerificationRequested"
 	EventMemberVerified        = "membership.MemberVerified"
+	EventMentorRoleChanged     = "membership.MentorRoleChanged"
 	EventModerationDecided     = "moderation.Decided"
 )
 
@@ -51,6 +62,8 @@ const (
 	AuditVerifyApprove      = "membership.verification.approve"
 	AuditVerifyReject       = "membership.verification.reject"
 	AuditMemberList         = "membership.member.list"
+	AuditMentorGrant        = "membership.member.mentor_grant"
+	AuditMentorRevoke       = "membership.member.mentor_revoke"
 	ActorRoleSystem         = "system"
 	ActorRoleStaff          = "staff"
 )
@@ -127,6 +140,7 @@ type StaffMember struct {
 	VerifiedAt  *time.Time
 	Suspended   bool
 	SuspendedAt *time.Time
+	Mentor      bool
 }
 
 // StaffMemberPage is a page of staff members with an opaque next cursor.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -613,5 +614,294 @@ func TestStaffListMembersAuthorizationAndAudit(t *testing.T) {
 	}
 	if e.store.st.audits != beforeAudits+1 {
 		t.Errorf("audits = %d, want %d", e.store.st.audits, beforeAudits+1)
+	}
+}
+
+func TestGrantMentorRoleAuthorizationAndDenyByDefault(t *testing.T) {
+	e := newEnv(t)
+	staffID := uuid.New()
+	targetID := uuid.New()
+
+	cases := []struct {
+		name string
+		ctx  context.Context
+		want error
+	}{
+		{"anonymous", context.Background(), model.ErrUnauthenticated},
+		{"member session", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: uuid.New()}), model.ErrUnauthenticated},
+		{"staff nil identity", auth.WithPrincipal(context.Background(), auth.Principal{Staff: true, MFA: true, Roles: []string{staffauth.RoleModerator}}), model.ErrUnauthenticated},
+		{"staff without MFA", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: false, Roles: []string{staffauth.RoleModerator}}), model.ErrForbidden},
+		{"staff psychologist", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RolePsychologist}}), model.ErrForbidden},
+		{"staff lawyer", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleLawyer}}), model.ErrForbidden},
+		{"staff moderator with MFA", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleModerator}}), model.ErrMemberNotFound},
+		{"staff admin with MFA", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleAdmin}}), model.ErrMemberNotFound},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := e.svc.GrantMentorRole(tc.ctx, targetID)
+			wantErr(t, err, tc.want)
+		})
+	}
+}
+
+func TestRevokeMentorRoleAuthorizationAndDenyByDefault(t *testing.T) {
+	e := newEnv(t)
+	staffID := uuid.New()
+	targetID := uuid.New()
+
+	cases := []struct {
+		name string
+		ctx  context.Context
+		want error
+	}{
+		{"anonymous", context.Background(), model.ErrUnauthenticated},
+		{"member session", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: uuid.New()}), model.ErrUnauthenticated},
+		{"staff nil identity", auth.WithPrincipal(context.Background(), auth.Principal{Staff: true, MFA: true, Roles: []string{staffauth.RoleModerator}}), model.ErrUnauthenticated},
+		{"staff without MFA", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: false, Roles: []string{staffauth.RoleModerator}}), model.ErrForbidden},
+		{"staff psychologist", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RolePsychologist}}), model.ErrForbidden},
+		{"staff lawyer", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleLawyer}}), model.ErrForbidden},
+		{"staff moderator with MFA", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleModerator}}), nil},
+		{"staff admin with MFA", auth.WithPrincipal(context.Background(), auth.Principal{IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleAdmin}}), nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := e.svc.RevokeMentorRole(tc.ctx, targetID)
+			wantErr(t, err, tc.want)
+		})
+	}
+}
+
+func TestGrantMentorRoleLogic(t *testing.T) {
+	e := newEnv(t)
+	staffID := uuid.New()
+	modCtx := auth.WithPrincipal(context.Background(), auth.Principal{
+		IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleModerator},
+	})
+
+	// Unknown member -> 404
+	if err := e.svc.GrantMentorRole(modCtx, uuid.New()); !errors.Is(err, model.ErrMemberNotFound) {
+		t.Errorf("unknown member error = %v, want %v", err, model.ErrMemberNotFound)
+	}
+
+	// Nil member -> 404
+	if err := e.svc.GrantMentorRole(modCtx, uuid.Nil); !errors.Is(err, model.ErrMemberNotFound) {
+		t.Errorf("nil member error = %v, want %v", err, model.ErrMemberNotFound)
+	}
+
+	// Unverified member (new) -> 409
+	_, newMem := newMember(t, e)
+	if err := e.svc.GrantMentorRole(modCtx, newMem.ID); !errors.Is(err, model.ErrNotVerified) {
+		t.Errorf("unverified member error = %v, want %v", err, model.ErrNotVerified)
+	}
+
+	// Suspended member -> 409
+	now := time.Now().UTC()
+	rec := e.store.st.members[newMem.ID]
+	rec.Verification = model.VerificationVerified
+	rec.VerifiedAt = &now
+	rec.SuspendedAt = &now
+	rec.SuspendedReason = "spam"
+	e.store.st.members[newMem.ID] = rec
+
+	if err := e.svc.GrantMentorRole(modCtx, newMem.ID); !errors.Is(err, model.ErrSuspended) {
+		t.Errorf("suspended member error = %v, want %v", err, model.ErrSuspended)
+	}
+
+	// Lift suspension -> verified non-suspended member
+	rec.SuspendedAt = nil
+	rec.SuspendedReason = ""
+	e.store.st.members[newMem.ID] = rec
+
+	// Grant mentor role
+	if err := e.svc.GrantMentorRole(modCtx, newMem.ID); err != nil {
+		t.Fatalf("GrantMentorRole: %v", err)
+	}
+
+	// Member now has mentor in roles
+	updated := e.store.st.members[newMem.ID]
+	if !slices.Contains(updated.Roles, model.RoleMentor) {
+		t.Errorf("roles = %v, want to contain %s", updated.Roles, model.RoleMentor)
+	}
+
+	// Audit entry written
+	audits := e.store.auditEntries()
+	if len(audits) != 1 {
+		t.Fatalf("audits = %d, want 1", len(audits))
+	}
+	if a := audits[0]; a.Action != model.AuditMentorGrant || a.ObjectType != model.AuditObjectMember || a.ObjectID != newMem.ID || a.ActorID != staffID || a.ActorRole != model.ActorRoleStaff {
+		t.Errorf("unexpected audit entry: %+v", a)
+	}
+
+	// Outbox event published
+	events := e.store.events()
+	if len(events) != 2 { // first was MemberRegistered
+		t.Fatalf("events = %d, want 2", len(events))
+	}
+	ev := events[1]
+	if ev.Type != model.EventMentorRoleChanged || ev.Version != 1 {
+		t.Errorf("unexpected event: %+v", ev)
+	}
+	payloadBytes, err := json.Marshal(ev.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data struct {
+		MemberID uuid.UUID `json:"member_id"`
+		Mentor   bool      `json:"mentor"`
+	}
+	if err := json.Unmarshal(payloadBytes, &data); err != nil {
+		t.Fatal(err)
+	}
+	if data.MemberID != newMem.ID || !data.Mentor {
+		t.Errorf("unexpected event data: %+v", data)
+	}
+
+	// Grant again (idempotent)
+	if err := e.svc.GrantMentorRole(modCtx, newMem.ID); err != nil {
+		t.Fatalf("GrantMentorRole idempotent: %v", err)
+	}
+
+	// No additional audit or event
+	if len(e.store.auditEntries()) != 1 {
+		t.Errorf("audits after repeat = %d, want 1", len(e.store.auditEntries()))
+	}
+	if len(e.store.events()) != 2 {
+		t.Errorf("events after repeat = %d, want 2", len(e.store.events()))
+	}
+}
+
+func TestRevokeMentorRoleLogic(t *testing.T) {
+	e := newEnv(t)
+	staffID := uuid.New()
+	modCtx := auth.WithPrincipal(context.Background(), auth.Principal{
+		IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleModerator},
+	})
+
+	// Unknown member -> succeeds (204 idempotent), no audit, no event
+	if err := e.svc.RevokeMentorRole(modCtx, uuid.New()); err != nil {
+		t.Fatalf("RevokeMentorRole unknown: %v", err)
+	}
+	if len(e.store.auditEntries()) != 0 || len(e.store.events()) != 0 {
+		t.Error("unknown member revoke wrote audit or events")
+	}
+
+	// Nil member -> succeeds
+	if err := e.svc.RevokeMentorRole(modCtx, uuid.Nil); err != nil {
+		t.Fatalf("RevokeMentorRole nil: %v", err)
+	}
+
+	// Member without mentor role -> succeeds, no audit, no event
+	_, mem := newMember(t, e)
+	eventsCountBefore := len(e.store.events())
+	if err := e.svc.RevokeMentorRole(modCtx, mem.ID); err != nil {
+		t.Fatalf("RevokeMentorRole non-mentor: %v", err)
+	}
+	if len(e.store.auditEntries()) != 0 || len(e.store.events()) != eventsCountBefore {
+		t.Error("non-mentor revoke wrote audit or events")
+	}
+
+	// Grant mentor role first
+	now := time.Now().UTC()
+	rec := e.store.st.members[mem.ID]
+	rec.Verification = model.VerificationVerified
+	rec.VerifiedAt = &now
+	rec.Roles = []string{model.RoleMom, model.RoleMentor}
+	e.store.st.members[mem.ID] = rec
+
+	// Revoke mentor role
+	if err := e.svc.RevokeMentorRole(modCtx, mem.ID); err != nil {
+		t.Fatalf("RevokeMentorRole: %v", err)
+	}
+
+	// Member no longer has mentor in roles
+	updated := e.store.st.members[mem.ID]
+	if slices.Contains(updated.Roles, model.RoleMentor) {
+		t.Errorf("roles = %v, should not contain %s", updated.Roles, model.RoleMentor)
+	}
+
+	// Audit entry written
+	audits := e.store.auditEntries()
+	if len(audits) != 1 {
+		t.Fatalf("audits = %d, want 1", len(audits))
+	}
+	if a := audits[0]; a.Action != model.AuditMentorRevoke || a.ObjectType != model.AuditObjectMember || a.ObjectID != mem.ID || a.ActorID != staffID {
+		t.Errorf("unexpected audit: %+v", a)
+	}
+
+	// Event published with mentor: false
+	events := e.store.events()
+	lastEv := events[len(events)-1]
+	if lastEv.Type != model.EventMentorRoleChanged || lastEv.Version != 1 {
+		t.Errorf("unexpected event: %+v", lastEv)
+	}
+	payloadBytes, err := json.Marshal(lastEv.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data struct {
+		MemberID uuid.UUID `json:"member_id"`
+		Mentor   bool      `json:"mentor"`
+	}
+	if err := json.Unmarshal(payloadBytes, &data); err != nil {
+		t.Fatal(err)
+	}
+	if data.MemberID != mem.ID || data.Mentor {
+		t.Errorf("unexpected event data: %+v", data)
+	}
+
+	// Revoke again (idempotent)
+	if err := e.svc.RevokeMentorRole(modCtx, mem.ID); err != nil {
+		t.Fatalf("RevokeMentorRole idempotent: %v", err)
+	}
+	if len(e.store.auditEntries()) != 1 {
+		t.Errorf("audits after repeat = %d, want 1", len(e.store.auditEntries()))
+	}
+	if len(e.store.events()) != len(events) {
+		t.Errorf("events after repeat = %d, want %d", len(e.store.events()), len(events))
+	}
+}
+
+func TestStaffListMembersMentorFlag(t *testing.T) {
+	e := newEnv(t)
+	staffID := uuid.New()
+	modCtx := auth.WithPrincipal(context.Background(), auth.Principal{
+		IdentityID: staffID, Staff: true, MFA: true, Roles: []string{staffauth.RoleModerator},
+	})
+
+	now := time.Now().UTC()
+	_, m1 := newMember(t, e)
+	rec1 := e.store.st.members[m1.ID]
+	rec1.Verification = model.VerificationVerified
+	rec1.VerifiedAt = &now
+	rec1.Roles = []string{model.RoleMom, model.RoleMentor}
+	e.store.st.members[m1.ID] = rec1
+
+	_, m2 := newMember(t, e)
+	rec2 := e.store.st.members[m2.ID]
+	rec2.Verification = model.VerificationVerified
+	rec2.VerifiedAt = &now
+	rec2.Roles = []string{model.RoleMom}
+	e.store.st.members[m2.ID] = rec2
+
+	page, err := e.svc.StaffListMembers(modCtx, model.StaffMemberListFilter{Status: model.StaffMemberStatusVerified})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 2 {
+		t.Fatalf("items = %d, want 2", len(page.Items))
+	}
+
+	byID := map[uuid.UUID]model.StaffMember{}
+	for _, it := range page.Items {
+		byID[it.ID] = it
+	}
+
+	if !byID[m1.ID].Mentor {
+		t.Errorf("member 1 mentor = %v, want true", byID[m1.ID].Mentor)
+	}
+	if byID[m2.ID].Mentor {
+		t.Errorf("member 2 mentor = %v, want false", byID[m2.ID].Mentor)
 	}
 }

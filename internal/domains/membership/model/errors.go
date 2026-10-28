@@ -49,6 +49,8 @@ var (
 	ErrChildrenLimit   = &Error{KindConflict, "children_limit", "Too many children."}
 	ErrBlocksLimit     = &Error{KindConflict, "blocks_limit", "Too many blocked members."}
 	ErrAlreadyVerified = &Error{KindConflict, "already_verified", "The profile is already verified."}
+	ErrNotVerified     = &Error{KindConflict, "not_verified", "Member is not verified."}
+	ErrSuspended       = &Error{KindConflict, "suspended", "Member is suspended."}
 
 	// ErrMemberSuspended is returned when a suspended member's session tries
 	// a member route (moderation.block_author; ADR-0019).

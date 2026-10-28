@@ -238,11 +238,13 @@ func (h *Server) StaffListMembers(ctx context.Context, req StaffListMembersReque
 
 	items := make([]StaffMember, 0, len(page.Items))
 	for _, m := range page.Items {
+		isMentor := m.Mentor
 		item := StaffMember{
 			Id:          m.ID,
 			DisplayName: m.DisplayName,
 			Verified:    m.Verified,
 			Suspended:   m.Suspended,
+			Mentor:      &isMentor,
 		}
 		if m.DistrictID != nil {
 			dID := *m.DistrictID
@@ -266,6 +268,44 @@ func (h *Server) StaffListMembers(ctx context.Context, req StaffListMembersReque
 		resp.NextCursor = &c
 	}
 	return StaffListMembers200JSONResponse(resp), nil
+}
+
+// GrantMentorRole gives a verified member the mentor role (staff).
+func (h *Server) GrantMentorRole(ctx context.Context, req GrantMentorRoleRequestObject) (GrantMentorRoleResponseObject, error) {
+	if err := h.svc.GrantMentorRole(ctx, req.MemberId); err != nil {
+		if st, c, t, ok := staffProblem(err); ok {
+			if st == http.StatusForbidden {
+				return GrantMentorRole403ApplicationProblemPlusJSONResponse{
+					ProblemApplicationProblemPlusJSONResponse: ProblemApplicationProblemPlusJSONResponse(problem(st, c, t)),
+				}, nil
+			}
+			if st == http.StatusNotFound {
+				return GrantMentorRole404ApplicationProblemPlusJSONResponse(problem(st, c, t)), nil
+			}
+			if st == http.StatusConflict {
+				return GrantMentorRole409ApplicationProblemPlusJSONResponse(problem(st, c, t)), nil
+			}
+			return GrantMentorRoledefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+		}
+		return fail[GrantMentorRoledefaultApplicationProblemPlusJSONResponse](err)
+	}
+	return GrantMentorRole204Response{}, nil
+}
+
+// RevokeMentorRole takes the mentor role away (staff).
+func (h *Server) RevokeMentorRole(ctx context.Context, req RevokeMentorRoleRequestObject) (RevokeMentorRoleResponseObject, error) {
+	if err := h.svc.RevokeMentorRole(ctx, req.MemberId); err != nil {
+		if st, c, t, ok := staffProblem(err); ok {
+			if st == http.StatusForbidden {
+				return RevokeMentorRole403ApplicationProblemPlusJSONResponse{
+					ProblemApplicationProblemPlusJSONResponse: ProblemApplicationProblemPlusJSONResponse(problem(st, c, t)),
+				}, nil
+			}
+			return RevokeMentorRoledefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+		}
+		return fail[RevokeMentorRoledefaultApplicationProblemPlusJSONResponse](err)
+	}
+	return RevokeMentorRole204Response{}, nil
 }
 
 func problem(status int, code, title string) Problem {

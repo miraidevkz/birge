@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 
 	"birge/internal/domains/membership/model"
 	"birge/internal/domains/membership/port"
+	"birge/internal/platform/outbox"
 )
 
 // StaffListMembers lists verified or suspended members for staff.
@@ -81,6 +84,7 @@ func (s *Service) StaffListMembers(ctx context.Context, f model.StaffMemberListF
 			VerifiedAt:  r.VerifiedAt,
 			Suspended:   r.SuspendedAt != nil,
 			SuspendedAt: r.SuspendedAt,
+			Mentor:      slices.Contains(r.Roles, model.RoleMentor),
 		})
 	}
 
@@ -127,4 +131,109 @@ func decodeCursor(c string) (time.Time, uuid.UUID, error) {
 		return time.Time{}, uuid.Nil, bad
 	}
 	return time.Unix(0, n).UTC(), id, nil
+}
+
+// mentorRoleChanged is the payload of membership.MentorRoleChanged v1.
+type mentorRoleChanged struct {
+	MemberID uuid.UUID `json:"member_id"`
+	Mentor   bool      `json:"mentor"`
+}
+
+// GrantMentorRole gives a verified member the mentor role.
+// Staff moderator or admin with MFA (deny by default). Member must exist (404),
+// be verified and not suspended (409). Idempotent when she already holds the
+// mentor role. Writes audit log (membership.member.mentor_grant) and outbox event
+// membership.MentorRoleChanged (v1) only when the role actually changed.
+func (s *Service) GrantMentorRole(ctx context.Context, memberID uuid.UUID) error {
+	p, err := staffModerator(ctx)
+	if err != nil {
+		return err
+	}
+	if memberID == uuid.Nil {
+		return model.ErrMemberNotFound
+	}
+	now := s.clock.Now().UTC()
+	return s.store.InTx(ctx, func(tx port.Tx) error {
+		if err := tx.LockMember(ctx, memberID); err != nil {
+			return err
+		}
+		rec, err := tx.MemberByID(ctx, memberID)
+		if err != nil {
+			return err
+		}
+		if rec.Verification != model.VerificationVerified {
+			return model.ErrNotVerified
+		}
+		if rec.SuspendedAt != nil {
+			return model.ErrSuspended
+		}
+		if slices.Contains(rec.Roles, model.RoleMentor) {
+			return nil
+		}
+		newRoles := append(slices.Clone(rec.Roles), model.RoleMentor)
+		if err := tx.SetRoles(ctx, memberID, newRoles, now); err != nil {
+			return err
+		}
+		if err := tx.Audit(ctx, p.IdentityID, model.ActorRoleStaff, model.AuditMentorGrant,
+			model.AuditObjectMember, memberID, ""); err != nil {
+			return err
+		}
+		return tx.Publish(ctx, now, outbox.Event{
+			Type:    model.EventMentorRoleChanged,
+			Version: 1,
+			Data:    mentorRoleChanged{MemberID: memberID, Mentor: true},
+		})
+	})
+}
+
+// RevokeMentorRole takes the mentor role away.
+// Staff moderator or admin with MFA (deny by default). Unknown member answers 204
+// idempotently without creating anything. Writes audit log (membership.member.mentor_revoke)
+// and outbox event membership.MentorRoleChanged (v1, mentor=false) only when the role
+// actually changed.
+func (s *Service) RevokeMentorRole(ctx context.Context, memberID uuid.UUID) error {
+	p, err := staffModerator(ctx)
+	if err != nil {
+		return err
+	}
+	if memberID == uuid.Nil {
+		return nil
+	}
+	now := s.clock.Now().UTC()
+	return s.store.InTx(ctx, func(tx port.Tx) error {
+		if err := tx.LockMember(ctx, memberID); err != nil {
+			if errors.Is(err, model.ErrMemberNotFound) {
+				return nil
+			}
+			return err
+		}
+		rec, err := tx.MemberByID(ctx, memberID)
+		if errors.Is(err, model.ErrMemberNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !slices.Contains(rec.Roles, model.RoleMentor) {
+			return nil
+		}
+		newRoles := make([]string, 0, len(rec.Roles))
+		for _, r := range rec.Roles {
+			if r != model.RoleMentor {
+				newRoles = append(newRoles, r)
+			}
+		}
+		if err := tx.SetRoles(ctx, memberID, newRoles, now); err != nil {
+			return err
+		}
+		if err := tx.Audit(ctx, p.IdentityID, model.ActorRoleStaff, model.AuditMentorRevoke,
+			model.AuditObjectMember, memberID, ""); err != nil {
+			return err
+		}
+		return tx.Publish(ctx, now, outbox.Event{
+			Type:    model.EventMentorRoleChanged,
+			Version: 1,
+			Data:    mentorRoleChanged{MemberID: memberID, Mentor: false},
+		})
+	})
 }

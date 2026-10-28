@@ -253,6 +253,16 @@ func TestOperations(t *testing.T) {
 		{"staff members wrong role", call{method: http.MethodGet, path: "/staff/members?status=verified", identity: uuid.New(), staff: true, mfa: true, roles: []string{"psychologist"}}, 403, "forbidden"},
 		{"staff members missing status", call{method: http.MethodGet, path: "/staff/members", identity: uuid.New(), staff: true, mfa: true, roles: []string{"moderator"}}, 400, "invalid_request"},
 		{"staff members bad status", call{method: http.MethodGet, path: "/staff/members?status=invalid", identity: uuid.New(), staff: true, mfa: true, roles: []string{"moderator"}}, 400, "invalid_request"},
+		{"anonymous grant mentor", call{method: http.MethodPut, path: "/staff/members/" + uuid.NewString() + "/roles/mentor"}, 401, "unauthenticated"},
+		{"member grant mentor", call{method: http.MethodPut, path: "/staff/members/" + uuid.NewString() + "/roles/mentor", identity: me}, 401, "unauthenticated"},
+		{"staff grant mentor no mfa", call{method: http.MethodPut, path: "/staff/members/" + uuid.NewString() + "/roles/mentor", identity: uuid.New(), staff: true, mfa: false, roles: []string{"moderator"}}, 403, "forbidden"},
+		{"staff grant mentor wrong role", call{method: http.MethodPut, path: "/staff/members/" + uuid.NewString() + "/roles/mentor", identity: uuid.New(), staff: true, mfa: true, roles: []string{"psychologist"}}, 403, "forbidden"},
+		{"anonymous revoke mentor", call{method: http.MethodDelete, path: "/staff/members/" + uuid.NewString() + "/roles/mentor"}, 401, "unauthenticated"},
+		{"member revoke mentor", call{method: http.MethodDelete, path: "/staff/members/" + uuid.NewString() + "/roles/mentor", identity: me}, 401, "unauthenticated"},
+		{"staff revoke mentor no mfa", call{method: http.MethodDelete, path: "/staff/members/" + uuid.NewString() + "/roles/mentor", identity: uuid.New(), staff: true, mfa: false, roles: []string{"moderator"}}, 403, "forbidden"},
+		{"staff revoke mentor wrong role", call{method: http.MethodDelete, path: "/staff/members/" + uuid.NewString() + "/roles/mentor", identity: uuid.New(), staff: true, mfa: true, roles: []string{"psychologist"}}, 403, "forbidden"},
+		{"grant mentor unknown", call{method: http.MethodPut, path: "/staff/members/" + uuid.NewString() + "/roles/mentor", identity: uuid.New(), staff: true, mfa: true, roles: []string{"moderator"}}, 404, "member_not_found"},
+		{"grant mentor unverified", call{method: http.MethodPut, path: "/staff/members/" + o.Id.String() + "/roles/mentor", identity: uuid.New(), staff: true, mfa: true, roles: []string{"moderator"}}, 409, "not_verified"},
 	}
 	for _, tt := range problems {
 		t.Run(tt.name, func(t *testing.T) {
@@ -313,5 +323,84 @@ func TestStaffListMembersEndpoint(t *testing.T) {
 	}
 	if item.DistrictId == nil || *item.DistrictId != districtID {
 		t.Errorf("districtId = %v, want %v", item.DistrictId, districtID)
+	}
+	if item.Mentor == nil || *item.Mentor {
+		t.Errorf("mentor = %v, want false", item.Mentor)
+	}
+}
+
+func TestMentorRoleEndpoints(t *testing.T) {
+	s, exec := newServer(t)
+	cityID, districtID := uuid.New(), uuid.New()
+	exec(`INSERT INTO membership.cities (id, code) VALUES ($1, 'city_mentor_api')`, cityID)
+	exec(`INSERT INTO membership.districts (id, city_id, code) VALUES ($1, $2, 'dist_mentor_api')`, districtID, cityID)
+
+	memberID := uuid.New()
+	identityID := uuid.New()
+	sealedName, err := testEncryptor{}.Seal(context.Background(), memberID, []byte("MentorAPIUser"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec(`INSERT INTO membership.members (id, identity_id, display_name, district_id, verification, verified_at, roles, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 'verified', now(), '{mom}', now(), now())`, memberID, identityID, sealedName, districtID)
+
+	staffID := uuid.New()
+	modCall := func(method, path string) call {
+		return call{
+			method:   method,
+			path:     path,
+			identity: staffID,
+			staff:    true,
+			mfa:      true,
+			roles:    []string{"moderator"},
+		}
+	}
+
+	// 1. Grant mentor role
+	s.json(modCall(http.MethodPut, "/staff/members/"+memberID.String()+"/roles/mentor"), 204, nil)
+
+	// 2. Grant again (idempotent)
+	s.json(modCall(http.MethodPut, "/staff/members/"+memberID.String()+"/roles/mentor"), 204, nil)
+
+	// 3. StaffListMembers shows mentor: true
+	var page api.StaffMemberPage
+	s.json(modCall(http.MethodGet, "/staff/members?status=verified"), 200, &page)
+	if len(page.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(page.Items))
+	}
+	if page.Items[0].Mentor == nil || !*page.Items[0].Mentor {
+		t.Errorf("mentor flag in list = %v, want true", page.Items[0].Mentor)
+	}
+
+	// 4. Revoke mentor role
+	s.json(modCall(http.MethodDelete, "/staff/members/"+memberID.String()+"/roles/mentor"), 204, nil)
+
+	// 5. Revoke again (idempotent)
+	s.json(modCall(http.MethodDelete, "/staff/members/"+memberID.String()+"/roles/mentor"), 204, nil)
+
+	// 6. StaffListMembers shows mentor: false
+	s.json(modCall(http.MethodGet, "/staff/members?status=verified"), 200, &page)
+	if len(page.Items) != 1 {
+		t.Fatalf("items = %d, want 1", len(page.Items))
+	}
+	if page.Items[0].Mentor == nil || *page.Items[0].Mentor {
+		t.Errorf("mentor flag in list = %v, want false", page.Items[0].Mentor)
+	}
+
+	// 7. Revoke unknown member -> 204
+	s.json(modCall(http.MethodDelete, "/staff/members/"+uuid.NewString()+"/roles/mentor"), 204, nil)
+
+	// 8. Grant suspended member -> 409
+	exec(`UPDATE membership.members SET suspended_at = now(), suspended_reason = 'spam' WHERE id = $1`, memberID)
+	status, _, body := s.do(modCall(http.MethodPut, "/staff/members/"+memberID.String()+"/roles/mentor"))
+	if status != 409 {
+		t.Fatalf("grant suspended status = %d, want 409: %s", status, body)
+	}
+	var p api.Problem
+	if err := json.Unmarshal(body, &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Code == nil || *p.Code != "suspended" {
+		t.Errorf("problem code = %v, want suspended", p.Code)
 	}
 }

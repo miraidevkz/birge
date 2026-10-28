@@ -25,7 +25,9 @@ Operations of tag `membership` in `contracts/openapi/birge.yaml`:
 | `POST /me/verification-requests` | At most one pending request; repeats return the current member without a second event. |
 | `GET /me/blocks`, `PUT/DELETE /me/blocks/{memberId}` | Idempotent block/unblock; no self-block; cap `MaxBlocks` (1000). Blocked member is not notified. |
 | `GET /reference/districts`, `GET /reference/needs` | Anonymous (`security: []`). |
-| `GET /staff/members` | Staff `moderator` or `admin`, MFA. Lists verified or suspended members (`status=verified|suspended`, optional `districtId`, keyset `cursor`). Page size 50. Every read is audited as `membership.member.list` (staff ID, status filter, count; never names). Tombstoned members never appear. |
+| `GET /staff/members` | Staff `moderator` or `admin`, MFA. Lists verified or suspended members (`status=verified|suspended`, optional `districtId`, keyset `cursor`). Page size 50. Returns `mentor` boolean flag indicating whether she holds the mentor role. Every read is audited as `membership.member.list` (staff ID, status filter, count; never names). Tombstoned members never appear. |
+| `PUT /staff/members/{memberId}/roles/mentor` | Staff `moderator` or `admin`, MFA. Member must exist (404 `not_found`), be verified and not suspended (409). Adds `mentor` to `roles` idempotently. Audited as `membership.member.mentor_grant`. Publishes `membership.MentorRoleChanged` (`mentor: true`) only when the role actually changed. |
+| `DELETE /staff/members/{memberId}/roles/mentor` | Staff `moderator` or `admin`, MFA. Removes `mentor` from `roles` idempotently (unknown member → 204). Audited as `membership.member.mentor_revoke`. Publishes `membership.MentorRoleChanged` (`mentor: false`) only when the role actually changed. |
 | `GET /staff/members/{memberId}/suspension` | Staff `moderator` or `admin`, MFA. |
 | `DELETE /staff/members/{memberId}/suspension` | Staff `admin`, MFA; lifts suspension; audited. |
 
@@ -38,6 +40,7 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 | publishes | `membership.MemberRegistered` v1 | first authenticated request of a new identity | outbox, same transaction as member insert |
 | publishes | `membership.VerificationRequested` v1 | member asks for a call and none is pending | outbox, same transaction as pending request |
 | publishes | `membership.MemberVerified` v1 | verification approved via `moderation.Decided` | outbox, same transaction as approve; `verified_by` = moderation item id (Decided carries no staff id) |
+| publishes | `membership.MentorRoleChanged` v1 | staff granted or revoked the mentor role | outbox, same transaction as role update; published only when the role actually changed |
 | consumes | `moderation.Decided` v1 | kind `verification` | JetStream durable `membership-moderation-decided`; deduplicated via `platform.processed_events`; a deleted member (request gone) is a no-op |
 | consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `membership-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `membership.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
@@ -54,6 +57,8 @@ Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 pre
 | `service.Service.IsBlocked(ctx, a, b)` | Symmetric block check (either direction) **or** either member suspended. A deleted member is not "blocked" (her tombstones stay visible). No authorization. |
 | `service.Service.Member(ctx, id)` | Member by ID or `model.ErrMemberNotFound` (also for a deleted member: callers show her as deleted). No authorization; display name is opened for the caller. |
 | `service.Service.ListVerifiedInDistrict(ctx, districtID)` | IDs of verified, non-suspended, non-deleted members in the district. No authorization. |
+| `service.Service.GrantMentorRole(ctx, memberID)` | Staff `moderator` or `admin`, MFA. Verified, non-suspended member only (409 otherwise; 404 for unknown). Audited; outbox event on change. |
+| `service.Service.RevokeMentorRole(ctx, memberID)` | Staff `moderator` or `admin`, MFA. Idempotent (unknown member → 204). Audited; outbox event on change. |
 | `service.Service.SuspendAuthor(ctx, memberID, reason, itemID)` | System suspension from chat after `block_author`; idempotent; audited as `system`. A deleted member is a no-op. |
 | `service.Service.VerificationSummary(ctx, requestID)` | First name and district id for the moderation ContentSource; `ErrMemberNotFound` when gone. |
 | `service.Service.ApplyModerationDecided` | Applies `moderation.Decided` for kind verification. |

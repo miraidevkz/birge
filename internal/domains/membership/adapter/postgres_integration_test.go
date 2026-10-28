@@ -563,3 +563,188 @@ func TestStaffListMembersIntegration(t *testing.T) {
 		t.Errorf("personal data leaked in audit_log reason: count = %d", leakCount)
 	}
 }
+
+func TestMentorRoleIntegration(t *testing.T) {
+	ctx := context.Background()
+	pool, svc := setup(t)
+
+	var cityID, districtID uuid.UUID
+	err := pool.QueryRow(ctx, `
+		WITH c AS (INSERT INTO membership.cities (code) VALUES ('city_mentor_test') RETURNING id),
+		     d AS (INSERT INTO membership.districts (city_id, code) SELECT id, 'dist_mentor_test' FROM c RETURNING id)
+		SELECT (SELECT id FROM c), (SELECT id FROM d)`).Scan(&cityID, &districtID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	staffID := uuid.New()
+	staffCtx := auth.WithPrincipal(ctx, auth.Principal{
+		IdentityID: staffID,
+		Staff:      true,
+		MFA:        true,
+		Roles:      []string{staffauth.RoleModerator},
+	})
+
+	// 1. Create a verified member
+	targetID := uuid.New()
+	targetIdentity := uuid.New()
+	sealedName, err := testEncryptor{}.Seal(ctx, targetID, []byte("MentorCandidate"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO membership.members (id, identity_id, display_name, district_id, verification, verified_at, roles, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, 'verified', now(), '{mom}', now(), now())`,
+		targetID, targetIdentity, sealedName, districtID); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Grant mentor role
+	if err := svc.GrantMentorRole(staffCtx, targetID); err != nil {
+		t.Fatalf("GrantMentorRole: %v", err)
+	}
+
+	// Check DB roles
+	var hasMentor bool
+	if err := pool.QueryRow(ctx, `SELECT 'mentor' = ANY(roles) FROM membership.members WHERE id = $1`, targetID).Scan(&hasMentor); err != nil || !hasMentor {
+		t.Errorf("DB roles has mentor = %v, err = %v; want true", hasMentor, err)
+	}
+
+	// Check audit log
+	if n := count(t, pool, `SELECT count(*) FROM platform.audit_log
+		WHERE actor_id = $1 AND actor_role = 'staff' AND action = 'membership.member.mentor_grant'
+		  AND object_type = 'membership.member' AND object_id = $2`, staffID, targetID); n != 1 {
+		t.Errorf("audit rows for mentor_grant = %d, want 1", n)
+	}
+
+	// Check outbox event
+	if n := count(t, pool, `SELECT count(*) FROM platform.outbox
+		WHERE event_type = 'membership.MentorRoleChanged'
+		  AND payload->>'member_id' = $1 AND (payload->>'mentor')::boolean = true`, targetID.String()); n != 1 {
+		t.Errorf("outbox events for mentor=true = %d, want 1", n)
+	}
+
+	// 3. Grant again (idempotent)
+	if err := svc.GrantMentorRole(staffCtx, targetID); err != nil {
+		t.Fatalf("GrantMentorRole repeat: %v", err)
+	}
+	// Audit count and outbox count must NOT increase
+	if n := count(t, pool, `SELECT count(*) FROM platform.audit_log
+		WHERE actor_id = $1 AND action = 'membership.member.mentor_grant'`, staffID); n != 1 {
+		t.Errorf("audit rows after repeat = %d, want 1", n)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM platform.outbox
+		WHERE event_type = 'membership.MentorRoleChanged' AND payload->>'member_id' = $1`, targetID.String()); n != 1 {
+		t.Errorf("outbox events after repeat = %d, want 1", n)
+	}
+
+	// 4. StaffListMembers shows mentor: true
+	page, err := svc.StaffListMembers(staffCtx, model.StaffMemberListFilter{
+		Status: model.StaffMemberStatusVerified,
+	})
+	if err != nil {
+		t.Fatalf("StaffListMembers: %v", err)
+	}
+	found := false
+	for _, it := range page.Items {
+		if it.ID == targetID {
+			found = true
+			if !it.Mentor {
+				t.Errorf("StaffMember.Mentor = false, want true")
+			}
+		}
+	}
+	if !found {
+		t.Error("target member not found in StaffListMembers")
+	}
+
+	// 5. Revoke mentor role
+	if err := svc.RevokeMentorRole(staffCtx, targetID); err != nil {
+		t.Fatalf("RevokeMentorRole: %v", err)
+	}
+
+	// Check DB roles
+	if err := pool.QueryRow(ctx, `SELECT 'mentor' = ANY(roles) FROM membership.members WHERE id = $1`, targetID).Scan(&hasMentor); err != nil || hasMentor {
+		t.Errorf("DB roles has mentor = %v, err = %v; want false", hasMentor, err)
+	}
+
+	// Check audit log for revoke
+	if n := count(t, pool, `SELECT count(*) FROM platform.audit_log
+		WHERE actor_id = $1 AND actor_role = 'staff' AND action = 'membership.member.mentor_revoke'
+		  AND object_type = 'membership.member' AND object_id = $2`, staffID, targetID); n != 1 {
+		t.Errorf("audit rows for mentor_revoke = %d, want 1", n)
+	}
+
+	// Check outbox event for revoke
+	if n := count(t, pool, `SELECT count(*) FROM platform.outbox
+		WHERE event_type = 'membership.MentorRoleChanged'
+		  AND payload->>'member_id' = $1 AND (payload->>'mentor')::boolean = false`, targetID.String()); n != 1 {
+		t.Errorf("outbox events for mentor=false = %d, want 1", n)
+	}
+
+	// 6. Revoke again (idempotent)
+	if err := svc.RevokeMentorRole(staffCtx, targetID); err != nil {
+		t.Fatalf("RevokeMentorRole repeat: %v", err)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM platform.audit_log
+		WHERE actor_id = $1 AND action = 'membership.member.mentor_revoke'`, staffID); n != 1 {
+		t.Errorf("audit rows after repeat = %d, want 1", n)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM platform.outbox
+		WHERE event_type = 'membership.MentorRoleChanged'
+		  AND payload->>'member_id' = $1 AND (payload->>'mentor')::boolean = false`, targetID.String()); n != 1 {
+		t.Errorf("outbox events after repeat = %d, want 1", n)
+	}
+
+	// 7. StaffListMembers shows mentor: false
+	page2, err := svc.StaffListMembers(staffCtx, model.StaffMemberListFilter{
+		Status: model.StaffMemberStatusVerified,
+	})
+	if err != nil {
+		t.Fatalf("StaffListMembers: %v", err)
+	}
+	for _, it := range page2.Items {
+		if it.ID == targetID && it.Mentor {
+			t.Errorf("StaffMember.Mentor = true, want false")
+		}
+	}
+
+	// 8. Revoke unknown member -> 204 no-op
+	unknownID := uuid.New()
+	if err := svc.RevokeMentorRole(staffCtx, unknownID); err != nil {
+		t.Fatalf("RevokeMentorRole unknown: %v", err)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM platform.audit_log WHERE object_id = $1`, unknownID); n != 0 {
+		t.Errorf("audit rows for unknown member = %d, want 0", n)
+	}
+
+	// 9. Grant failure paths
+	// Unknown member -> 404
+	if err := svc.GrantMentorRole(staffCtx, unknownID); !errors.Is(err, model.ErrMemberNotFound) {
+		t.Errorf("grant unknown member error = %v, want %v", err, model.ErrMemberNotFound)
+	}
+
+	// Unverified member -> 409
+	unverifiedID := uuid.New()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO membership.members (id, identity_id, district_id, verification, roles, created_at, updated_at)
+		VALUES ($1, $2, $3, 'new', '{mom}', now(), now())`,
+		unverifiedID, uuid.New(), districtID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.GrantMentorRole(staffCtx, unverifiedID); !errors.Is(err, model.ErrNotVerified) {
+		t.Errorf("grant unverified member error = %v, want %v", err, model.ErrNotVerified)
+	}
+
+	// Suspended member -> 409
+	suspendedID := uuid.New()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO membership.members (id, identity_id, district_id, verification, verified_at, suspended_at, suspended_reason, roles, created_at, updated_at)
+		VALUES ($1, $2, $3, 'verified', now(), now(), 'spam', '{mom}', now(), now())`,
+		suspendedID, uuid.New(), districtID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.GrantMentorRole(staffCtx, suspendedID); !errors.Is(err, model.ErrSuspended) {
+		t.Errorf("grant suspended member error = %v, want %v", err, model.ErrSuspended)
+	}
+}

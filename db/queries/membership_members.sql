@@ -90,7 +90,7 @@ DELETE FROM membership.verification_requests WHERE member_id = @member_id;
 -- Staff member list: verified members (most recently verified first).
 -- name: ListStaffMembersVerified :many
 SELECT id, display_name, district_id, verification, verified_at,
-       suspended_at
+       suspended_at, roles
 FROM membership.members
 WHERE deleted_at IS NULL
   AND verification = 'verified'
@@ -105,7 +105,7 @@ LIMIT @page_limit;
 -- Staff member list: suspended members (most recently suspended first).
 -- name: ListStaffMembersSuspended :many
 SELECT id, display_name, district_id, verification, verified_at,
-       suspended_at
+       suspended_at, roles
 FROM membership.members
 WHERE deleted_at IS NULL
   AND suspended_at IS NOT NULL
@@ -116,3 +116,9 @@ WHERE deleted_at IS NULL
   )
 ORDER BY suspended_at DESC, id DESC
 LIMIT @page_limit;
+
+-- name: SetMemberRoles :execrows
+UPDATE membership.members
+SET roles = @roles,
+    updated_at = @now
+WHERE id = @id AND deleted_at IS NULL;

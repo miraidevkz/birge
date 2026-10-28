@@ -149,7 +149,7 @@ func (q *Queries) InsertMember(ctx context.Context, arg InsertMemberParams) (uui
 
 const listStaffMembersSuspended = `-- name: ListStaffMembersSuspended :many
 SELECT id, display_name, district_id, verification, verified_at,
-       suspended_at
+       suspended_at, roles
 FROM membership.members
 WHERE deleted_at IS NULL
   AND suspended_at IS NOT NULL
@@ -176,6 +176,7 @@ type ListStaffMembersSuspendedRow struct {
 	Verification string
 	VerifiedAt   *time.Time
 	SuspendedAt  *time.Time
+	Roles        []string
 }
 
 // Staff member list: suspended members (most recently suspended first).
@@ -200,6 +201,7 @@ func (q *Queries) ListStaffMembersSuspended(ctx context.Context, arg ListStaffMe
 			&i.Verification,
 			&i.VerifiedAt,
 			&i.SuspendedAt,
+			&i.Roles,
 		); err != nil {
 			return nil, err
 		}
@@ -213,7 +215,7 @@ func (q *Queries) ListStaffMembersSuspended(ctx context.Context, arg ListStaffMe
 
 const listStaffMembersVerified = `-- name: ListStaffMembersVerified :many
 SELECT id, display_name, district_id, verification, verified_at,
-       suspended_at
+       suspended_at, roles
 FROM membership.members
 WHERE deleted_at IS NULL
   AND verification = 'verified'
@@ -240,6 +242,7 @@ type ListStaffMembersVerifiedRow struct {
 	Verification string
 	VerifiedAt   *time.Time
 	SuspendedAt  *time.Time
+	Roles        []string
 }
 
 // Staff member list: verified members (most recently verified first).
@@ -264,6 +267,7 @@ func (q *Queries) ListStaffMembersVerified(ctx context.Context, arg ListStaffMem
 			&i.Verification,
 			&i.VerifiedAt,
 			&i.SuspendedAt,
+			&i.Roles,
 		); err != nil {
 			return nil, err
 		}
@@ -338,6 +342,27 @@ func (q *Queries) LockMemberForDeletion(ctx context.Context, id uuid.UUID) (Lock
 	var i LockMemberForDeletionRow
 	err := row.Scan(&i.IdentityID, &i.Deleted)
 	return i, err
+}
+
+const setMemberRoles = `-- name: SetMemberRoles :execrows
+UPDATE membership.members
+SET roles = $1,
+    updated_at = $2
+WHERE id = $3 AND deleted_at IS NULL
+`
+
+type SetMemberRolesParams struct {
+	Roles []string
+	Now   time.Time
+	ID    uuid.UUID
+}
+
+func (q *Queries) SetMemberRoles(ctx context.Context, arg SetMemberRolesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMemberRoles, arg.Roles, arg.Now, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setMemberSuspension = `-- name: SetMemberSuspension :execrows

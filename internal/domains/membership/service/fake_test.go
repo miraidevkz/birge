@@ -61,6 +61,15 @@ type fakeChild struct {
 
 type blockKey struct{ blocker, blocked uuid.UUID }
 
+type fakeAuditEntry struct {
+	ActorID    uuid.UUID
+	ActorRole  string
+	Action     string
+	ObjectType string
+	ObjectID   uuid.UUID
+	Reason     string
+}
+
 type state struct {
 	members       map[uuid.UUID]port.MemberRecord
 	children      map[uuid.UUID]fakeChild
@@ -68,6 +77,7 @@ type state struct {
 	verifications map[uuid.UUID]model.VerificationRequest
 	processed     map[string]bool
 	audits        int
+	auditEntries  []fakeAuditEntry
 	blocks        map[blockKey]time.Time
 	events        []outbox.Event
 	districts     map[uuid.UUID]uuid.UUID // district -> city
@@ -82,6 +92,7 @@ func (s state) clone() state {
 	c.pending = maps.Clone(s.pending)
 	c.verifications = maps.Clone(s.verifications)
 	c.processed = maps.Clone(s.processed)
+	c.auditEntries = slices.Clone(s.auditEntries)
 	c.blocks = maps.Clone(s.blocks)
 	c.events = slices.Clone(s.events)
 	return c
@@ -125,6 +136,12 @@ func (f *fakeStore) events() []outbox.Event {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return slices.Clone(f.st.events)
+}
+
+func (f *fakeStore) auditEntries() []fakeAuditEntry {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.st.auditEntries)
 }
 
 type fakeTx struct{ f *fakeStore }
@@ -222,6 +239,19 @@ func (t *fakeTx) SetVerification(_ context.Context, id uuid.UUID, v model.Verifi
 	} else {
 		m.VerifiedAt = nil
 	}
+	t.f.st.members[id] = m
+	return nil
+}
+
+func (t *fakeTx) SetRoles(_ context.Context, id uuid.UUID, roles []string, _ time.Time) error {
+	if err := t.check("SetRoles"); err != nil {
+		return err
+	}
+	m, ok := t.f.st.members[id]
+	if !ok || m.Deleted {
+		return model.ErrMemberNotFound
+	}
+	m.Roles = slices.Clone(roles)
 	t.f.st.members[id] = m
 	return nil
 }
@@ -357,11 +387,19 @@ func (t *fakeTx) MarkProcessed(_ context.Context, consumer string, eventID uuid.
 	return true, nil
 }
 
-func (t *fakeTx) Audit(_ context.Context, _ uuid.UUID, _, _, _ string, _ uuid.UUID, _ string) error {
+func (t *fakeTx) Audit(_ context.Context, actorID uuid.UUID, actorRole, action, objectType string, objectID uuid.UUID, reason string) error {
 	if err := t.check("Audit"); err != nil {
 		return err
 	}
 	t.f.st.audits++
+	t.f.st.auditEntries = append(t.f.st.auditEntries, fakeAuditEntry{
+		ActorID:    actorID,
+		ActorRole:  actorRole,
+		Action:     action,
+		ObjectType: objectType,
+		ObjectID:   objectID,
+		Reason:     reason,
+	})
 	return nil
 }
 
@@ -475,6 +513,7 @@ func (t *fakeTx) ListStaffMembers(_ context.Context, f port.StaffMemberListFilte
 			Verification: m.Verification,
 			VerifiedAt:   m.VerifiedAt,
 			SuspendedAt:  m.SuspendedAt,
+			Roles:        m.Roles,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
