@@ -144,11 +144,16 @@ func (f *FakeLLM) Complete(_ context.Context, req model.LLMRequest) (model.Compl
 
 // MemStore is an in-memory port.Store. A failed transaction rolls back.
 type MemStore struct {
-	mu     sync.Mutex
-	Turns  []model.Turn
-	Events []model.ReplyRatedData
-	Timers []Timer
-	Err    error // returned by InTx when set
+	mu       sync.Mutex
+	Turns    []model.Turn
+	Events   []model.ReplyRatedData
+	Answered []model.QuestionAnsweredData // assistant.QuestionAnswered events
+	Timers   []Timer
+	Err      error // returned by InTx when set
+	// AnsweredErr fails PublishQuestionAnswered. Like the savepoint in the
+	// Postgres adapter, the failure writes nothing and leaves the
+	// transaction usable.
+	AnsweredErr error
 }
 
 // Timer is a recorded retention timer.
@@ -165,15 +170,24 @@ func (s *MemStore) InTx(_ context.Context, fn func(tx port.Tx) error) error {
 		return s.Err
 	}
 	tx := &memTx{
-		turns:  append([]model.Turn(nil), s.Turns...),
-		events: append([]model.ReplyRatedData(nil), s.Events...),
-		timers: append([]Timer(nil), s.Timers...),
+		turns:       append([]model.Turn(nil), s.Turns...),
+		events:      append([]model.ReplyRatedData(nil), s.Events...),
+		answered:    append([]model.QuestionAnsweredData(nil), s.Answered...),
+		timers:      append([]Timer(nil), s.Timers...),
+		answeredErr: s.AnsweredErr,
 	}
 	if err := fn(tx); err != nil {
 		return err
 	}
-	s.Turns, s.Events, s.Timers = tx.turns, tx.events, tx.timers
+	s.Turns, s.Events, s.Answered, s.Timers = tx.turns, tx.events, tx.answered, tx.timers
 	return nil
+}
+
+// AnsweredSnapshot returns a copy of the committed QuestionAnswered events.
+func (s *MemStore) AnsweredSnapshot() []model.QuestionAnsweredData {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]model.QuestionAnsweredData(nil), s.Answered...)
 }
 
 // TurnsSnapshot returns a copy of the stored turns.
@@ -184,9 +198,11 @@ func (s *MemStore) TurnsSnapshot() []model.Turn {
 }
 
 type memTx struct {
-	turns  []model.Turn
-	events []model.ReplyRatedData
-	timers []Timer
+	turns       []model.Turn
+	events      []model.ReplyRatedData
+	answered    []model.QuestionAnsweredData
+	timers      []Timer
+	answeredErr error
 }
 
 // InsertExchange implements port.Tx.
@@ -271,6 +287,15 @@ func (t *memTx) SetRating(_ context.Context, memberID, messageID uuid.UUID, help
 // PublishReplyRated implements port.Tx.
 func (t *memTx) PublishReplyRated(_ context.Context, _ time.Time, data model.ReplyRatedData) error {
 	t.events = append(t.events, data)
+	return nil
+}
+
+// PublishQuestionAnswered implements port.Tx.
+func (t *memTx) PublishQuestionAnswered(_ context.Context, _ time.Time, data model.QuestionAnsweredData) error {
+	if t.answeredErr != nil {
+		return t.answeredErr
+	}
+	t.answered = append(t.answered, data)
 	return nil
 }
 

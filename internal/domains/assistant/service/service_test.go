@@ -492,3 +492,201 @@ func TestLoadPromptDemoPreset(t *testing.T) {
 		t.Fatal("empty prompt must fail")
 	}
 }
+
+// answeredFor returns the committed QuestionAnswered events for messageID.
+func (h *harness) answeredFor(messageID uuid.UUID) []model.QuestionAnsweredData {
+	var out []model.QuestionAnsweredData
+	for _, e := range h.store.AnsweredSnapshot() {
+		if e.MessageID == messageID {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func TestQuestionAnsweredSource(t *testing.T) {
+	cases := []struct {
+		name   string
+		scope  string
+		text   string
+		setup  func(h *harness)
+		source string
+	}{
+		{name: "knowledge", scope: model.ScopeGeneral, text: "hello", source: model.SourceKnowledge},
+		{name: "knowledge rights", scope: model.ScopeRights, text: "benefits?", source: model.SourceKnowledge},
+		{name: "no answer: nothing retrieved", scope: model.ScopeRights, text: "benefits?", source: model.SourceNoAnswer,
+			setup: func(h *harness) {
+				h.retriever.Fragments = nil
+				h.llm.JSON = `{"reply":"I do not know","crisis":false,"sources":[],"suggest":"none"}`
+			}},
+		{name: "no answer: no retrieved source cited", scope: model.ScopeGeneral, text: "hello", source: model.SourceNoAnswer,
+			setup: func(h *harness) {
+				h.llm.JSON = `{"reply":"ok","crisis":false,"sources":["019a2f00-0000-7000-8000-0000000000ff"],"suggest":"none"}`
+			}},
+		{name: "no answer: retrieval disabled", scope: model.ScopeGeneral, text: "hello", source: model.SourceNoAnswer,
+			setup: func(h *harness) { h.svc.Retriever = nil }},
+		{name: "crisis L1", scope: model.ScopeRights, text: "I want to die", source: model.SourceCrisis},
+		{name: "crisis L2", scope: model.ScopeGeneral, text: "everything is dark", source: model.SourceCrisis,
+			setup: func(h *harness) {
+				h.llm.JSON = `{"reply":"x","crisis":true,"sources":[],"suggest":"none"}`
+			}},
+		{name: "unavailable: provider down", scope: model.ScopeGeneral, text: "hello", source: model.SourceUnavailable,
+			setup: func(h *harness) { h.llm.Err = &model.ProviderError{Kind: model.FailureTimeout} }},
+		{name: "unavailable: no model", scope: model.ScopeRights, text: "hello", source: model.SourceUnavailable,
+			setup: func(h *harness) { h.svc.LLM = nil }},
+		{name: "unavailable: invalid output", scope: model.ScopeGeneral, text: "hello", source: model.SourceUnavailable,
+			setup: func(h *harness) { h.llm.JSON = `{"reply":"x",` }},
+		{name: "unavailable: retrieval down", scope: model.ScopeGeneral, text: "hello", source: model.SourceUnavailable,
+			setup: func(h *harness) { h.retriever.Err = errors.New("vector store down") }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			if tc.setup != nil {
+				tc.setup(h)
+			}
+			r, err := h.svc.SendMessage(context.Background(), h.member, uuid.Must(uuid.NewV7()), service.MessageInput{Text: tc.text, Scope: tc.scope})
+			if err != nil {
+				t.Fatal(err)
+			}
+			all := h.store.AnsweredSnapshot()
+			want := model.QuestionAnsweredData{MessageID: r.MessageID, Scope: tc.scope, Source: tc.source}
+			if len(all) != 1 || all[0] != want {
+				t.Fatalf("events = %+v, want [%+v]", all, want)
+			}
+		})
+	}
+}
+
+func TestQuestionAnsweredExactlyOnce(t *testing.T) {
+	t.Run("replay", func(t *testing.T) {
+		for _, text := range []string{"hello", "want to die"} {
+			h := newHarness(t)
+			key := uuid.Must(uuid.NewV7())
+			in := service.MessageInput{Text: text, Scope: model.ScopeGeneral}
+			var id uuid.UUID
+			for range 3 {
+				r, err := h.svc.SendMessage(context.Background(), h.member, key, in)
+				if err != nil {
+					t.Fatal(err)
+				}
+				id = r.MessageID
+			}
+			if got := h.store.AnsweredSnapshot(); len(got) != 1 || got[0].MessageID != id {
+				t.Fatalf("%q: events = %+v", text, got)
+			}
+		}
+	})
+	t.Run("concurrent request lost the insert", func(t *testing.T) {
+		// The same key arrives twice; the second request finishes first
+		// (nested inside the first one's retrieval), so the first loses the
+		// insert and must replay without emitting.
+		h := newHarness(t)
+		key := uuid.Must(uuid.NewV7())
+		in := service.MessageInput{Text: "hello", Scope: model.ScopeGeneral}
+		var inner model.Reply
+		h.svc.Retriever = &racingRetriever{inner: h.retriever, race: func() {
+			var err error
+			if inner, err = h.svc.SendMessage(context.Background(), h.member, key, in); err != nil {
+				t.Error(err)
+			}
+		}}
+		outer, err := h.svc.SendMessage(context.Background(), h.member, key, in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if outer.MessageID != inner.MessageID {
+			t.Fatalf("outer = %v inner = %v", outer.MessageID, inner.MessageID)
+		}
+		if got := h.store.AnsweredSnapshot(); len(got) != 1 || got[0].MessageID != inner.MessageID {
+			t.Fatalf("events = %+v", got)
+		}
+	})
+	t.Run("separate messages", func(t *testing.T) {
+		h := newHarness(t)
+		a, b := h.send(t, "hello"), h.send(t, "hello")
+		if len(h.answeredFor(a.MessageID)) != 1 || len(h.answeredFor(b.MessageID)) != 1 || len(h.store.AnsweredSnapshot()) != 2 {
+			t.Fatalf("events = %+v", h.store.AnsweredSnapshot())
+		}
+	})
+}
+
+// racingRetriever runs race once, before the first search, to simulate a
+// concurrent request with the same key that finishes first.
+type racingRetriever struct {
+	inner port.Retriever
+	race  func()
+	done  bool
+}
+
+func (r *racingRetriever) Search(ctx context.Context, lang, scope, text string, k int) ([]model.Fragment, error) {
+	if !r.done {
+		r.done = true
+		r.race()
+	}
+	return r.inner.Search(ctx, lang, scope, text, k)
+}
+
+func TestQuestionAnsweredNotEmittedWithoutStorage(t *testing.T) {
+	h := newHarness(t)
+	h.consent.Granted = false
+	if r := h.send(t, "I want to die"); !r.Crisis {
+		t.Fatalf("reply = %+v", r)
+	}
+	_, err := h.svc.SendMessage(context.Background(), h.member, uuid.Must(uuid.NewV7()), service.MessageInput{Text: "hello", Scope: model.ScopeGeneral})
+	if !errors.Is(err, model.ErrConsentRequired) {
+		t.Fatalf("err = %v", err)
+	}
+	if got := h.store.AnsweredSnapshot(); len(got) != 0 {
+		t.Fatalf("nothing is stored without consent; events = %+v", got)
+	}
+}
+
+func TestCrisisResponseWhenQuestionAnsweredFails(t *testing.T) {
+	for name, setup := range map[string]func(h *harness){
+		"L1": func(*harness) {},
+		"L2": func(h *harness) { h.llm.JSON = `{"reply":"x","crisis":true,"sources":[],"suggest":"none"}` },
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t)
+			setup(h)
+			h.store.AnsweredErr = errors.New("outbox insert failed")
+			text := "everything is dark"
+			if name == "L1" {
+				text = "I want to die"
+			}
+			r := h.send(t, text)
+			if !r.Crisis || len(r.CrisisPhones) != 1 || r.EscalationID == nil || r.Text != nil {
+				t.Fatalf("reply = %+v", r)
+			}
+			if len(h.opener.Calls) != 1 {
+				t.Fatalf("escalations = %d", len(h.opener.Calls))
+			}
+			// The savepoint keeps the transaction usable: the crisis turn is
+			// still stored, only the metric event is dropped.
+			turns := h.store.TurnsSnapshot()
+			if len(turns) != 2 || !turns[1].Crisis || turns[1].ID != r.MessageID {
+				t.Fatalf("turns = %+v", turns)
+			}
+			if got := h.store.AnsweredSnapshot(); len(got) != 0 {
+				t.Fatalf("events = %+v", got)
+			}
+			if !strings.Contains(h.logs.String(), "AssistantQuestionAnsweredDropped") {
+				t.Fatal("a dropped event must be logged")
+			}
+			h.assertNoTextInLogs(t, text)
+		})
+	}
+}
+
+func TestQuestionAnsweredFailureFailsNormalTurn(t *testing.T) {
+	h := newHarness(t)
+	h.store.AnsweredErr = errors.New("outbox insert failed")
+	_, err := h.svc.SendMessage(context.Background(), h.member, uuid.Must(uuid.NewV7()), service.MessageInput{Text: "hello", Scope: model.ScopeGeneral})
+	if err == nil {
+		t.Fatal("a normal turn must fail with its event")
+	}
+	if len(h.store.TurnsSnapshot()) != 0 {
+		t.Fatal("a turn without its event must not be stored")
+	}
+}

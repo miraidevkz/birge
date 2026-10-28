@@ -65,6 +65,27 @@ var RetentionPurgeSubject = uuid.MustParse("019a2f00-0000-7000-8000-000000000700
 const (
 	EventReplyRated        = "assistant.ReplyRated"
 	EventReplyRatedVersion = 1
+
+	EventQuestionAnswered        = "assistant.QuestionAnswered"
+	EventQuestionAnsweredVersion = 1
+)
+
+// Answer sources of assistant.QuestionAnswered v1 (contract enum). Each is
+// one existing pipeline outcome, never a new heuristic:
+//
+//   - SourceKnowledge: the model replied and at least one of its sources is a
+//     retrieved fragment (published, reviewed articles only) after Validate;
+//   - SourceNoAnswer: the model replied, retrieval worked, and no retrieved
+//     fragment backs the reply (nothing found, or the model cited none);
+//   - SourceCrisis: the fixed crisis response (L1 or L2);
+//   - SourceUnavailable: the fallback was shown (degraded reply: provider
+//     failure, no model, profile down) or retrieval failed with an error, so
+//     the model answered without the knowledge base.
+const (
+	SourceKnowledge   = "knowledge"
+	SourceNoAnswer    = "no_answer"
+	SourceCrisis      = "crisis"
+	SourceUnavailable = "unavailable"
 )
 
 // Limits of the model-output contract (contract AssistantReply).
@@ -288,6 +309,15 @@ type Reply struct {
 	Suggest        string
 	DisclaimerKey  string
 	RemainingToday int // -1 when unknown (crisis without consent)
+}
+
+// QuestionAnsweredData is the payload of assistant.QuestionAnswered v1: the
+// assistant turn ID, the scope and the answer source only. No text, no topic,
+// no member ID and no article IDs (ADR-0024: metrics only).
+type QuestionAnsweredData struct {
+	MessageID uuid.UUID `json:"message_id"`
+	Scope     string    `json:"scope"`
+	Source    string    `json:"source"`
 }
 
 // ReplyRatedData is the payload of assistant.ReplyRated v1: IDs and the

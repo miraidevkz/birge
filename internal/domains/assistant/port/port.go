@@ -79,6 +79,11 @@ type Tx interface {
 	GetRatingForUpdate(ctx context.Context, memberID, messageID uuid.UUID) (helped *bool, err error)
 	SetRating(ctx context.Context, memberID, messageID uuid.UUID, helped bool, at time.Time) error
 	PublishReplyRated(ctx context.Context, now time.Time, data model.ReplyRatedData) error
+	// PublishQuestionAnswered enqueues assistant.QuestionAnswered in this
+	// transaction's outbox. It runs in its own savepoint: on error nothing of
+	// it is written and the transaction stays usable, so the crisis path can
+	// drop the event and still commit its turn.
+	PublishQuestionAnswered(ctx context.Context, now time.Time, data model.QuestionAnsweredData) error
 
 	// PurgeTurnsBefore deletes at most limit turns created before cutoff.
 	PurgeTurnsBefore(ctx context.Context, cutoff time.Time, limit int) (int64, error)

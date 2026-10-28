@@ -22,7 +22,16 @@
 //     text is returned;
 //  8. any provider failure (timeout, error, rate limit, refusal, invalid
 //     JSON) gives degraded=true, no text, suggest none; never a 5xx;
-//  9. persistence of anonymized, sealed text only.
+//  9. persistence of anonymized, sealed text only, with
+//     assistant.QuestionAnswered in the same transaction (see persist).
+//
+// assistant.QuestionAnswered (ADR-0024 addendum 2026-10-28) is emitted
+// exactly once per stored exchange: only by the transaction whose
+// InsertExchange actually inserted it. A replay of a known Idempotency-Key,
+// or a concurrent request that lost the insert race, emits nothing. A crisis
+// without the ai_crossborder consent stores nothing, so it emits nothing
+// either (its escalation is counted by safety.EscalationOpened). There is no
+// streaming: one request is one finished turn.
 //
 // Logs carry IDs, event names, outcome, latency and model ID; never message
 // text, anonymized text or a member ID next to a crisis flag.
@@ -265,7 +274,7 @@ func (s *Service) SendMessage(ctx context.Context, memberID, idempotencyKey uuid
 	}
 	remaining := max(limit-count-1, 0)
 
-	ex := exchange{memberID: memberID, key: idempotencyKey, now: now, remaining: remaining}
+	ex := exchange{memberID: memberID, key: idempotencyKey, scope: in.Scope, now: now, remaining: remaining}
 	if ex.memberTurnID, err = uuid.NewV7(); err != nil {
 		return model.Reply{}, fmt.Errorf("assistant: message id: %w", err)
 	}
@@ -301,7 +310,7 @@ func (s *Service) SendMessage(ctx context.Context, memberID, idempotencyKey uuid
 	}
 
 	// 5. Retrieval; failure leaves the model without sources.
-	fragments := s.retrieve(ctx, ex.assistantTurnID, lang, in.Scope, ex.memberText)
+	fragments, retrievalFailed := s.retrieve(ctx, ex.assistantTurnID, lang, in.Scope, ex.memberText)
 
 	// 6. The model.
 	if s.LLM == nil {
@@ -364,13 +373,24 @@ func (s *Service) SendMessage(ctx context.Context, memberID, idempotencyKey uuid
 			reply.DisclaimerKey = DefaultRightsDisclaimerKey
 		}
 	}
+	// The answer source follows what the pipeline did: retrieval down means
+	// the knowledge base was unavailable to the model (logged as
+	// AssistantRetrievalFailed); otherwise a reply backed by at least one
+	// retrieved, reviewed article is "knowledge" and anything else "no_answer".
+	source := model.SourceNoAnswer
+	switch {
+	case retrievalFailed:
+		source = model.SourceUnavailable
+	case len(sources) > 0:
+		source = model.SourceKnowledge
+	}
 	stored := s.anonymizer().Anonymize(out.Reply, ex.ownName)
-	final, err := s.persist(ctx, ex, model.Turn{Sources: sources, Suggest: out.Suggest}, &stored, reply)
+	final, err := s.persist(ctx, ex, model.Turn{Sources: sources, Suggest: out.Suggest}, &stored, reply, source)
 	if err != nil {
 		return model.Reply{}, err
 	}
 	s.log().Info("assistant replied", "event", "AssistantReplied", "message_id", final.MessageID,
-		"outcome", "ok", "latency_ms", latency.Milliseconds(), "model", comp.ModelID,
+		"outcome", "ok", "source", source, "latency_ms", latency.Milliseconds(), "model", comp.ModelID,
 		"prompt_version", s.Settings.Prompt.Version, "sources", len(sources))
 	return final, nil
 }
@@ -379,6 +399,7 @@ func (s *Service) SendMessage(ctx context.Context, memberID, idempotencyKey uuid
 type exchange struct {
 	memberID        uuid.UUID
 	key             uuid.UUID
+	scope           string
 	now             time.Time
 	memberTurnID    uuid.UUID
 	assistantTurnID uuid.UUID
@@ -394,20 +415,23 @@ func (s *Service) profile(ctx context.Context, memberID uuid.UUID) (model.Profil
 	return s.Profiles.Profile(ctx, memberID)
 }
 
-func (s *Service) retrieve(ctx context.Context, messageID uuid.UUID, lang, scope, text string) []model.Fragment {
+// retrieve returns the fragments and whether retrieval failed with an error.
+// A missing or disabled retriever (NoRetrieval) is not a failure: it finds
+// nothing, which is a "no_answer", not an outage.
+func (s *Service) retrieve(ctx context.Context, messageID uuid.UUID, lang, scope, text string) (frags []model.Fragment, failed bool) {
 	if s.Retriever == nil {
-		return nil
+		return nil, false
 	}
 	k := orDefault(s.Settings.RetrievalK, DefaultRetrievalK)
 	frags, err := s.Retriever.Search(ctx, lang, scope, text, k)
 	if err != nil {
 		s.log().Warn("assistant retrieval failed", "event", "AssistantRetrievalFailed", "message_id", messageID, "error", err.Error())
-		return nil
+		return nil, true
 	}
 	if len(frags) > k {
 		frags = frags[:k]
 	}
-	return frags
+	return frags, false
 }
 
 // history returns up to HistoryTurns earlier turns, oldest first, starting
@@ -529,7 +553,7 @@ func (s *Service) crisisReply(ctx context.Context, ex exchange, level, rawText s
 		}
 		ex.memberText = s.anonymizer().Anonymize(rawText, profile.DisplayName)
 	}
-	final, err := s.persist(ctx, ex, model.Turn{Crisis: true, Suggest: model.SuggestNone, EscalationID: reply.EscalationID}, nil, reply)
+	final, err := s.persist(ctx, ex, model.Turn{Crisis: true, Suggest: model.SuggestNone, EscalationID: reply.EscalationID}, nil, reply, model.SourceCrisis)
 	if err != nil {
 		s.log().Error("assistant crisis turn not stored", "event", "AssistantCrisisPersistFailed", "message_id", ex.assistantTurnID, "error", err.Error())
 		final = reply
@@ -548,7 +572,7 @@ func (s *Service) degradedReply(ctx context.Context, ex exchange, kind, modelID 
 		Suggest:        model.SuggestNone,
 		RemainingToday: ex.remaining,
 	}
-	final, err := s.persist(ctx, ex, model.Turn{Degraded: true, Suggest: model.SuggestNone}, nil, reply)
+	final, err := s.persist(ctx, ex, model.Turn{Degraded: true, Suggest: model.SuggestNone}, nil, reply, model.SourceUnavailable)
 	if err != nil {
 		return model.Reply{}, err
 	}
@@ -558,9 +582,26 @@ func (s *Service) degradedReply(ctx context.Context, ex exchange, kind, modelID 
 }
 
 // persist seals and stores the member turn and the assistant turn in one
-// transaction. When a concurrent request with the same idempotency key won,
-// the stored exchange is returned instead of reply.
-func (s *Service) persist(ctx context.Context, ex exchange, at model.Turn, assistantText *string, reply model.Reply) (model.Reply, error) {
+// transaction, together with assistant.QuestionAnswered (source). When a
+// concurrent request with the same idempotency key won, the stored exchange
+// is returned instead of reply and no event is emitted: the winner emitted it.
+//
+// Crisis turns (at.Crisis) treat the event as best effort, so the crisis
+// response never depends on it (non-negotiable 1):
+//   - by the time persist runs, crisisReply has already opened the escalation
+//     and built the reply with the phones; nothing here can change them;
+//   - the event is one INSERT into the local outbox inside the transaction
+//     the crisis path already waits on for its turn. No broker, no network:
+//     the relay publishes later;
+//   - PublishQuestionAnswered runs in its own savepoint. If it fails, the
+//     error is not returned from the transaction, so the turn still commits
+//     and the event is dropped with an Error log (the metric loses one count);
+//   - if the whole transaction fails anyway, crisisReply logs it and returns
+//     the crisis reply.
+//
+// For every other turn an event failure fails the transaction, so a stored
+// turn always has exactly one event.
+func (s *Service) persist(ctx context.Context, ex exchange, at model.Turn, assistantText *string, reply model.Reply, source string) (model.Reply, error) {
 	memberSealed, err := s.seal(ctx, ex.memberID, ex.memberTurnID, ex.memberText)
 	if err != nil {
 		return model.Reply{}, fmt.Errorf("assistant: seal member turn: %w", err)
@@ -585,10 +626,22 @@ func (s *Service) persist(ctx context.Context, ex exchange, at model.Turn, assis
 	}
 
 	out := reply
+	var droppedEvent error
 	err = s.Store.InTx(ctx, func(tx port.Tx) error {
+		droppedEvent = nil
 		inserted, err := tx.InsertExchange(ctx, mt, at)
-		if err != nil || inserted {
+		if err != nil {
 			return err
+		}
+		if inserted {
+			evErr := tx.PublishQuestionAnswered(ctx, ex.now, model.QuestionAnsweredData{
+				MessageID: ex.assistantTurnID, Scope: ex.scope, Source: source,
+			})
+			if evErr != nil && at.Crisis {
+				droppedEvent = evErr
+				return nil
+			}
+			return evErr
 		}
 		existingMember, existingAssistant, err := tx.GetExchangeByIdempotencyKey(ctx, ex.memberID, ex.key)
 		if err != nil {
@@ -600,6 +653,10 @@ func (s *Service) persist(ctx context.Context, ex exchange, at model.Turn, assis
 	})
 	if err != nil {
 		return model.Reply{}, err
+	}
+	if droppedEvent != nil {
+		s.log().Error("assistant event dropped", "event", "AssistantQuestionAnsweredDropped",
+			"message_id", ex.assistantTurnID, "error", droppedEvent.Error())
 	}
 	return out, nil
 }

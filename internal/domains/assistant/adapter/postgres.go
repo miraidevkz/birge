@@ -1,6 +1,7 @@
 // Package adapter implements the assistant ports on PostgreSQL (schema
-// assistant) and platform hooks: the outbox for assistant.ReplyRated and the
-// daily retention-purge timer. The model adapter lives in adapter/anthropic.
+// assistant) and platform hooks: the outbox for assistant.ReplyRated and
+// assistant.QuestionAnswered, and the daily retention-purge timer. The model
+// adapter lives in adapter/anthropic.
 package adapter
 
 import (
@@ -37,10 +38,11 @@ func (s *PostgresStore) InTx(ctx context.Context, fn func(tx port.Tx) error) err
 
 // TxFrom binds a port.Tx to an existing database transaction (timer worker).
 func TxFrom(tx pgx.Tx) port.Tx {
-	return &postgresTx{assistant: assistantstore.New(tx), platform: platformstore.New(tx)}
+	return &postgresTx{tx: tx, assistant: assistantstore.New(tx), platform: platformstore.New(tx)}
 }
 
 type postgresTx struct {
+	tx        pgx.Tx
 	assistant *assistantstore.Queries
 	platform  *platformstore.Queries
 }
@@ -167,6 +169,29 @@ func (t *postgresTx) PublishReplyRated(ctx context.Context, now time.Time, data 
 		Type: model.EventReplyRated, Version: model.EventReplyRatedVersion, Data: data,
 	})
 	return err
+}
+
+// PublishQuestionAnswered enqueues assistant.QuestionAnswered inside a
+// savepoint (pgx nested transaction). A failed INSERT in PostgreSQL aborts
+// the whole transaction; the savepoint confines the failure to the event, so
+// the caller may drop it and still commit the turn (the crisis path does).
+func (t *postgresTx) PublishQuestionAnswered(ctx context.Context, now time.Time, data model.QuestionAnsweredData) error {
+	sp, err := t.tx.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("savepoint %s: %w", model.EventQuestionAnswered, err)
+	}
+	if _, err := outbox.Enqueue(ctx, platformstore.New(sp), now, "", outbox.Event{
+		Type: model.EventQuestionAnswered, Version: model.EventQuestionAnsweredVersion, Data: data,
+	}); err != nil {
+		if rbErr := sp.Rollback(ctx); rbErr != nil {
+			return errors.Join(err, fmt.Errorf("rollback to savepoint: %w", rbErr))
+		}
+		return err
+	}
+	if err := sp.Commit(ctx); err != nil {
+		return fmt.Errorf("release savepoint %s: %w", model.EventQuestionAnswered, err)
+	}
+	return nil
 }
 
 // PurgeTurnsBefore deletes one bounded batch of expired turns.

@@ -22,6 +22,7 @@ Operations of tag `assistant` in `contracts/openapi/birge.yaml`:
 | Direction | Event | When | Guarantees |
 |---|---|---|---|
 | publishes | `assistant.ReplyRated` v1 | rating stored or changed | outbox, same transaction; payload `message_id`, `helped` only |
+| publishes | `assistant.QuestionAnswered` v1 | an exchange is stored (one finished turn) | outbox, same transaction as the exchange; exactly once: only the transaction that inserted the exchange emits it, so a replay or a lost idempotency race emits nothing; nothing for a crisis without consent (nothing is stored). Payload `message_id` (assistant turn), `scope`, `source` only. `source`: `knowledge` = the model replied and at least one retrieved article backs it; `no_answer` = retrieval worked (or is disabled) and no retrieved article backs the reply; `crisis` = the fixed crisis response (L1 or L2); `unavailable` = degraded reply (provider failure, no model, profile down) or retrieval failed with an error. On a crisis turn the event is best effort: written in a savepoint, a failure drops it (`AssistantQuestionAnsweredDropped`, Error) and the turn and the crisis response still go out; on any other turn the failure fails the turn |
 | consumes | `privacy.DataDeletionRequested` v1 | account deletion | JetStream durable `assistant-deletion` (`wiring.DeletionConsumer`); deduplicated in `platform.processed_events` (consumer `assistant.Deletion`) after `service.Deletion.DeleteMember`, which is idempotent and runs in one transaction |
 
 Escalations are opened through `safety.OpenEscalation` (source `assistant`), which publishes `safety.EscalationOpened`.
@@ -80,7 +81,8 @@ Environment variables: `BIRGE_LLM_MODEL`, `BIRGE_LLM_API_KEY_FILE`, `BIRGE_LLM_B
 - Model output is parsed strictly (four fields, no extras, nothing after); reply 1–2000 characters, suggestion in the enum, sources filtered to the retrieved fragment IDs (model; `model_test.go`, `TestSourcesFilteredToRetrieved`). Any failure → degraded, never a 5xx.
 - Only anonymized text is stored, sealed with the member's key; model replies are anonymized again before storage (adapter integration test checks no name in `text_sealed`).
 - Logs: IDs, event names, outcome, failure kind, latency, model ID, prompt version. Never message text or anonymized text, never a member ID next to a crisis flag (service tests scan the log output).
-- One `Idempotency-Key` = one effect: one model call, one stored exchange, one escalation (unique index + replay; tested in service and integration tests).
+- One `Idempotency-Key` = one effect: one model call, one stored exchange, one escalation, one `assistant.QuestionAnswered` (unique index + replay; tested in service and integration tests; `TestQuestionAnsweredExactlyOnce`).
+- The crisis response never depends on `assistant.QuestionAnswered`: the escalation and the reply exist before the event is written, and its failure neither fails the crisis turn nor stops it being stored (`TestCrisisResponseWhenQuestionAnsweredFails`, `TestCrisisTurnKeptWhenQuestionAnsweredInsertFailsPostgres`).
 - Fragments and member text reach the model as JSON inside `<knowledge_fragments>` / `<member_message>`; '<' and '>' are escaped, so data cannot close its tag (`anthropic_test.go`).
 - Account deletion (AGENTS.md N6): every turn of her dialogue is deleted at once, without waiting for the 90-day retention; nothing is tombstoned (the dialogue is hers alone; an escalation it opened is kept by safety as a shell). The crisis path is not touched. One audit entry `assistant.member_deleted` (actor system).
 
@@ -89,6 +91,7 @@ Environment variables: `BIRGE_LLM_MODEL`, `BIRGE_LLM_API_KEY_FILE`, `BIRGE_LLM_B
 - AI provider down, slow (> 20 s), rate-limited, refusing or returning invalid JSON: degraded reply; log `AssistantDegraded kind=<timeout|rate_limited|api_error|refusal|truncated|invalid_output|unavailable>`.
 - Retrieval down: the model gets no fragments and must say it does not know; log `AssistantRetrievalFailed`.
 - Safety down on a crisis: crisis phones still returned; log `CrisisEscalationFailed` at Error (alert on it).
+- Outbox write of `assistant.QuestionAnswered` failing: a crisis turn is stored and answered without the event (`AssistantQuestionAnsweredDropped` at Error); a normal message fails with 5xx and nothing is stored.
 - Database or sealer down: a normal message fails with 5xx; a crisis message still returns the crisis response (`AssistantCrisisPersistFailed`).
 - Membership down: crisis path unaffected; normal message degraded (the name cannot be anonymized).
 - Purge failing: platform timer retries with backoff (ADR-0020); rows stay until it succeeds.
@@ -96,6 +99,6 @@ Environment variables: `BIRGE_LLM_MODEL`, `BIRGE_LLM_API_KEY_FILE`, `BIRGE_LLM_B
 ## Tests
 
 - Unit: `anonymize/anonymize_test.go` (cases + `TestAnonymizationEvalSet` over `evals/datasets/anonymization/{kk,ru,en}.tsv`: zero phone/IIN/e-mail survivors and every must-not-contain removed), `model/model_test.go`, `service/service_test.go` (pipeline order with fakes, consent, limit, L1, L2, degraded, invalid JSON, sources, replay, history, rating, retention), `api/handler_test.go`.
-- Adapter: `adapter/integration_test.go` with `testinfra.Postgres` (exchange, replay, limit, rating outbox payload, retention purge through `timers.Worker`); `adapter/anthropic/anthropic_test.go` against an `httptest` server emulating the Messages API (no network, no key).
+- Adapter: `adapter/integration_test.go` with `testinfra.Postgres` (exchange, replay, limit, rating outbox payload, `assistant.QuestionAnswered` payloads checked against `contracts/events/assistant.QuestionAnswered.v1.json`, savepoint on a failed event insert, retention purge through `timers.Worker`); `adapter/anthropic/anthropic_test.go` against an `httptest` server emulating the Messages API (no network, no key).
 - Evaluation sets: `evals/datasets/anonymization/` is **draft** (agent-written, not approved; see its README). The crisis and behaviour sets run through `cmd/birge-eval` once it exists (ADR-0017).
 - Fakes: `assistanttest/`.
