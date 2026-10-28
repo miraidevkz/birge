@@ -1,0 +1,26 @@
+{
+  "title": "Let us get to know you",
+  "next": "Next",
+  "finish": "Done",
+  "skip": "I will do it later",
+  "progress": "Step {{step}} of {{total}}",
+  "failed": "Could not save. Try again.",
+  "name": {
+    "title": "What is your name?",
+    "body": "This is how other mothers will see you. A first name is enough.",
+    "label": "Name",
+    "hint": "For example, Aigerim"
+  },
+  "about": {
+    "title": "District and child",
+    "body": "This lets us show mothers nearby and chats on your child's topics. Only you see this."
+  },
+  "verify": {
+    "title": "Verification",
+    "body": "District and topic chats are open to verified mothers, so only members are there. A moderator will call you for a short talk.",
+    "request": "Ask to be verified",
+    "requested": "Request sent. A moderator will call you.",
+    "afterHeading": "What next",
+    "after": "While you wait, you can do a wellbeing check-in, read the knowledge base and open Help at any time."
+  }
+}

@@ -23,7 +23,7 @@ import { SessionProvider, useSession } from '@/lib/session';
 
 // Synchronous: texts are bundled, so the first frame is already translated.
 // Routes that are roots: everything else is stacked above them and gets Back.
-const ROOTS = new Set(['(tabs)', 'sign-in', 'onboarding']);
+const ROOTS = new Set(['(tabs)', 'sign-in', 'onboarding', 'setup']);
 
 initI18n(getLocales().map((l) => l.languageTag));
 
@@ -75,6 +75,7 @@ export default function RootLayout() {
               >
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="onboarding" />
+                <Stack.Screen name="setup" />
                 <Stack.Screen name="sign-in" />
                 <Stack.Screen name="privacy" />
                 <Stack.Screen name="about-me" />

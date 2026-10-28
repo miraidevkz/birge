@@ -1,7 +1,7 @@
 // About me: her district and her children (birth year and needs). Rooms, tea
 // matches and specialists all depend on them; before this screen no member
 // could set them, so the Circle stayed empty. Children carry no names (schema).
-import { unwrap } from '@birge/api';
+import { unwrap, type Schemas } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
 import {
   Banner,
@@ -24,11 +24,42 @@ import { cityLabel, districtLabel, needLabel, useDistricts, useNeeds } from '@/l
 
 const YEAR = /^\d{4}$/;
 
+type Member = Schemas['Member'];
+
 /** AboutMeScreen edits the member's district and children. */
 export function AboutMeScreen() {
   const { t } = useTranslation('about');
-  const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: () => unwrap(api.GET('/me')) });
+
+  if (me.isLoading) {
+    return (
+      <Screen title={t('title')}>
+        <LoadingState />
+      </Screen>
+    );
+  }
+  if (!me.data) {
+    return (
+      <Screen title={t('title')}>
+        <ErrorState onRetry={() => void me.refetch()} />
+      </Screen>
+    );
+  }
+  return (
+    <Screen title={t('title')} testID="about-me">
+      <Text tone="muted">{t('intro')}</Text>
+      <AboutMeSections member={me.data} />
+    </Screen>
+  );
+}
+
+/**
+ * AboutMeSections is the district and children editor without a screen
+ * around it: About me and the first-run setup use the same one.
+ */
+export function AboutMeSections({ member }: { member: Member }) {
+  const { t } = useTranslation('about');
+  const client = useQueryClient();
   const districts = useDistricts();
   const needs = useNeeds();
   const [status, setStatus] = useState<'idle' | 'saved' | 'failed'>('idle');
@@ -64,22 +95,6 @@ export function AboutMeScreen() {
     onError: () => setStatus('failed'),
   });
 
-  if (me.isLoading) {
-    return (
-      <Screen title={t('title')}>
-        <LoadingState />
-      </Screen>
-    );
-  }
-  if (!me.data) {
-    return (
-      <Screen title={t('title')}>
-        <ErrorState onRetry={() => void me.refetch()} />
-      </Screen>
-    );
-  }
-  const member = me.data;
-
   function onAdd() {
     const y = Number(year);
     if (!YEAR.test(year) || y < 1990 || y > new Date().getFullYear()) {
@@ -91,8 +106,7 @@ export function AboutMeScreen() {
   }
 
   return (
-    <Screen title={t('title')} testID="about-me">
-      <Text tone="muted">{t('intro')}</Text>
+    <>
       {status === 'saved' ? <Banner tone="success">{t('district.saved')}</Banner> : null}
       {status === 'failed' ? <Banner tone="danger">{t('failed')}</Banner> : null}
 
@@ -171,6 +185,6 @@ export function AboutMeScreen() {
         ) : null}
         <Button title={t('children.save')} onPress={onAdd} loading={addChild.isPending} testID="about-child-save" />
       </Card>
-    </Screen>
+    </>
   );
 }

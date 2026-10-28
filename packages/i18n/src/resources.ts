@@ -18,6 +18,7 @@ import enInbox from './locales/en/inbox.json';
 import enOnboarding from './locales/en/onboarding.json';
 import enKnowledge from './locales/en/knowledge.json';
 import enPrivacy from './locales/en/privacy.json';
+import enSetup from './locales/en/setup.json';
 import enReference from './locales/en/reference.json';
 import enProfile from './locales/en/profile.json';
 import enSharing from './locales/en/sharing.json';
@@ -39,6 +40,7 @@ import kkInbox from './locales/kk/inbox.json';
 import kkOnboarding from './locales/kk/onboarding.json';
 import kkKnowledge from './locales/kk/knowledge.json';
 import kkPrivacy from './locales/kk/privacy.json';
+import kkSetup from './locales/kk/setup.json';
 import kkReference from './locales/kk/reference.json';
 import kkProfile from './locales/kk/profile.json';
 import kkSharing from './locales/kk/sharing.json';
@@ -60,6 +62,7 @@ import ruInbox from './locales/ru/inbox.json';
 import ruOnboarding from './locales/ru/onboarding.json';
 import ruKnowledge from './locales/ru/knowledge.json';
 import ruPrivacy from './locales/ru/privacy.json';
+import ruSetup from './locales/ru/setup.json';
 import ruReference from './locales/ru/reference.json';
 import ruProfile from './locales/ru/profile.json';
 import ruSharing from './locales/ru/sharing.json';
@@ -77,6 +80,7 @@ export const namespaces = [
   'inbox',
   'about',
   'reference',
+  'setup',
   'onboarding',
   'help',
   'circle',
@@ -106,6 +110,7 @@ export const resources = {
     inbox: kkInbox,
     about: kkAbout,
     reference: kkReference,
+    setup: kkSetup,
     onboarding: kkOnboarding,
     help: kkHelp,
     circle: kkCircle,
@@ -129,6 +134,7 @@ export const resources = {
     inbox: ruInbox,
     about: ruAbout,
     reference: ruReference,
+    setup: ruSetup,
     onboarding: ruOnboarding,
     help: ruHelp,
     circle: ruCircle,
@@ -152,6 +158,7 @@ export const resources = {
     inbox: enInbox,
     about: enAbout,
     reference: enReference,
+    setup: enSetup,
     onboarding: enOnboarding,
     help: enHelp,
     circle: enCircle,
