@@ -3,12 +3,12 @@
   "intro": "This lets us show mothers nearby and chats on your children's topics. Only you see this; other mothers see only what you have in common.",
   "district": {
     "heading": "My district",
-    "none": "The list of districts is empty for now.",
+    "none": "The list of districts will appear soon.",
     "saved": "District saved."
   },
   "children": {
     "heading": "My children",
-    "none": "No one added yet.",
+    "none": "Your children will appear here once you add them.",
     "item": "Child, born {{year}}",
     "noNeeds": "no needs given",
     "add": "Add a child",

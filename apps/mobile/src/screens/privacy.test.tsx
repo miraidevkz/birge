@@ -63,7 +63,7 @@ describe('PrivacyScreen', () => {
   it('shows empty when there are no consents', async () => {
     mockFetch.mockResolvedValue(json([]));
     await renderPrivacy();
-    expect(await screen.findByText('No consents')).toBeTruthy();
+    expect(await screen.findByText('No consents yet')).toBeTruthy();
   });
 
   it('shows the error state when consents fail to load', async () => {
@@ -86,7 +86,7 @@ describe('PrivacyScreen', () => {
     await renderPrivacy();
     await screen.findByText('Processing of personal data');
     await fireEvent.press(screen.getByTestId('privacy-delete-open'));
-    expect(await screen.findByText(/This cannot be undone/)).toBeTruthy();
+    expect(await screen.findByText(/Once deleted, your data cannot be restored/)).toBeTruthy();
     await fireEvent.press(screen.getByTestId('privacy-delete-confirm'));
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith('/sign-in'));
   });

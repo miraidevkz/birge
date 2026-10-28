@@ -20,8 +20,8 @@
     "contact": "Contact a person"
   },
   "errors": {
-    "consent_required": "To use the assistant, grant the cross-border AI consent in Privacy.",
-    "daily_limit": "Daily message limit reached. Try again tomorrow.",
+    "consent_required": "The assistant will work once you give the cross-border AI consent in Privacy.",
+    "daily_limit": "That is all the messages for today. You can continue tomorrow.",
     "unknown": "Could not send. Try again."
   },
   "openPrivacy": "Open Privacy",

@@ -66,7 +66,7 @@ describe('HomeScreen', () => {
     expect(screen.getByTestId('home-checkin')).toBeTruthy();
     expect(await screen.findByText('Mothers who understand are here. Find yours.')).toBeTruthy();
     expect(screen.getByTestId('home-tip')).toBeTruthy();
-    expect(await screen.findByText('Nothing new')).toBeTruthy();
+    expect(await screen.findByText('All quiet for now')).toBeTruthy();
   });
 
   it('"hard" opens Help and "so-so" starts the check-in; nothing is stored', async () => {

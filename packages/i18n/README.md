@@ -2,6 +2,8 @@
 
 Every user-visible string of the clients, in Kazakh, Russian and English ([ADR-0014](../../docs/adr/0014-ui-stack.md)). Code never contains UI text; it calls `useTranslation(namespace)` from this package.
 
+Write and review texts by the tone guide [`docs/content-style.md`](../../docs/content-style.md); it also lists the texts excluded from tone edits (questionnaire, crisis, legal).
+
 - One JSON file per feature namespace in `src/locales/<lang>/`; the list is in `src/resources.ts`. The staff console uses the `admin` namespace (with nested keys per screen).
 - Language: the first supported device language, otherwise Kazakh. Missing keys fall back to Kazakh.
 - Texts are bundled, so they work offline, including the fixed crisis screen.

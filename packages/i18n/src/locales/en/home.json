@@ -2,14 +2,14 @@
   "title": "Home",
   "checkin": {
     "heading": "Next check-in",
-    "off": "Weekly check-in reminders are off.",
-    "none": "No check-in reminder yet.",
+    "off": "Weekly check-in reminders are off. You can check in any time.",
+    "none": "No reminder set yet. You can check in any time.",
     "action": "Start check-in",
     "openLabel": "Weekly check-in"
   },
   "inbox": {
     "heading": "Latest",
-    "emptyTitle": "Nothing new",
+    "emptyTitle": "All quiet for now",
     "emptyDescription": "Messages and reminders will appear here."
   },
   "greeting": "Hello, {{name}}",

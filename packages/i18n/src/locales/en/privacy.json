@@ -3,7 +3,7 @@
   "back": "Back",
   "consents": {
     "heading": "Consents",
-    "emptyTitle": "No consents",
+    "emptyTitle": "No consents yet",
     "emptyDescription": "Consent options will appear here.",
     "granted": "Granted",
     "revoked": "Not granted",
@@ -17,10 +17,10 @@
   },
   "deletion": {
     "heading": "Delete my data",
-    "description": "Request deletion of all your data. It will be removed within 24 hours.",
+    "description": "You can ask us to delete all your data. It will be removed within 24 hours.",
     "action": "Delete my data",
     "sheetTitle": "Confirm deletion",
-    "sheetBody": "This cannot be undone. Your account and all data will be deleted within 24 hours.",
+    "sheetBody": "Once deleted, your data cannot be restored. Your account and all data will be deleted within 24 hours.",
     "confirm": "Yes, delete everything",
     "failed": "Could not schedule deletion. Try again."
   }

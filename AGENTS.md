@@ -65,6 +65,7 @@ This project will be maintained by people who did not write it. Code without an 
 - Design tokens only: no hard-coded colors, spacing, sizes, fonts or animation durations.
 - Loading, empty and error states, accessibility labels and reduce-motion come from shared components.
 - Lists use FlashList; animations run on the UI thread (Reanimated); crisis and SOS screens have no animation.
+- UI text follows [`docs/content-style.md`](docs/content-style.md): warm, no bans or blame, empty states and errors give a next step; the questionnaire, crisis and legal texts are excluded.
 
 ## Database rules
 

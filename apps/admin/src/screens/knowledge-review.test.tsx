@@ -110,7 +110,7 @@ describe('KnowledgeReviewScreen', () => {
     expect(await screen.findByTestId('review-problem')).toBeTruthy();
     expect(
       screen.getByText(
-        /You are not allowed to do this\. Another reviewer may be required, or you authored this version\./,
+        /This action belongs to another role\. Another reviewer may be needed, or you authored this version\./,
       ),
     ).toBeTruthy();
   });

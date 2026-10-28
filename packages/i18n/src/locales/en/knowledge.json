@@ -7,14 +7,14 @@
   },
   "topics": {
     "heading": "Topics",
-    "emptyTitle": "No topics",
-    "emptyDescription": "Published topics will appear here.",
+    "emptyTitle": "Topics coming soon",
+    "emptyDescription": "Every text is reviewed before it is published.",
     "back": "All topics"
   },
   "articles": {
     "heading": "Articles",
-    "emptyTitle": "No articles",
-    "emptyDescription": "Published articles will appear here.",
+    "emptyTitle": "Articles coming soon",
+    "emptyDescription": "Every text is reviewed before it is published.",
     "rechecking": "Being rechecked"
   },
   "article": {
@@ -23,6 +23,6 @@
     "reviewed": "Reviewed {{date}}",
     "rechecking": "This article is being rechecked and may be outdated.",
     "back": "Back",
-    "notFound": "Article not found."
+    "notFound": "This article is not available right now. You can look for it in all topics."
   }
 }

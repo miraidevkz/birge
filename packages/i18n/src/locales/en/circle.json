@@ -9,7 +9,7 @@
       "open": "Looking for a match",
       "matched": "Matched",
       "cancelled": "Cancelled",
-      "expired": "Expired"
+      "expired": "Time ran out"
     },
     "format": {
       "meeting": "Meet in person",
@@ -19,17 +19,17 @@
     "pref": {
       "heading": "Preferences",
       "sameDistrictOn": "Same district: yes",
-      "sameDistrictOff": "Same district: no",
+      "sameDistrictOff": "Same district: does not matter",
       "similarAgeOn": "Similar child age: yes",
-      "similarAgeOff": "Similar child age: no",
+      "similarAgeOff": "Similar child age: does not matter",
       "sharedNeedsOn": "Shared needs: yes",
-      "sharedNeedsOff": "Shared needs: no"
+      "sharedNeedsOff": "Shared needs: does not matter"
     },
     "submit": "Send request",
     "cancel": "Cancel request",
     "sheetTitle": "Ask for tea",
-    "errorConflict": "You already have an open request.",
-    "errorForbidden": "Verification is required to ask for tea.",
+    "errorConflict": "Your request is already waiting for a match. We will let you know when we find someone.",
+    "errorForbidden": "Tea opens once you are verified. You can ask for this in your profile.",
     "errorGeneric": "Could not send the request. Try again."
   },
   "matches": {
@@ -44,10 +44,10 @@
     "status": {
       "proposed": "New match",
       "accepted": "Accepted",
-      "declined": "Declined",
+      "declined": "Not this time",
       "met": "Met in person",
       "not_met": "Did not meet",
-      "expired": "Expired"
+      "expired": "Time ran out"
     },
     "sharedNeeds": "Shared: {{needs}}",
     "ages": "Children aged {{ages}}"

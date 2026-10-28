@@ -72,7 +72,9 @@ describe('KnowledgeArticleScreen', () => {
   it('shows not found on error', async () => {
     mockFetch.mockResolvedValue(json({ code: 'not_found', title: 'missing' }, 404));
     await renderArticle();
-    expect(await screen.findByText('Article not found.')).toBeTruthy();
+    expect(
+      await screen.findByText('This article is not available right now. You can look for it in all topics.'),
+    ).toBeTruthy();
   });
 
   it('goes back through the screen header when the navigator provides Back', async () => {

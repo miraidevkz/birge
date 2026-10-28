@@ -79,7 +79,7 @@ describe('AboutMeScreen', () => {
     await renderAbout();
     expect(await screen.findByText('Demo district A')).toBeTruthy();
     expect(await screen.findByText('Autism')).toBeTruthy();
-    expect(screen.getByText('No one added yet.')).toBeTruthy();
+    expect(screen.getByText('Your children will appear here once you add them.')).toBeTruthy();
   });
 
   it('saves the district she picks', async () => {

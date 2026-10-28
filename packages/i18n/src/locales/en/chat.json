@@ -18,7 +18,7 @@
   },
   "room": {
     "emptyTitle": "No messages yet",
-    "emptyDescription": "Say hello. Be kind; reports go to moderation.",
+    "emptyDescription": "You can start by saying hello. People here look after each other, and a moderator is always close by.",
     "hidden": "Message unavailable",
     "composer": "Message",
     "send": "Send",

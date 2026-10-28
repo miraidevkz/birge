@@ -31,7 +31,9 @@ describe('SignInScreen', () => {
     );
     await fireEvent.changeText(screen.getByLabelText('Mobile number'), '8 700 000');
     await fireEvent.press(screen.getByRole('button', { name: 'Send code' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('Enter a valid mobile number in international format.');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Please check the number: it needs the international format, for example +7 700 000 00 00.',
+    );
     expect(mocked.startSignIn).not.toHaveBeenCalled();
   });
 
@@ -67,7 +69,7 @@ describe('SignInScreen', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Send code' }));
     await fireEvent.changeText(await screen.findByLabelText('Code from SMS'), '1111');
     await fireEvent.press(screen.getByRole('button', { name: 'Sign in' }));
-    expect(await screen.findByText('The code is not correct. Check the SMS and try again.')).toBeTruthy();
+    expect(await screen.findByText('That code did not match. Check the SMS and try again.')).toBeTruthy();
     expect(screen.getByLabelText('Code from SMS')).toBeTruthy();
   });
 });

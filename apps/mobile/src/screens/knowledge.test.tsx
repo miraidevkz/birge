@@ -62,7 +62,7 @@ describe('KnowledgeScreen', () => {
   it('shows empty when there are no topics', async () => {
     mockFetch.mockResolvedValue(json([]));
     await renderKnowledge();
-    expect(await screen.findByText('No topics')).toBeTruthy();
+    expect(await screen.findByText('Topics coming soon')).toBeTruthy();
   });
 
   it('shows the error state when topics fail to load', async () => {

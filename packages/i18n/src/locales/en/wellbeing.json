@@ -8,7 +8,7 @@
   },
   "progress": "Question {{current}} of {{total}}",
   "questions": {
-    "missing": "This question is not available in this version of the app."
+    "missing": "This question will appear after you update the app."
   },
   "phq4": {
     "q1": "Little interest or pleasure in doing things",
@@ -47,7 +47,7 @@
     "tea": "Meet a mother nearby for tea when you are ready.",
     "talk": "Open Talk to write freely to the assistant.",
     "psychologist": "A psychologist on duty can contact you.",
-    "none": "No extra step right now."
+    "none": "Nothing more to do right now. Take care of yourself."
   },
   "elevated": {
     "heading": "Talk to a psychologist",

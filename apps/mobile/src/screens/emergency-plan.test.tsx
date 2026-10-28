@@ -68,7 +68,7 @@ describe('EmergencyPlanScreen', () => {
     mockFetch.mockRejectedValue(new TypeError('Network request failed'));
     await storage.set('birge.session', 'session-token');
     await renderPlan();
-    expect(await screen.findByText('Could not load the plan.')).toBeTruthy();
+    expect(await screen.findByText('Could not load the plan. Please try again in a moment.')).toBeTruthy();
     mockFetch.mockResolvedValue(json(emptyPlan));
     await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(screen.getByLabelText(/Needs, medicines/)).toBeTruthy());

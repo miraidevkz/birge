@@ -5,14 +5,14 @@
     "heading": "Child card",
     "label": "Needs, medicines, how to calm, fears",
     "hint": "Free text, up to 2000 characters. Stored encrypted.",
-    "empty": "No child card yet.",
+    "empty": "Your child's card will appear here once you save it.",
     "save": "Save child card",
     "saved": "Child card saved."
   },
   "contacts": {
     "heading": "Trusted contacts",
     "emptyTitle": "No trusted contacts yet",
-    "emptyDescription": "Add up to three people you trust. Members must have met you in person and accept the invitation.",
+    "emptyDescription": "Add up to three people you trust. A member can become a contact if you have met in person and she accepts the invitation.",
     "status": {
       "invited": "Invitation pending",
       "confirmed": "Confirmed"
@@ -27,9 +27,9 @@
     "phoneHint": "International format, for example +70000000000",
     "add": "Add contact",
     "remove": "Remove",
-    "invalidPhone": "Enter a valid mobile number in international format.",
-    "invalidName": "Enter a name.",
-    "full": "You already have three trusted contacts."
+    "invalidPhone": "Please check the number: it needs the international format, for example +70000000000.",
+    "invalidName": "Add the contact's name.",
+    "full": "You already have three trusted contacts. To add someone new, remove one from the list first."
   },
   "send": {
     "heading": "Send the plan",
@@ -44,5 +44,5 @@
   },
   "lastSent": "Last sent {{when}}",
   "saveError": "Could not save. Check your connection and try again.",
-  "loadError": "Could not load the plan."
+  "loadError": "Could not load the plan. Please try again in a moment."
 }
