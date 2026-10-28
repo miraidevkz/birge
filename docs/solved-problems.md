@@ -44,6 +44,7 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 - **Do not declare `CREATE UNLOGGED TABLE` in `db/schema`.** psqldef cannot round-trip it: the generated migration tried a `DROP CONSTRAINT`, which the destructive gate refuses. Use a regular table, and if logging ever costs too much, switch it with a reviewed hand-written `ALTER TABLE ... SET UNLOGGED`. Remember that an unlogged table is empty after a crash or a failover, so it can hold nothing that protects against replay or cost. (rate limit store)
 - **Scope each sqlc block to its own schema file.** A block reading the whole `db/schema` directory copies other contexts' models into its package. (dc3bffd)
 - **A middleware that reads the body must hand it on; test that the handler receives it unchanged.** (0cf0879)
+- **A new Go tool goes into a module where it moves nothing.** `go get -tool` resolves one dependency graph per module: adding oasdiff to `tools/go.mod` upgraded kin-openapi (oapi-codegen's parser) and `x/tools` (golangci-lint's analyzers), which would have changed generated code and lint results in a CI-only change. CI-only tools live in `tools/ci/go.mod`; check `git diff tools/go.mod` for upgraded lines before adding to it. (w36 CI stages)
 
 ## Clients
 

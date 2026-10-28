@@ -11,13 +11,13 @@ How to build, test and change Birge. Read [`docs/architecture.md`](architecture.
 | make, git | any recent | |
 | Node.js + npm | a current LTS release | mobile app, shared client packages (see [Clients](#clients)) |
 
-No Docker is needed for development or tests. Development tools (sqlc, oapi-codegen, golangci-lint, psqldef) are pinned in `tools/go.mod` and run with `go tool`; you do not install them.
+No Docker is needed for development or tests (only `make secrets`, `make image`, `make sbom` and `make image-sign` use it). Development tools (sqlc, oapi-codegen, golangci-lint, psqldef) are pinned in `tools/go.mod`, and the CI-only tools (govulncheck, oasdiff, actionlint) in `tools/ci/go.mod`, a separate module so their dependencies never change the versions the others are built with; make builds them into `bin/`, you do not install them.
 
 ## Everyday commands
 
 | Command | What it does |
 |---|---|
-| `make go-check` | everything CI runs for Go: formatting, generated code up to date, migrations match the schema, lint, vet, race tests, build, `make eval` |
+| `make go-check` | everything CI's `go` job runs: formatting, generated code up to date, migrations match the schema, lint, vet, race tests, the coverage ratchet, build, `make eval` |
 | `make eval` | AI regression sets through the real assistant pipeline, offline (see [AI evaluation](#ai-evaluation)) |
 | `go test ./internal/domains/<context>/...` | tests of one context (integration tests start their own PostgreSQL and NATS) |
 | `make api-gen` | regenerate HTTP server code from `contracts/openapi/birge.yaml` |
@@ -25,6 +25,9 @@ No Docker is needed for development or tests. Development tools (sqlc, oapi-code
 | `make -s migration name=<snake_case>` | print the migration that brings the database to `db/schema/*.sql` |
 | `make db-check` | verify migrations: safety gate, apply to a fresh database, compare with the schema |
 | `make lint` | golangci-lint with the project config |
+| `make coverage-check` | race tests, then per-context coverage against `coverage-floor.txt` (see [Coverage ratchet](#coverage-ratchet)) |
+| `make vuln`, `make contract-diff`, `make workflow-lint` | known vulnerabilities, breaking changes against released contracts, workflow lint (see [CI stages](#ci-stages)) |
+| `make image`, `make sbom` | build the `birge` image and its SPDX SBOM (Docker) |
 
 Set `BIRGE_REQUIRE_INTEGRATION=1` to make integration tests fail instead of skip when PostgreSQL binaries are missing (CI does this).
 
@@ -288,9 +291,37 @@ go run ./cmd/birge-eval -sets crisis -lexicon /path/to/lexicon -out -   # anothe
 - Report: `schema`, `commit`, `prompt_version`, `model_id`, `knowledge_index_version` (`none`: the offline pipeline has no retrieval), `dataset_version` and `lexicon_version` (content hashes), then per set its dataset version, totals and one entry per case (and per mode or sample) with `id` (`<set>/<file>:<line>`), a content `key`, `review` (`draft` or `approved`, from the file header), `result` (`pass`, `fail`, `false_positive`) and `reason`. Never case text or model output; stderr prints the same IDs and reasons.
 - Baseline: a drop is a case (matched by content key, mode and sample, so moving lines is harmless) that passed in the baseline and does not pass now, a new false positive included, or a set whose pass rate fell. Cases added or removed in the same PR are not drops. After a reviewed change that is meant to move a number (a new false positive the psychologist accepts), regenerate the baseline on main.
 - Every case gates `make eval`, drafts included; `review` lets a release review tell approved cases apart (ADR-0017: only approved cases gate a release).
-- CI: `make go-check` runs `make eval`, so every PR runs the offline sets. To compare with main, a CI job keeps `bin/eval-report.json` from the main branch as an artifact and runs `make eval EVAL_BASELINE=<that file>` on the PR (wiring that up is a CI change, not done here).
+- CI: `make go-check` runs `make eval`, so every PR runs the offline sets, compared with the report of the last main run (see [CI stages](#ci-stages), "Eval baseline").
 - Live model (manual only, never in `make eval` or CI): `go run ./cmd/birge-eval -provider live -api-key-file <file> [-model <id>] [-base-url <url>] [-samples 3] [-max-calls 300] -out live.json`. The crisis and llm-down checks still run with the failing provider first; then every crisis case runs `-samples` times with the real model (set `crisis-live`) and the anonymization set's requests go to the real model through the recording wrapper. Only synthetic dataset text is sent, and only after anonymization. `-max-calls` caps provider calls; reaching it exits 2.
 - Adding a case: synthetic data only (AGENTS.md non-negotiable 4), in `kk`, `ru` and `en` where it applies, `status: draft` until the psychologist approves it. A case that fails because of a real gap stays out of the set until the fix lands with it in the same PR.
+
+## CI stages
+
+`.github/workflows/ci.yml` runs only make targets, so every stage runs locally the same way. No job depends on a third-party service ([ADR-0012](adr/0012-foss-only-dependencies.md)); the tools are pinned (Go tools in `tools/ci/go.mod`, container tools by tag and digest in the `Makefile`, actions by commit SHA).
+
+| Job | Targets | Fails when |
+|---|---|---|
+| `secrets` | `make secrets` | gitleaks finds a secret anywhere in history |
+| `go` | `make go-check` | any check of [Everyday commands](#everyday-commands), a coverage drop, an eval miss or a drop against main's eval report |
+| `checks` | `make contract-diff`, `make workflow-lint`, `make vuln` | a breaking contract change, a workflow error, a reachable known vulnerability |
+| `image` | `make image`, `make sbom`; on main also `make image-sign` | the image does not build or the SBOM cannot be generated; signing fails with the key present |
+| `helm` | `make helm-lint` | a chart under `deploy/helm` fails `helm lint --strict` (passes while there is none) |
+
+- **govulncheck** (`make vuln`): reports only vulnerabilities the code can reach (symbol level), in dependencies and the standard library. A finding is fixed by upgrading the module or Go; it is never suppressed in CI. It reads `https://vuln.go.dev`; `make vuln VULN_DB=file:///path/to/mirror` uses an offline mirror.
+- **Contract diff** (`make contract-diff`, [ADR-0018](adr/0018-client-compatibility.md)): oasdiff compares every snapshot in `contracts/openapi/released/` with `contracts/openapi/birge.yaml` and fails on any error-level breaking change (removed operation, new required request field, removed response field, narrowed type, ...). Before that it proves itself on the fixtures in `tools/ci/testdata/contract-diff/` (every `breaking-*.yaml` must fail against `base.yaml`, every `compatible-*.yaml` must pass) and loads `birge.yaml` against itself, so a tool upgrade that stops catching breaks, or a spec the tool cannot read, fails before it matters. Release: copy `birge.yaml` to `released/<app-version>.yaml` when an app version ships; delete a snapshot when the version leaves the support window. Never pass oasdiff's `--open` flag: it uploads the specs to oasdiff.com.
+- **Eval baseline** ([ADR-0017](adr/0017-ai-evaluation.md)): a push to main that passes `make go-check` uploads `bin/eval-report.json` as the artifact `eval-report-main` (kept 90 days). A pull request looks up the newest unexpired one through the REST API (artifacts of another workflow run are not visible to `actions/download-artifact` without a run ID) and runs `make go-check` with `EVAL_BASELINE` set to it, so a drop against main fails the PR. Without one (first run, a quiet main for 90 days) the job warns and runs without a baseline; misses still fail. Locally: download the artifact from the last main run and `make eval EVAL_BASELINE=<file>`.
+- **Images**: `make image` builds `deploy/compose/Dockerfile` as `IMAGE` (default `birge:dev`); `make sbom` writes the SPDX JSON SBOM of it to `bin/sbom.spdx.json` with syft, which reads a saved archive with no network. Pull requests build and keep the SBOM as an artifact but never push. A push to main pushes `ghcr.io/<owner>/<repo>:sha-<commit>` and runs `make image-sign IMAGE_REF=<image@digest>`: cosign signs the digest and attaches the SBOM as an `spdxjson` attestation with the project key from the CI secrets `COSIGN_PRIVATE_KEY` and `COSIGN_PASSWORD` (from `cosign generate-key-pair`; the private key is held like other production keys, ADR-0009). Keyless signing is not used: no Fulcio certificate, no Rekor entry, no TUF fetch. Without the secret (forks) the push and signature are skipped with a notice. Verify a signature with the public key: `cosign verify --key cosign.pub --insecure-ignore-tlog --private-infrastructure <image@digest>` (and `cosign verify-attestation --type spdxjson` with the same flags).
+- **Helm**: `make helm-lint` lints every chart under `deploy/helm` (`HELM` names the binary); the CI job installs a checksum-pinned Helm only when that directory exists.
+- **Workflow lint** (`make workflow-lint`): actionlint checks syntax, expressions, action inputs and, when `shellcheck` is on `PATH`, the `run:` scripts.
+
+### Coverage ratchet
+
+`make go-test` writes one coverage profile (`bin/coverage.out`); `make coverage-check` (part of `make go-check`, so the tests run once) sums it per bounded context (`internal/domains/<context>`) and for `internal/platform` with `cmd/birge-coverage`, and compares each with its floor in `coverage-floor.txt`.
+
+- The number is statement coverage over all packages of the context, each package measured by its own tests (plain `go test -cover`; code exercised only by `internal/wiring` tests does not count). Packages without tests count as 0%. Generated files (`Code generated ... DO NOT EDIT.`) and test-support packages (`<context>test`) are left out.
+- A context fails when it is more than 0.5 points below its floor (concurrent tests take slightly different paths from run to run), when it has no floor (a new context), or when a floor names a context that no longer exists.
+- After adding tests, `make coverage-floor` raises the floors to the current numbers (rounded down to a tenth; it never lowers one) and you commit the file. Lowering a floor is a hand edit in a reviewed change that says why.
+- Numbers depend on integration tests running: measure with PostgreSQL binaries present (CI sets `BIRGE_REQUIRE_INTEGRATION=1`).
 
 ## Clients
 

@@ -1,5 +1,10 @@
 name: ci
 
+# Every job runs make targets, so each stage also runs locally
+# (docs/development.md, "CI stages"). No third-party service is on the path
+# (ADR-0012): GitHub itself, the Go module proxy and the Go vulnerability
+# database (VULN_DB can point at a mirror) only.
+
 on:
   push:
     branches: [main]
@@ -18,7 +23,67 @@ jobs:
           persist-credentials: false
       - run: make secrets
 
+  # Format, generated code, migrations, lint, vet, tests with the coverage
+  # ratchet, build and the offline AI evaluation. One test run feeds both
+  # go-test and coverage-check.
   go:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read # the eval baseline artifact of the last main run
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - name: Install PostgreSQL 18 binaries for integration tests
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y --no-install-recommends postgresql-18
+          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+      # ADR-0017: a PR's eval report is compared with main's. Each passing
+      # main run keeps its report as the artifact eval-report-main (uploaded
+      # below). Artifacts of another workflow run are reachable only through
+      # the REST API, so the newest unexpired one from main is looked up by
+      # name. None (first run, or older than 90 days): make eval runs without
+      # a baseline, still failing on any missed case, and the run says so.
+      - name: Fetch the eval baseline from main
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=eval-report-main&per_page=20" \
+            --jq '[.artifacts[] | select(.expired | not) | select(.workflow_run.head_branch == "main")][0].id // empty') || id=
+          dir="$RUNNER_TEMP/eval-baseline"
+          if [ -n "$id" ] && mkdir -p "$dir" \
+            && gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$dir/report.zip" \
+            && unzip -q -o "$dir/report.zip" -d "$dir" && [ -f "$dir/eval-report.json" ]; then
+            echo "EVAL_BASELINE=$dir/eval-report.json" >> "$GITHUB_ENV"
+            echo "eval baseline: artifact $id"
+          else
+            echo "::warning::No eval report from main found; make eval runs without a baseline."
+          fi
+      - run: make go-check
+        env:
+          BIRGE_REQUIRE_INTEGRATION: "1"
+      - name: Keep the eval report of main as the baseline for PRs
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: eval-report-main
+          path: bin/eval-report.json
+          retention-days: 90
+          if-no-files-found: error
+
+  # Dependency vulnerabilities, compatibility with released app contracts
+  # (ADR-0018) and the workflow files. Its own Go cache key (tools/ci/go.sum
+  # instead of tools/go.sum) so it never races the go job for one entry.
+  checks:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -27,11 +92,75 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - name: Install PostgreSQL 18 binaries for integration tests
-        run: |
-          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-          sudo apt-get install -y --no-install-recommends postgresql-18
-          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
-      - run: make go-check
+          cache-dependency-path: |
+            go.sum
+            tools/ci/go.sum
+      - run: make contract-diff
+      - run: make workflow-lint
+      - run: make vuln
+
+  # Image of cmd/birge with its SBOM on every run. On a push to main it is
+  # also pushed and signed with the project key (cosign, no Fulcio or Rekor).
+  # Pull requests never push. Without the key (forks) push and signature are
+  # skipped with a notice, never failed.
+  image:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io, main only
+    env:
+      IMAGE: birge:ci
+      HAS_SIGNING_KEY: ${{ secrets.COSIGN_PRIVATE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: make image
+      - run: make sbom
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: bin/sbom.spdx.json
+          retention-days: 30
+          if-no-files-found: error
+      - name: Signing key absent
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.HAS_SIGNING_KEY != 'true'
+        run: echo "::notice::COSIGN_PRIVATE_KEY is not set; the image was built but not pushed or signed."
+      - name: Push and sign
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.HAS_SIGNING_KEY == 'true'
         env:
-          BIRGE_REQUIRE_INTEGRATION: "1"
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          trap 'docker logout ghcr.io' EXIT
+          docker tag "$IMAGE" "$repo:sha-$GITHUB_SHA"
+          docker push "$repo:sha-$GITHUB_SHA"
+          ref=$(docker inspect -f '{{index .RepoDigests 0}}' "$repo:sha-$GITHUB_SHA")
+          make image-sign IMAGE_REF="$ref"
+          echo "::notice::Signed $ref"
+
+  # Helm charts land with w37 (deploy/helm). Until then the job passes
+  # without installing anything; afterwards it lints every chart.
+  helm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: charts
+        run: |
+          if [ -d deploy/helm ]; then present=true; else present=false; fi
+          echo "present=$present" >> "$GITHUB_OUTPUT"
+      - name: Install Helm (checksum pinned)
+        if: steps.charts.outputs.present == 'true'
+        run: |
+          v=v4.3.1
+          sum=0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b
+          curl -fsSL -o "$RUNNER_TEMP/helm.tgz" "https://get.helm.sh/helm-$v-linux-amd64.tar.gz"
+          echo "$sum  $RUNNER_TEMP/helm.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/helm.tgz" -C "$RUNNER_TEMP" linux-amd64/helm
+          echo "$RUNNER_TEMP/linux-amd64" >> "$GITHUB_PATH"
+      - run: make helm-lint

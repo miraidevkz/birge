@@ -47,7 +47,7 @@ linters:
       - path: _test\.go
         linters: [gosec, wrapcheck, noctx, revive]
       # Development and test tooling, not part of the production binary.
-      - path: (cmd/birge-dbtool|internal/platform/(pgtemp|testinfra))/
+      - path: (cmd/birge-(dbtool|coverage)|internal/platform/(pgtemp|testinfra))/
         linters: [gosec, noctx, wrapcheck]
 formatters:
   enable:

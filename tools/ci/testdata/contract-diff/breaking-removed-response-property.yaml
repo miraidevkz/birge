@@ -1,0 +1,54 @@
+openapi: 3.1.0
+info:
+  title: contract-diff fixture
+  version: 1.0.0
+paths:
+  /v1/notes/{id}:
+    get:
+      operationId: getNote
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: The note.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+  /v1/notes:
+    post:
+      operationId: createNote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  maxLength: 200
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Note"
+
+components:
+  schemas:
+    Note:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
