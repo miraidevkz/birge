@@ -195,6 +195,9 @@ func TestLoadValid(t *testing.T) {
 				if cfg.InternalAddr != "" || cfg.CourierSecret != nil {
 					t.Error("internal listener must be off unless BIRGE_INTERNAL_ADDR is set")
 				}
+				if cfg.MetricsAddr != "" || cfg.TracingEnabled {
+					t.Error("metrics listener and tracing must be off unless configured")
+				}
 				if cfg.EventsMaxAge != defaultEventsMaxAge || cfg.EventsMaxBytes != defaultEventsMaxBytes {
 					t.Errorf("events retention: age %s, bytes %d", cfg.EventsMaxAge, cfg.EventsMaxBytes)
 				}
@@ -257,6 +260,10 @@ func TestLoadRejects(t *testing.T) {
 			func(f fakeFiles) { f["/keys/courier"] = []byte("short") }, "BIRGE_COURIER_SECRET_FILE: the key must be at least 32 bytes"},
 		{"bad internal addr", CommandWorker, map[string]string{"BIRGE_INTERNAL_ADDR": "8090"}, nil, "BIRGE_INTERNAL_ADDR"},
 		{"internal addr on the health port", CommandWorker, map[string]string{"BIRGE_INTERNAL_ADDR": ":8080"}, nil, "another port than BIRGE_HTTP_ADDR"},
+		{"bad metrics addr", CommandAPI, map[string]string{"BIRGE_METRICS_ADDR": "9100"}, nil, "BIRGE_METRICS_ADDR: must be host:port"},
+		{"metrics addr on the api port", CommandAPI, map[string]string{"BIRGE_METRICS_ADDR": ":8080"}, nil, "BIRGE_METRICS_ADDR: must use another port than BIRGE_HTTP_ADDR"},
+		{"metrics addr on the internal port", CommandWorker, map[string]string{"BIRGE_METRICS_ADDR": ":8090", "BIRGE_INTERNAL_ADDR": ":8090", "BIRGE_COURIER_SECRET_FILE": "/keys/courier"},
+			func(f fakeFiles) { f["/keys/courier"] = bytes.Repeat([]byte("c"), 32) }, "BIRGE_METRICS_ADDR: must use another port than BIRGE_INTERNAL_ADDR"},
 		{"unknown rate limit store", CommandAPI, map[string]string{"BIRGE_RATE_LIMIT_STORE": "redis"}, nil, `BIRGE_RATE_LIMIT_STORE: must be "postgres" or "memory"`},
 		{"worker without hash key on the shared store", CommandWorker, map[string]string{"BIRGE_HASH_KEY_FILE": ""}, nil, "BIRGE_HASH_KEY_FILE is required"},
 		{"worker hash key is the analytics key", CommandWorker, nil, func(f fakeFiles) { f["/keys/hash"] = f["/keys/analytics"] }, "BIRGE_HASH_KEY_FILE must hold its own key"},
@@ -610,5 +617,25 @@ func TestLoadRateLimitStoreAndPreviousKEKs(t *testing.T) {
 	}
 	if cfg.RateLimitStore != RateLimitStoreMemory || cfg.HashKey != nil || cfg.PreviousKEKs != nil {
 		t.Errorf("memory store: %q, hash key set %v, previous %v", cfg.RateLimitStore, cfg.HashKey != nil, cfg.PreviousKEKs)
+	}
+}
+
+func TestLoadTelemetry(t *testing.T) {
+	files := validFiles(t)
+	for _, cmd := range []Command{CommandAPI, CommandWorker} {
+		env := validEnv(t)
+		env["BIRGE_METRICS_ADDR"] = "127.0.0.1:9464"
+		env["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://collector.example.invalid:4318"
+		cfg, err := load(env, files, cmd)
+		if err != nil {
+			t.Fatalf("%s: %v", cmd, err)
+		}
+		if cfg.MetricsAddr != "127.0.0.1:9464" || !cfg.TracingEnabled {
+			t.Errorf("%s: metrics %q tracing %v", cmd, cfg.MetricsAddr, cfg.TracingEnabled)
+		}
+		env["OTEL_SDK_DISABLED"] = "true"
+		if cfg, err := load(env, files, cmd); err != nil || cfg.TracingEnabled {
+			t.Errorf("%s: OTEL_SDK_DISABLED=true left tracing on (%v)", cmd, err)
+		}
 	}
 }

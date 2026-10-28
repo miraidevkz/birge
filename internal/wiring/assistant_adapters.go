@@ -22,9 +22,11 @@ type LexiconCrisis struct {
 
 var _ assistantport.CrisisDetector = LexiconCrisis{}
 
-// Detect reports whether text matches the level-1 crisis lexicon.
+// Detect reports whether text matches the level-1 crisis lexicon. Running
+// without a lexicon is a crisis path failure and is counted.
 func (l LexiconCrisis) Detect(text, lang string) bool {
 	if l.Lex == nil {
+		crisisPathError("lexicon_unavailable", errLexiconUnavailable)
 		return false
 	}
 	return l.Lex.Detect(text, lang).Crisis

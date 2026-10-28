@@ -1,5 +1,8 @@
 // Package outbox implements the transactional outbox (ADR-0007): events are
-// written in the same transaction as the data and published to the broker later.
+// written in the same transaction as the data and published to the broker
+// later. It also carries traces across the broker (ADR-0021): the envelope's
+// trace_parent is the producer's span, the relay publishes under it and
+// TraceJetStream gives every consumed message a span under it.
 package outbox
 
 import (
@@ -12,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"birge/internal/platform/store"
+	"birge/internal/platform/telemetry"
 )
 
 var eventTypeRe = regexp.MustCompile(`^[a-z]+\.[A-Z][A-Za-z]+$`)
@@ -35,10 +39,15 @@ type Envelope struct {
 }
 
 // Enqueue stores e in the outbox using q, which must be bound to the caller's
-// transaction (store.New(tx)).
+// transaction (store.New(tx)). An empty traceParent takes the span of ctx
+// (the traced request or message that caused the event), so consumers'
+// spans join the producer's trace without every context passing it.
 func Enqueue(ctx context.Context, q *store.Queries, now time.Time, traceParent string, e Event) (uuid.UUID, error) {
 	if err := validate(e); err != nil {
 		return uuid.Nil, err
+	}
+	if traceParent == "" {
+		traceParent = telemetry.TraceParent(ctx)
 	}
 	data, err := json.Marshal(e.Data)
 	if err != nil {

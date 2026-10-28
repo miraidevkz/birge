@@ -8,11 +8,20 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"birge/internal/platform/telemetry"
 )
 
-// Open connects to PostgreSQL and verifies the connection.
+// Open connects to PostgreSQL and verifies the connection. Every pool gets
+// the telemetry query tracer, so queries under a traced request become
+// spans named by their sqlc query name (never the SQL or its arguments).
 func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, url)
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+	cfg.ConnConfig.Tracer = telemetry.PgxTracer{}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}

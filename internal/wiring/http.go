@@ -118,8 +118,9 @@ type APIDeps struct {
 
 // NewAPIHandler builds the whole HTTP stack of `birge api`, outermost first:
 //
-//  1. request logging (method, route pattern, status, duration; no bodies,
-//     no query strings, no IPs, no headers);
+//  1. httpserver.Observe: request log, server span and request metrics,
+//     all by route pattern (method, status, duration; no bodies, no query
+//     strings, no IPs, no headers);
 //  2. /auth/: the member sign-in gateway in front of Kratos (it has its own
 //     per-IP, per-number and global limits and the proof of work);
 //  3. /v1/: per-IP rate limit → authentication → request validation → the
@@ -382,7 +383,7 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	root.Handle("/v1/", v1)
 	root.Handle("GET /healthz", httpserver.Liveness())
 	root.Handle("GET /readyz", httpserver.Readiness(d.Logger, poolCheck(d.Pool)))
-	return httpserver.LogRequests(d.Logger, root, api), nil
+	return httpserver.Observe(d.Logger, root, api), nil
 }
 
 // noopFanout disables live chat delivery when the API has no NATS connection
@@ -439,7 +440,7 @@ func newAssistantService(
 	if err != nil {
 		return nil, fmt.Errorf("wiring: llm: %w", err)
 	}
-	svc.LLM = client
+	svc.LLM = countingLLM{inner: client}
 	return svc, nil
 }
 

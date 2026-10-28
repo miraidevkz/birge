@@ -415,12 +415,16 @@ type CrisisOpener struct {
 
 var _ wellbeingport.CrisisOpener = (*CrisisOpener)(nil)
 
-// OpenEscalation opens a human escalation for the member (source typically "checkin").
+// OpenEscalation opens a human escalation for the member (source typically
+// "checkin"). A failure counts in birge_crisis_path_errors_total.
 func (o *CrisisOpener) OpenEscalation(ctx context.Context, memberID uuid.UUID, source string) (uuid.UUID, error) {
 	if o == nil || o.Safety == nil {
-		return uuid.Nil, errors.New("wiring: crisis opener not configured")
+		err := errors.New("wiring: crisis opener not configured")
+		crisisPathError("escalation_open", err)
+		return uuid.Nil, err
 	}
 	id, _, err := o.Safety.OpenEscalation(ctx, memberID, source)
+	crisisPathError("escalation_open", err)
 	return id, err
 }
 

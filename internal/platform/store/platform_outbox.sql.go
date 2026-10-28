@@ -163,3 +163,61 @@ func (q *Queries) OldestUnpublishedEvent(ctx context.Context) (time.Time, error)
 	err := row.Scan(&oldest)
 	return oldest, err
 }
+
+const outboxLag = `-- name: OutboxLag :one
+SELECT COALESCE(min(occurred_at), $1::timestamptz)::timestamptz AS oldest
+FROM platform.outbox
+WHERE published_at IS NULL
+`
+
+// OutboxLag feeds the outbox lag gauge (telemetry.Sampler): the oldest
+// unpublished occurred_at, or @now when everything is published (age 0).
+func (q *Queries) OutboxLag(ctx context.Context, now time.Time) (time.Time, error) {
+	row := q.db.QueryRow(ctx, outboxLag, now)
+	var oldest time.Time
+	err := row.Scan(&oldest)
+	return oldest, err
+}
+
+const untakenEscalations = `-- name: UntakenEscalations :one
+SELECT count(*)::bigint AS untaken,
+       COALESCE(min(o.occurred_at), $1::timestamptz)::timestamptz AS oldest
+FROM platform.outbox o
+WHERE o.id >= $2::uuid
+  AND o.event_type = 'safety.EscalationOpened'
+  AND o.occurred_at >= $3::timestamptz
+  AND NOT EXISTS (
+    SELECT 1
+    FROM platform.outbox d
+    WHERE d.id >= $2::uuid
+      AND d.event_type IN ('safety.EscalationTaken', 'safety.EscalationClosed')
+      AND d.payload->>'escalation_id' = o.payload->>'escalation_id'
+  )
+`
+
+type UntakenEscalationsParams struct {
+	Now   time.Time
+	MinID uuid.UUID
+	Since time.Time
+}
+
+type UntakenEscalationsRow struct {
+	Untaken int64
+	Oldest  time.Time
+}
+
+// UntakenEscalations feeds the unattended-escalation alert
+// (telemetry.Sampler, ADR-0021): escalations opened since @since with no
+// EscalationTaken or EscalationClosed event yet. It reads only the outbox,
+// the platform's own table, and only escalation_id, the field the event
+// contracts (contracts/events/safety.Escalation*.v1.json) define for
+// every consumer; it never reads safety tables.
+// Outbox ids are uuidv7, ordered by insert time: @min_id is the smallest
+// uuidv7 of @since, so the primary key bounds the scan to recent rows
+// without an extra index.
+func (q *Queries) UntakenEscalations(ctx context.Context, arg UntakenEscalationsParams) (UntakenEscalationsRow, error) {
+	row := q.db.QueryRow(ctx, untakenEscalations, arg.Now, arg.MinID, arg.Since)
+	var i UntakenEscalationsRow
+	err := row.Scan(&i.Untaken, &i.Oldest)
+	return i, err
+}

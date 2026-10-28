@@ -1,6 +1,6 @@
 // Package httpserver runs an HTTP server with graceful shutdown and provides
 // the pieces every Birge listener shares: the liveness and readiness
-// handlers and the request log. The caller builds its own root mux (the API
+// handlers and Observe (request log, server span and request metrics). The caller builds its own root mux (the API
 // mounts /auth/ and /v1/; the worker only health endpoints and, on a second
 // listener, the courier hook) and passes it to Run.
 package httpserver
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"birge/internal/platform/httpapi"
+	"birge/internal/platform/telemetry"
 )
 
 // shutdownTimeout bounds the graceful shutdown: in-flight requests get this
@@ -88,32 +89,47 @@ func Readiness(logger *slog.Logger, checks ...Check) http.Handler {
 	})
 }
 
-// LogRequests logs one line per request with the route pattern instead of the
-// path: paths and query strings can carry identifiers typed by the client, and
-// patterns keep the log free of them (ADR-0021). No IPs, headers or bodies.
-// api resolves the pattern of /v1 routes, which the root mux only knows as
-// "/v1/"; it may be nil.
-func LogRequests(logger *slog.Logger, root, api *http.ServeMux) http.Handler {
+// Observe is the outermost handler of a listener: one log line, one server
+// span and the request metrics per request, all keyed by the route pattern
+// instead of the path. Paths and query strings can carry identifiers and
+// tokens typed by the client; patterns keep logs, spans and metric labels
+// free of them (ADR-0021). No IPs, headers or bodies anywhere.
+//
+// The span is started before routing so that database spans of the handler
+// are its children, and renamed to the pattern afterwards. api resolves the
+// pattern of /v1 routes, which the root mux only knows as "/v1/"; it may be
+// nil.
+func Observe(logger *slog.Logger, root, api *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		ctx, span := telemetry.StartHTTP(r.Context(), r.Method)
 		rec := &statusRecorder{ResponseWriter: w}
-		root.ServeHTTP(rec, r)
-		_, route := root.Handler(r)
-		if route == "/v1/" && api != nil {
-			if _, p := api.Handler(r); p != "" {
-				route = p
-			}
-		}
-		if route == "" {
-			route = "unmatched"
-		}
+		root.ServeHTTP(rec, r.WithContext(ctx))
+		route := Route(root, api, r)
 		status := rec.status
 		if status == 0 {
 			status = http.StatusOK
 		}
-		logger.Info("http request", "method", r.Method, "route", route, "status", status,
-			"bytes", rec.bytes, "duration_ms", time.Since(start).Milliseconds())
+		elapsed := time.Since(start)
+		telemetry.EndHTTP(span, r.Method, route, status, elapsed)
+		logger.Info("http request", "method", telemetry.HTTPMethod(r.Method), "route", route, "status", status,
+			"bytes", rec.bytes, "duration_ms", elapsed.Milliseconds())
 	})
+}
+
+// Route returns the pattern that serves r: the api pattern for /v1 routes
+// when api is given, the root pattern otherwise, "unmatched" when none.
+func Route(root, api *http.ServeMux, r *http.Request) string {
+	_, route := root.Handler(r)
+	if route == "/v1/" && api != nil {
+		if _, p := api.Handler(r); p != "" {
+			route = p
+		}
+	}
+	if route == "" {
+		route = "unmatched"
+	}
+	return route
 }
 
 // statusRecorder captures the status code and size for the request log.

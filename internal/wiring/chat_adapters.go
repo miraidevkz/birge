@@ -79,8 +79,10 @@ type ChatCrisis struct {
 var _ chatport.Crisis = (*ChatCrisis)(nil)
 
 // Detect runs the level-1 lexicon (local, never fails for missing hits).
+// Running without it is a crisis path failure and is counted.
 func (c *ChatCrisis) Detect(text, lang string) bool {
 	if c == nil || c.Safety == nil {
+		crisisPathError("lexicon_unavailable", errLexiconUnavailable)
 		return false
 	}
 	return c.Safety.Detect(text, lang).Crisis
@@ -102,9 +104,12 @@ func (c *ChatCrisis) CrisisPhones() []chatmodel.CrisisPhone {
 // OpenEscalation opens (or returns the open) escalation with source "chat".
 func (c *ChatCrisis) OpenEscalation(ctx context.Context, memberID uuid.UUID, source string) (uuid.UUID, error) {
 	if c == nil || c.Safety == nil {
-		return uuid.Nil, errors.New("wiring: chat crisis not configured")
+		err := errors.New("wiring: chat crisis not configured")
+		crisisPathError("escalation_open", err)
+		return uuid.Nil, err
 	}
 	id, _, err := c.Safety.OpenEscalation(ctx, memberID, source)
+	crisisPathError("escalation_open", err)
 	return id, err
 }
 

@@ -38,3 +38,11 @@ WHERE kind = ANY(@kinds::text[]) AND subject_id = ANY(@subject_ids::uuid[]) AND 
 SELECT min(due_at)::timestamptz AS oldest
 FROM platform.timers
 WHERE done_at IS NULL AND due_at <= @now;
+
+-- DueTimers feeds the timers gauges (telemetry.Sampler): how many timers
+-- are due and not done, and the due time of the oldest one (@now when none, so its age is 0).
+-- name: DueTimers :one
+SELECT count(*)::bigint AS due,
+       COALESCE(min(due_at), sqlc.arg(now)::timestamptz)::timestamptz AS oldest
+FROM platform.timers
+WHERE done_at IS NULL AND due_at <= @now;

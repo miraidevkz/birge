@@ -105,6 +105,27 @@ func (q *Queries) CompleteTimer(ctx context.Context, arg CompleteTimerParams) er
 	return err
 }
 
+const dueTimers = `-- name: DueTimers :one
+SELECT count(*)::bigint AS due,
+       COALESCE(min(due_at), $1::timestamptz)::timestamptz AS oldest
+FROM platform.timers
+WHERE done_at IS NULL AND due_at <= $1
+`
+
+type DueTimersRow struct {
+	Due    int64
+	Oldest time.Time
+}
+
+// DueTimers feeds the timers gauges (telemetry.Sampler): how many timers
+// are due and not done, and the due time of the oldest one (@now when none, so its age is 0).
+func (q *Queries) DueTimers(ctx context.Context, now time.Time) (DueTimersRow, error) {
+	row := q.db.QueryRow(ctx, dueTimers, now)
+	var i DueTimersRow
+	err := row.Scan(&i.Due, &i.Oldest)
+	return i, err
+}
+
 const insertTimer = `-- name: InsertTimer :execrows
 INSERT INTO platform.timers (kind, subject_id, dedup_key, due_at, payload)
 VALUES ($1, $2, $3, $4, $5)

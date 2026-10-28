@@ -57,6 +57,7 @@ import (
 	"birge/internal/platform/httpserver"
 	"birge/internal/platform/outbox"
 	"birge/internal/platform/ratelimit"
+	"birge/internal/platform/telemetry"
 	"birge/internal/platform/timers"
 	"birge/presets"
 )
@@ -268,8 +269,15 @@ func NewEnvelope(pool *pgxpool.Pool, cfg Config, clk clock.Clock) (*crypto.Envel
 	return env, nil
 }
 
-// RunAPI serves the API until ctx is cancelled.
+// RunAPI serves the API until ctx is cancelled, and /metrics on
+// BIRGE_METRICS_ADDR when set. Traces go to the OTLP endpoint when one is
+// configured.
 func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
+	stopTracing, err := telemetry.Setup(ctx, telemetry.Options{Service: "birge-api", Enabled: cfg.TracingEnabled, Logger: logger})
+	if err != nil {
+		return fmt.Errorf("api: %w", err)
+	}
+	defer flushTracing(ctx, logger, stopTracing)
 	pool, err := platformdb.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("api: %w", err)
@@ -296,7 +304,37 @@ func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	return httpserver.Run(ctx, logger, cfg.HTTPAddr, h)
+	servers := map[string]func(context.Context) error{
+		"api endpoints": func(ctx context.Context) error { return httpserver.Run(ctx, logger, cfg.HTTPAddr, h) },
+	}
+	addMetricsListener(servers, cfg, logger)
+	return runAll(ctx, logger, servers)
+}
+
+// tracingFlushTimeout bounds the export of the last spans on shutdown.
+const tracingFlushTimeout = 5 * time.Second
+
+// flushTracing exports the spans still buffered; a failure is only logged,
+// shutdown never waits on the collector for longer than the timeout.
+func flushTracing(ctx context.Context, logger *slog.Logger, stop func(context.Context) error) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), tracingFlushTimeout)
+	defer cancel()
+	if err := stop(ctx); err != nil {
+		logger.Warn("telemetry flush failed", "event", "TelemetryError", "error", err)
+	}
+}
+
+// addMetricsListener adds the internal /metrics listener to loops when
+// BIRGE_METRICS_ADDR is set. It serves nothing else: no health, no API.
+func addMetricsListener(loops map[string]func(context.Context) error, cfg Config, logger *slog.Logger) {
+	if cfg.MetricsAddr == "" {
+		return
+	}
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", telemetry.Handler())
+	loops["metrics endpoint"] = func(ctx context.Context) error {
+		return httpserver.Run(ctx, logger, cfg.MetricsAddr, mux)
+	}
 }
 
 // RunWorker runs the background loops until ctx is cancelled: the outbox
@@ -306,10 +344,17 @@ func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
 // timers worker with every context's handlers (analytics retention among
 // them), plus /healthz and /readyz (database and NATS) on the HTTP address,
 // and, with BIRGE_INTERNAL_ADDR, the Kratos courier hook on the internal
-// listener (InternalHandler). When one loop fails, the
+// listener (InternalHandler), the telemetry sampler (database gauges) and,
+// with BIRGE_METRICS_ADDR, /metrics. Consumers receive messages through
+// outbox.TraceJetStream. When one loop fails, the
 // others are stopped and the error is returned, so the orchestrator restarts
 // the process instead of running it half-working.
 func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
+	stopTracing, err := telemetry.Setup(ctx, telemetry.Options{Service: "birge-worker", Enabled: cfg.TracingEnabled, Logger: logger})
+	if err != nil {
+		return fmt.Errorf("worker: %w", err)
+	}
+	defer flushTracing(ctx, logger, stopTracing)
 	pushSender, smsSender, err := DeliverySenders(cfg, logger)
 	if err != nil {
 		return fmt.Errorf("worker: %w", err)
@@ -332,13 +377,16 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		return fmt.Errorf("worker: nats connect: %w", err)
 	}
 	defer nc.Close()
-	js, err := jetstream.New(nc)
+	rawJS, err := jetstream.New(nc)
 	if err != nil {
 		return fmt.Errorf("worker: jetstream: %w", err)
 	}
-	if err := EnsureStream(ctx, js, cfg.EventsMaxAge, cfg.EventsMaxBytes); err != nil {
+	if err := EnsureStream(ctx, rawJS, cfg.EventsMaxAge, cfg.EventsMaxBytes); err != nil {
 		return err
 	}
+	// Every consumer below gets its messages through the tracing decorator
+	// (consume spans under the envelope's trace_parent, consumed counter).
+	js := outbox.TraceJetStream(rawJS)
 
 	identities, err := NewKratosIdentities(cfg.KratosAdminURL, "phone", nil)
 	if err != nil {
@@ -516,6 +564,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	moderationQueue := &moderationadapter.QueueConsumer{JS: js, Stream: StreamName, Service: moderation, Logger: logger}
 	analyticsFacts := &analyticsadapter.FactsConsumer{JS: js, Stream: StreamName, Service: analytics, Logger: logger}
 	timerWorker := &timers.Worker{Pool: pool, Clock: clk, Logger: logger, Handlers: handlers, Interval: timersInterval}
+	sampler := &telemetry.Sampler{Pool: pool, Clock: clk, Logger: logger}
 
 	health := http.NewServeMux()
 	health.Handle("GET /healthz", httpserver.Liveness())
@@ -534,8 +583,10 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		"chat mentor role":      chatMentors.Run,
 		"membership moderation": membershipMod.Run,
 		"timers":                timerWorker.Run,
+		"telemetry sampler":     sampler.Run,
 		"health endpoints":      func(ctx context.Context) error { return httpserver.Run(ctx, logger, cfg.HTTPAddr, health) },
 	}
+	addMetricsListener(loops, cfg, logger)
 	if limits != nil {
 		// Expired counters and claims of the shared store (API and worker
 		// rows alike); several worker replicas may sweep at once.
@@ -581,9 +632,10 @@ func RateLimitStore(cfg Config, pool *pgxpool.Pool) (ratelimit.Store, error) {
 }
 
 // smsGuard builds one SMS guard on the shared counters; name keeps its
-// counters apart from the other guard's.
+// counters apart from the other guard's. The store is wrapped by
+// guardMetrics (refusals, store errors, daily budget used).
 func smsGuard(cfg guard.Config, limits ratelimit.Store, name string, logger *slog.Logger) *guard.Guard {
-	cfg.Store, cfg.Name, cfg.Logger = limits, name, logger
+	cfg.Store, cfg.Name, cfg.Logger = newGuardMetrics(limits, name, cfg.DailyBudget), name, logger
 	return guard.New(cfg)
 }
 
@@ -650,7 +702,7 @@ func runAll(ctx context.Context, logger *slog.Logger, loops map[string]func(cont
 				err = errors.New("stopped unexpectedly")
 			}
 			if err != nil {
-				logger.Error("worker loop stopped", "loop", name, "error", err)
+				logger.Error("loop stopped", "loop", name, "error", err)
 				mu.Lock()
 				errs = append(errs, fmt.Errorf("%s: %w", name, err))
 				mu.Unlock()

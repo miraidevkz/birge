@@ -153,6 +153,16 @@ type Config struct {
 	// serving the Kratos courier hook; empty means no internal listener and
 	// no hook. Never route it from the ingress.
 	InternalAddr string
+	// MetricsAddr is the internal Prometheus listener of the API and the
+	// worker (BIRGE_METRICS_ADDR): GET /metrics only, on its own port so it
+	// never shares a listener with the ingress-routed API or the courier
+	// hook's secret. Empty means no listener.
+	MetricsAddr string
+	// TracingEnabled is true when an OTLP endpoint is configured
+	// (OTEL_EXPORTER_OTLP_ENDPOINT or OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) and
+	// OTEL_SDK_DISABLED is not "true". The exporter reads the other
+	// OTEL_EXPORTER_OTLP_* variables itself.
+	TracingEnabled bool
 	// CourierSecret is the shared secret Kratos' courier presents to the
 	// hook (BIRGE_COURIER_SECRET_FILE, at least 32 bytes); required when
 	// InternalAddr is set.
@@ -387,6 +397,7 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		// Worker runs the retrieval indexer when TEI+Qdrant are configured.
 		l.retrieval(&cfg, false)
 	}
+	l.telemetry(&cfg)
 	if err := l.result(); err != nil {
 		return Config{}, err
 	}
@@ -411,6 +422,29 @@ func (l *loader) internalListener(cfg *Config) {
 		l.fail("BIRGE_INTERNAL_ADDR: must use another port than BIRGE_HTTP_ADDR")
 	}
 	cfg.CourierSecret = l.keyFile("BIRGE_COURIER_SECRET_FILE", true)
+}
+
+// telemetry loads the metrics listener and whether traces are exported.
+// The metrics port must differ from the HTTP port (which the ingress
+// routes) and from the internal listener (which holds the courier hook).
+func (l *loader) telemetry(cfg *Config) {
+	cfg.TracingEnabled = strings.TrimSpace(l.getenv("OTEL_SDK_DISABLED")) != "true" &&
+		(strings.TrimSpace(l.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")) != "" ||
+			strings.TrimSpace(l.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")) != "")
+	cfg.MetricsAddr = strings.TrimSpace(l.getenv("BIRGE_METRICS_ADDR"))
+	if cfg.MetricsAddr == "" {
+		return
+	}
+	_, port, err := net.SplitHostPort(cfg.MetricsAddr)
+	if err != nil || port == "" {
+		l.fail("BIRGE_METRICS_ADDR: must be host:port or :port")
+		return
+	}
+	for name, addr := range map[string]string{"BIRGE_HTTP_ADDR": cfg.HTTPAddr, "BIRGE_INTERNAL_ADDR": cfg.InternalAddr} {
+		if _, other, err := net.SplitHostPort(addr); err == nil && other == port {
+			l.fail("BIRGE_METRICS_ADDR: must use another port than " + name)
+		}
+	}
 }
 
 // delivery loads the delivery mode, the push and SMS providers and their
