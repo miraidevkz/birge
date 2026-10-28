@@ -2434,10 +2434,10 @@ export interface components {
         /** @enum {string} */
         StaffRole: "psychologist" | "moderator" | "lawyer" | "admin";
         /**
-         * @description The staff role the action was taken with; staff when the context records only that the actor was staff, not which role.
+         * @description The staff role the action was taken with; staff when the context records only that the actor was staff, not which role. external_contact is an external trusted contact who opened a sent emergency plan by its one-time link (emergency_plan.view_external); her actorId is the trusted contact ID, not a staff ID, so it has no staff card.
          * @enum {string}
          */
-        AuditActorRole: "psychologist" | "moderator" | "lawyer" | "admin" | "staff";
+        AuditActorRole: "psychologist" | "moderator" | "lawyer" | "admin" | "staff" | "external_contact";
         AuditEntry: {
             /** Format: uuid */
             id: string;
@@ -2445,7 +2445,7 @@ export interface components {
             occurredAt: string;
             /**
              * Format: uuid
-             * @description Staff ID; open its card with getStaffAccount.
+             * @description Staff ID (open its card with getStaffAccount), or the trusted contact ID when actorRole is external_contact.
              */
             actorId: string;
             actorRole: components["schemas"]["AuditActorRole"];

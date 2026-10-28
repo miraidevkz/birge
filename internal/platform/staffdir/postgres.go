@@ -50,6 +50,12 @@ func (s *PostgresStore) RecordStaffAccount(ctx context.Context, a staffauth.Acco
 // the system are never listed.
 var auditActorRoles = append(slices.Clone(staffauth.Roles), "staff")
 
+// auditListRoles are the actor roles the admin's audit log lists: every staff
+// role plus external_contact, because an external trusted contact opening a
+// sent emergency plan is access to a child card that admins must be able to
+// review. Per-staff action counts keep auditActorRoles: she is not staff.
+var auditListRoles = append(slices.Clone(auditActorRoles), "external_contact")
+
 // ReadAuditLog selects one page and then writes read, both in one
 // transaction. The read entry is inserted after the select, so a page never
 // lists the read that produced it.
@@ -58,7 +64,7 @@ func (s *PostgresStore) ReadAuditLog(ctx context.Context, q AuditQuery, read aud
 	err := db.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
 		qs := store.New(tx)
 		rows, err := qs.ListStaffAuditEntries(ctx, store.ListStaffAuditEntriesParams{
-			StaffRoles: auditActorRoles,
+			StaffRoles: auditListRoles,
 			ActorID:    optUUID(q.ActorID),
 			ObjectType: optString(q.ObjectType),
 			ObjectID:   optUUID(q.ObjectID),

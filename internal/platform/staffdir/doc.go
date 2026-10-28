@@ -19,7 +19,10 @@
 // Wiring mounts them under /v1/staff/ behind the staff auth middleware.
 //
 //   - listAuditEntries: entries whose actor_role is a staff role
-//     (psychologist, moderator, lawyer, admin), newest first, 50 per page
+//     (psychologist, moderator, lawyer, admin, or the generic staff), plus
+//     external_contact (an external trusted contact opening a sent emergency
+//     plan by its link: access to a child card admins must see), newest
+//     first, 50 per page
 //     with an opaque keyset cursor on (occurred_at, id); filters by actor,
 //     object type, object ID, action and an inclusive time range. Entries by
 //     members and by the system are never listed. Each call writes its own

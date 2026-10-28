@@ -105,7 +105,8 @@ func TestStaffAuditLog(t *testing.T) {
 
 	// 120 moderator decisions, one per minute from base; 3 escalation takes by
 	// a psychologist on day 35; one row by a context that records only
-	// "staff" (listed); rows by a member and the system are never listed.
+	// "staff" (listed); one external contact opening a plan by its link
+	// (listed); rows by a member and the system are never listed.
 	for i := range 120 {
 		insertEntry(t, pool, base.Add(time.Duration(i)*time.Minute), mod, "moderator", "moderation.approve", "moderation.item", &item)
 	}
@@ -115,8 +116,9 @@ func TestStaffAuditLog(t *testing.T) {
 	insertEntry(t, pool, now.Add(-time.Minute), member, "member", "emergency_plan.view_shared", "emergency.child_card", &item)
 	insertEntry(t, pool, now.Add(-time.Minute), uuid.New(), "system", "membership.member_deleted", "member", &member)
 	insertEntry(t, pool, now.Add(-time.Minute), uuid.New(), "staff", "membership.member_list", "member", nil)
+	insertEntry(t, pool, now.Add(-time.Minute), uuid.New(), "external_contact", "emergency_plan.view_external", "emergency.child_card", &member)
 
-	t.Run("pages across the whole log, newest first, staff only", func(t *testing.T) {
+	t.Run("pages across the whole log, newest first, staff and external contacts only", func(t *testing.T) {
 		seen := map[uuid.UUID]bool{}
 		var prev time.Time
 		cursor, pages := "", 0
@@ -135,8 +137,8 @@ func TestStaffAuditLog(t *testing.T) {
 					t.Fatalf("not newest first: %s after %s", e.OccurredAt, prev)
 				}
 				prev = e.OccurredAt
-				if !staffauth.RoleIsValid(e.ActorRole) && e.ActorRole != "staff" {
-					t.Fatalf("non-staff entry listed: role %q action %s", e.ActorRole, e.Action)
+				if !staffauth.RoleIsValid(e.ActorRole) && e.ActorRole != "staff" && e.ActorRole != "external_contact" {
+					t.Fatalf("unexpected entry listed: role %q action %s", e.ActorRole, e.Action)
 				}
 				if e.ActorID == mod && e.ActorName != "Dana" {
 					t.Fatalf("actor name = %q, want joined from staff_accounts", e.ActorName)
@@ -153,15 +155,15 @@ func TestStaffAuditLog(t *testing.T) {
 			}
 			cursor = page.NextCursor
 		}
-		// 124 staff entries existed before the first read; every read adds
+		// 125 listed entries existed before the first read; every read adds
 		// its own admin entry after selecting, so later pages may show the
-		// earlier reads. All 124 must be seen and nothing else but reads.
+		// earlier reads. All 125 must be seen and nothing else but reads.
 		reads := countReads(ctx, t, pool, reader)
 		if reads != pages {
 			t.Fatalf("read entries = %d, want one per page (%d)", reads, pages)
 		}
-		if len(seen) < 124 || len(seen) > 124+pages-1 {
-			t.Fatalf("listed %d entries over %d pages, want 124 plus earlier reads", len(seen), pages)
+		if len(seen) < 125 || len(seen) > 125+pages-1 {
+			t.Fatalf("listed %d entries over %d pages, want 125 plus earlier reads", len(seen), pages)
 		}
 	})
 

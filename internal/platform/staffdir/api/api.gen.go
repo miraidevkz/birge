@@ -20,17 +20,20 @@ import (
 
 // Defines values for AuditActorRole.
 const (
-	AuditActorAdmin        AuditActorRole = "admin"
-	AuditActorLawyer       AuditActorRole = "lawyer"
-	AuditActorModerator    AuditActorRole = "moderator"
-	AuditActorPsychologist AuditActorRole = "psychologist"
-	AuditActorStaff        AuditActorRole = "staff"
+	AuditActorAdmin           AuditActorRole = "admin"
+	AuditActorExternalContact AuditActorRole = "external_contact"
+	AuditActorLawyer          AuditActorRole = "lawyer"
+	AuditActorModerator       AuditActorRole = "moderator"
+	AuditActorPsychologist    AuditActorRole = "psychologist"
+	AuditActorStaff           AuditActorRole = "staff"
 )
 
 // Valid indicates whether the value is a known member of the AuditActorRole enum.
 func (e AuditActorRole) Valid() bool {
 	switch e {
 	case AuditActorAdmin:
+		return true
+	case AuditActorExternalContact:
 		return true
 	case AuditActorLawyer:
 		return true
@@ -69,7 +72,7 @@ func (e StaffRole) Valid() bool {
 	}
 }
 
-// AuditActorRole The staff role the action was taken with; staff when the context records only that the actor was staff, not which role.
+// AuditActorRole The staff role the action was taken with; staff when the context records only that the actor was staff, not which role. external_contact is an external trusted contact who opened a sent emergency plan by its one-time link (emergency_plan.view_external); her actorId is the trusted contact ID, not a staff ID, so it has no staff card.
 type AuditActorRole string
 
 // AuditCode A short code such as escalation.take or safety.escalation (package platform/audit).
@@ -80,13 +83,13 @@ type AuditEntry struct {
 	// Action A short code such as escalation.take or safety.escalation (package platform/audit).
 	Action AuditCode `json:"action"`
 
-	// ActorId Staff ID; open its card with getStaffAccount.
+	// ActorId Staff ID (open its card with getStaffAccount), or the trusted contact ID when actorRole is external_contact.
 	ActorId openapi_types.UUID `json:"actorId"`
 
 	// ActorName The staff account's display name when known.
 	ActorName *string `json:"actorName,omitempty"`
 
-	// ActorRole The staff role the action was taken with; staff when the context records only that the actor was staff, not which role.
+	// ActorRole The staff role the action was taken with; staff when the context records only that the actor was staff, not which role. external_contact is an external trusted contact who opened a sent emergency plan by its one-time link (emergency_plan.view_external); her actorId is the trusted contact ID, not a staff ID, so it has no staff card.
 	ActorRole AuditActorRole      `json:"actorRole"`
 	Id        openapi_types.UUID  `json:"id"`
 	ObjectId  *openapi_types.UUID `json:"objectId,omitempty"`

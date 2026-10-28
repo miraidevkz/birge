@@ -2963,9 +2963,9 @@ components:
       enum: [psychologist, moderator, lawyer, admin]
     AuditActorRole:
       type: string
-      enum: [psychologist, moderator, lawyer, admin, staff]
-      x-enum-varnames: [AuditActorPsychologist, AuditActorModerator, AuditActorLawyer, AuditActorAdmin, AuditActorStaff]
-      description: The staff role the action was taken with; staff when the context records only that the actor was staff, not which role.
+      enum: [psychologist, moderator, lawyer, admin, staff, external_contact]
+      x-enum-varnames: [AuditActorPsychologist, AuditActorModerator, AuditActorLawyer, AuditActorAdmin, AuditActorStaff, AuditActorExternalContact]
+      description: The staff role the action was taken with; staff when the context records only that the actor was staff, not which role. external_contact is an external trusted contact who opened a sent emergency plan by its one-time link (emergency_plan.view_external); her actorId is the trusted contact ID, not a staff ID, so it has no staff card.
     AuditEntry:
       type: object
       additionalProperties: false
@@ -2973,7 +2973,7 @@ components:
       properties:
         id: {type: string, format: uuid}
         occurredAt: {type: string, format: date-time}
-        actorId: {type: string, format: uuid, description: Staff ID; open its card with getStaffAccount.}
+        actorId: {type: string, format: uuid, description: "Staff ID (open its card with getStaffAccount), or the trusted contact ID when actorRole is external_contact."}
         actorRole: {$ref: '#/components/schemas/AuditActorRole'}
         actorName: {type: string, maxLength: 80, description: The staff account's display name when known.}
         action: {$ref: '#/components/schemas/AuditCode'}
