@@ -30,8 +30,11 @@
 // # Authentication
 //
 // The member session token is the first frame ({"type":"auth","token":…}),
-// never the URL; an invalid token, a non-member principal or no auth frame
-// within AuthTimeout closes with 4401. Message text is never logged.
+// never the URL; an invalid token or a non-member principal closes with
+// 4401. With no auth frame within AuthTimeout the read's context expires and
+// the websocket library drops the connection without a close frame; clients
+// treat any close before the ack as "sign in again". Message text is never
+// logged.
 package gateway
 
 import (
