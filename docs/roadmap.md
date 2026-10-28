@@ -25,11 +25,12 @@ Contract merged, code pending (answers 501):
 - [ ] Record the concrete staff role in membership and chat audit rows (today `staff`)
 - [x] One-time link for external trusted contacts to view a sent emergency plan (`viewExternalPlan`, emergency)
 - [x] Metric input events for analytics: `membership.MemberActiveDay`, `circle.TeaRequested`, `assistant.QuestionAnswered`
-- [ ] Analytics (ADR-0024): wellbeing cohort aggregates, the `analytics` context with `getMetrics` and `getMetricsCsv`
+- [x] Analytics (ADR-0024): wellbeing cohort aggregates, the `analytics` context with `getMetrics` and `getMetricsCsv`
+- [ ] Rights metrics need a member reference in `assistant.QuestionAnswered` and `assistant.ReplyRated`; the isolation metric needs an isolation item in the check-in (product and psychologist decision)
 
 No contract change needed:
-- [ ] Push (FCM, APNs) and SMS provider adapters (an SMS provider in Kazakhstan, e.g. SMSC.kz, with a registered sender ID); production refuses the log senders
-- [ ] Kratos courier hook so sign-in codes go through notify's SMS guard (the dev stack keeps `cmd/birge-devsms`)
+- [x] Push (FCM, APNs) and SMS provider adapters (an SMS provider in Kazakhstan, e.g. SMSC.kz, with a registered sender ID); production refuses the log senders
+- [x] Kratos courier hook so sign-in codes go through notify's SMS guard (the dev stack keeps `cmd/birge-devsms`); to verify against a live Kratos
 - [ ] More than one API replica: shared store for rate limits and PoW replay, previous KEKs in configuration for rotation, merge the wiring HTTP server back into `platform/httpserver`
 - [ ] Reference data (cities, districts, needs) for the pilot country, seeded by `migrate`
 - [ ] Role matrix for staff and a deny-by-default test generated from the contract (decided to come after the demo)
@@ -49,7 +50,8 @@ No contract change needed:
 ### Clients
 - [x] Admin: members, rooms and mentors, richer moderation (filters, block author, legal hold), audit log with staff cards
 - [ ] Admin: metrics screen once analytics lands
-- [ ] Mom app: success screen after account deletion; external plan web page (`/plan`)
+- [x] Mom app: external plan web page (`/plan`), notification inbox, native push registration (needs a Firebase project for Android delivery)
+- [ ] Mom app: success screen after account deletion; screens for a trusted contact (SOS view, invitation, shared plan)
 - [ ] Human review of texts: native Kazakh speaker and psychologist (`docs/content-review-2026-10.md`)
 
 ### Acceptance
