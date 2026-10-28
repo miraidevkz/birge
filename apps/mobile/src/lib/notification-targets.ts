@@ -3,9 +3,7 @@
 // is used only when it is a UUID, so it can never change the route's shape.
 // A template without a place in this app and an unknown template open
 // nothing; the item is still marked read. Without a place today: staff
-// templates (they never reach a member) and `emergency.sos_raised_contact`,
-// because the contract has no operation for a trusted contact to read
-// another member's SOS (internal/domains/emergency/README.md, open questions).
+// templates (they never reach a member).
 
 /** NotificationLike is what the table needs from an inbox item. */
 export interface NotificationLike {
@@ -40,6 +38,9 @@ export const NOTIFICATION_TARGETS: Readonly<Record<string, Target>> = {
   // Her own SOS: the SOS screen shows it with the responses.
   'emergency.sos_responded': () => '/sos',
   'emergency.sos_shared': () => '/sos',
+  // Another member's SOS, sent to her as a confirmed trusted contact;
+  // params {sos_id} (emergency service publishRaised).
+  'emergency.sos_raised_contact': byId('sos_id', '/trusted-sos'),
   // Another member invited her to be a trusted contact; params {contact_id}.
   'emergency.trusted_invitation': byId('contact_id', '/trusted-invitation'),
   // A member sent her plan to her as a member contact; params {owner_id}.

@@ -92,6 +92,14 @@ describe('notificationTarget', () => {
     expect(notificationTarget(n('emergency.plan_sent', { contact_id: id }))).toBeNull();
   });
 
+  it("opens another member's SOS for her trusted contact by the SOS id", () => {
+    const id = '01900000-0000-7000-8000-0000000000d1';
+    expect(notificationTarget(n('emergency.sos_raised_contact', { sos_id: id }))).toBe(`/trusted-sos/${id}`);
+    expect(notificationTarget(n('emergency.sos_raised_contact'))).toBeNull();
+    expect(notificationTarget(n('emergency.sos_raised_contact', { sos_id: '../me/sos' }))).toBeNull();
+    expect(notificationTarget(n('emergency.sos_raised_contact', { contact_id: id }))).toBeNull();
+  });
+
   it('never builds a route from a param that is not a UUID', () => {
     expect(notificationTarget(n('chat.new_message', { room_id: '../../sos' }))).toBe('/chat');
     expect(notificationTarget(n('chat.new_message'))).toBe('/chat');
@@ -99,8 +107,6 @@ describe('notificationTarget', () => {
 
   it('opens nothing for unknown templates and those without a screen', () => {
     expect(notificationTarget(n('future.thing'))).toBeNull();
-    // No contract operation lets a contact read another member's SOS yet.
-    expect(notificationTarget(n('emergency.sos_raised_contact', { sos_id: room }))).toBeNull();
     expect(notificationTarget(n('constructor'))).toBeNull();
     expect(notificationTarget(n('toString'))).toBeNull();
   });

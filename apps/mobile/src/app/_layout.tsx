@@ -101,6 +101,8 @@ export default function RootLayout() {
                 <Stack.Screen name="trusted-invitation/[contactId]" />
                 {/* Crisis-adjacent: the child card a contact may read while helping. */}
                 <Stack.Screen name="shared-plan/[ownerId]" options={{ animation: 'none' }} />
+                {/* Crisis: another member's SOS, read by her trusted contact. */}
+                <Stack.Screen name="trusted-sos/[sosId]" options={{ animation: 'none' }} />
                 {/* After account deletion: no session, no Back. */}
                 <Stack.Screen name="account-deleted" />
                 {/* Crisis / SOS: no transition animation (ADR-0014). */}

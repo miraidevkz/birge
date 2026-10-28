@@ -64,7 +64,7 @@
   },
   "invitation": {
     "title": "Trusted contact invitation",
-    "intro": "A member you have met in person invited you to be her trusted contact.",
+    "intro": "{{name}}, whom you have met in person, invited you to be her trusted contact.",
     "meaning": "If she raises an SOS, you will get an alert. When she sends her emergency plan, you can read the card about her child in the app.",
     "laterHint": "If you are not ready yet, you can come back to this later. The invitation stays open.",
     "accept": "Accept",
@@ -75,6 +75,45 @@
     "goneTitle": "This invitation is no longer active",
     "goneDescription": "Nothing more is needed from you.",
     "unmetTitle": "First, a meeting in person",
-    "unmetDescription": "You can accept this invitation once your meeting in person is confirmed in the app."
+    "unmetDescription": "You can accept this invitation once your meeting in person is confirmed in the app.",
+    "decline": "Decline",
+    "declineTitle": "Decline the invitation?",
+    "declineMessage": "You will not get {{name}}'s SOS alerts or her plan. She is not sent a notification about it.",
+    "declineConfirm": "Yes, decline",
+    "declined": "You declined the invitation. Nothing more is needed from you.",
+    "confirmedIntro": "You are already {{name}}'s trusted contact.",
+    "leave": "Stop being her trusted contact",
+    "leaveTitle": "Stop being her trusted contact?",
+    "leaveMessage": "You will no longer get {{name}}'s SOS alerts or her plan. She is not sent a notification about it.",
+    "leaveConfirm": "Yes, stop",
+    "left": "You are no longer her trusted contact.",
+    "declineFailed": "Could not save your answer. Check your connection and try again.",
+    "loadError": "Could not load the invitation. Please try again in a moment."
+  },
+  "trustedSos": {
+    "title": "A request for help",
+    "intro": "{{name}} trusts you and is asking for help.",
+    "type": {
+      "childcare": "She has no one to leave her child with",
+      "item_or_medicine": "She urgently needs an item or medicine",
+      "other": "Another request"
+    },
+    "childcareNote": "You are her trusted contact: she chose you to help with her child.",
+    "raisedAt": "Sent {{when}}",
+    "closesAt": "Closes automatically {{when}}",
+    "status": {
+      "open": "The request is still open",
+      "closed": "The request is closed"
+    },
+    "respond": "I can help",
+    "respondHint": "She will be told that you can help. She can then open a chat with you.",
+    "responded": "You offered help",
+    "respondedDescription": "She has been told. She may open a chat with you, and it will appear in your chats.",
+    "closedTitle": "This request is closed",
+    "closedDescription": "Nothing more is needed from you now. Thank you for being there for her.",
+    "failed": "Could not send your answer. Check your connection and try again.",
+    "loadError": "Could not load the request. Please try again in a moment.",
+    "unavailableTitle": "This request is not available now",
+    "unavailableDescription": "Nothing more is needed from you here."
   }
 }
