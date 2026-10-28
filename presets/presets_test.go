@@ -76,7 +76,7 @@ func TestSettingsAndReference(t *testing.T) {
 	if len(s.CrisisPhones) != 1 || s.CrisisPhones[0].Number != "112" {
 		t.Fatalf("phones = %+v", s.CrisisPhones)
 	}
-	ref, err := presets.LoadReference()
+	ref, err := presets.LoadReference(presets.ReferenceDemo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,18 +110,16 @@ func TestKnowledgeDemoMarked(t *testing.T) {
 }
 
 func TestDirectoryAndListingsDemoMarked(t *testing.T) {
-	ref, err := presets.LoadReference()
+	ref, err := presets.LoadReference(presets.ReferenceDemo)
 	if err != nil {
 		t.Fatal(err)
 	}
 	districts := map[string]bool{}
-	for _, c := range ref.Cities {
-		for _, d := range c.Districts {
-			districts[d] = true
-		}
+	for _, d := range ref.DistrictCodes() {
+		districts[d] = true
 	}
 	needs := map[string]bool{}
-	for _, n := range ref.Needs {
+	for _, n := range ref.NeedCodes() {
 		needs[n] = true
 	}
 	dir, err := presets.LoadDirectory()

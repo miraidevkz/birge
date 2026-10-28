@@ -30,6 +30,7 @@ type MembershipChild struct {
 type MembershipCity struct {
 	ID        uuid.UUID
 	Code      string
+	Active    bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -38,6 +39,7 @@ type MembershipDistrict struct {
 	ID        uuid.UUID
 	CityID    uuid.UUID
 	Code      string
+	Active    bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -61,6 +63,7 @@ type MembershipMember struct {
 
 type MembershipNeed struct {
 	Code      string
+	Active    bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

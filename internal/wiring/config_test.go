@@ -16,6 +16,8 @@ import (
 	"github.com/tink-crypto/tink-go/v2/aead"
 	"github.com/tink-crypto/tink-go/v2/insecurecleartextkeyset"
 	"github.com/tink-crypto/tink-go/v2/keyset"
+
+	"birge/presets"
 )
 
 // testKeysetJSON generates a fresh AES256-GCM Tink keyset; no key is ever
@@ -146,6 +148,9 @@ func TestLoadValid(t *testing.T) {
 				t.Error("DATABASE_URL not loaded")
 			}
 			if cmd == CommandMigrate {
+				if !slices.Equal(cfg.ReferencePresets, presets.DefaultReferenceSets) {
+					t.Errorf("reference presets = %v", cfg.ReferencePresets)
+				}
 				return
 			}
 			if cfg.KEK == nil || cfg.KEK.ID() != "local-1" {
@@ -212,6 +217,8 @@ func TestLoadRejects(t *testing.T) {
 		{"missing database", CommandMigrate, map[string]string{"DATABASE_URL": ""}, nil, "DATABASE_URL is required"},
 		{"bad database", CommandMigrate, map[string]string{"DATABASE_URL": "postgres://birge:s3cret-password@[bad"}, nil, "DATABASE_URL: not a valid"},
 		{"apply roles", CommandMigrate, map[string]string{"BIRGE_APPLY_ROLES": "yes"}, nil, "BIRGE_APPLY_ROLES"},
+		{"unknown reference set", CommandMigrate, map[string]string{"BIRGE_REFERENCE_PRESETS": "kz,mars"}, nil, "BIRGE_REFERENCE_PRESETS: unknown or repeated"},
+		{"repeated reference set", CommandMigrate, map[string]string{"BIRGE_REFERENCE_PRESETS": "kz,kz"}, nil, "BIRGE_REFERENCE_PRESETS: unknown or repeated"},
 		{"missing kratos", CommandAPI, map[string]string{"KRATOS_PUBLIC_URL": ""}, nil, "KRATOS_PUBLIC_URL is required"},
 		{"kratos with credentials", CommandAPI, map[string]string{"KRATOS_PUBLIC_URL": "http://u:p@kratos.example.invalid"}, nil, "KRATOS_PUBLIC_URL"},
 		{"missing pow file", CommandAPI, nil, func(f fakeFiles) { delete(f, "/keys/pow") }, "BIRGE_POW_KEY_FILE: cannot read"},
@@ -550,5 +557,17 @@ func TestLoadStaffAuth(t *testing.T) {
 				t.Error("error contains the client secret")
 			}
 		})
+	}
+}
+
+func TestLoadReferencePresets(t *testing.T) {
+	env := validEnv(t)
+	env["BIRGE_REFERENCE_PRESETS"] = " kz "
+	cfg, err := load(env, validFiles(t), CommandMigrate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(cfg.ReferencePresets, []string{presets.ReferenceKZ}) {
+		t.Fatalf("reference presets = %v", cfg.ReferencePresets)
 	}
 }

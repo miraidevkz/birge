@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -82,11 +84,12 @@ const rolesHeader = "SET lock_timeout = '5s';\nSET statement_timeout = '60s';\n"
 // ApplyRoles is set, db/roles.sql. Both steps are idempotent: goose records
 // applied versions, and grants repeat without effect. A PostgreSQL session
 // lock serializes concurrent runs (several migration jobs starting at once).
-// After migrations, membership reference tables are seeded from the DEMO
-// preset only when they are empty (never overwrites; logs event=DemoPreset).
-// DEMO chat rooms, specialists, listings and knowledge follow, each only into
-// its own empty tables; specialists and listings only while the DEMO
-// reference is in use.
+// After migrations, the membership reference tables are synced with the
+// reference sets in cfg.ReferencePresets (syncReference: missing entries
+// added, removed ones deactivated, nothing deleted; logs event=DemoPreset when
+// the DEMO set adds rows). DEMO chat rooms, specialists, listings and
+// knowledge follow, each only into its own empty tables; specialists and
+// listings only while the DEMO reference is in use.
 func Migrate(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	sqlDB, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {
@@ -125,7 +128,7 @@ func Migrate(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		}
 		logger.Info("roles applied")
 	}
-	if err := seedDemoReference(ctx, logger, cfg.DatabaseURL); err != nil {
+	if err := syncReference(ctx, logger, cfg.DatabaseURL, cfg.ReferencePresets); err != nil {
 		return err
 	}
 	if err := seedDemoChat(ctx, logger, cfg.DatabaseURL); err != nil {
@@ -140,30 +143,64 @@ func Migrate(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	return seedDemoKnowledge(ctx, logger, cfg.DatabaseURL)
 }
 
-// seedDemoReference inserts DEMO cities, districts and needs when every
-// membership reference table is empty. Idempotent: a second migrate is a no-op.
-func seedDemoReference(ctx context.Context, logger *slog.Logger, databaseURL string) error {
-	ref, err := presets.LoadReference()
+// syncReference makes the active membership reference rows equal to the
+// union of the named reference sets (presets.DefaultReferenceSets when names
+// is empty). Idempotent: a second migrate changes nothing. Sets may share
+// needs codes; a city or district code in two sets is refused, because clients
+// label districts by code alone.
+func syncReference(ctx context.Context, logger *slog.Logger, databaseURL string, names []string) error {
+	if len(names) == 0 {
+		names = presets.DefaultReferenceSets
+	}
+	seed, err := referenceSeed(names)
 	if err != nil {
-		return fmt.Errorf("migrate: demo reference: %w", err)
+		return fmt.Errorf("migrate: reference: %w", err)
 	}
 	pool, err := platformdb.Open(ctx, databaseURL)
 	if err != nil {
-		return fmt.Errorf("migrate: demo reference: %w", err)
+		return fmt.Errorf("migrate: reference: %w", err)
 	}
 	defer pool.Close()
-	seed := membershipmodel.ReferenceSeed{Needs: ref.Needs}
-	for _, c := range ref.Cities {
-		seed.Cities = append(seed.Cities, membershipmodel.ReferenceCitySeed{Code: c.Code, Districts: c.Districts})
-	}
-	seeded, err := (&membershipadapter.Postgres{Pool: pool}).SeedReferenceIfEmpty(ctx, seed)
+	res, err := (&membershipadapter.Postgres{Pool: pool}).SyncReference(ctx, seed, time.Now().UTC())
 	if err != nil {
-		return fmt.Errorf("migrate: demo reference: %w", err)
+		return fmt.Errorf("migrate: reference: %w", err)
 	}
-	if seeded {
+	logger.Info("reference synced", "sets", strings.Join(names, ","),
+		"inserted", res.Inserted, "reactivated", res.Reactivated, "deactivated", res.Deactivated)
+	if slices.Contains(names, presets.ReferenceDemo) && res.Inserted+res.Reactivated > 0 {
 		LogDemoPresets(logger, []string{presets.NameReference})
 	}
 	return nil
+}
+
+// referenceSeed merges the named reference sets into one membership seed.
+func referenceSeed(names []string) (membershipmodel.ReferenceSeed, error) {
+	var seed membershipmodel.ReferenceSeed
+	needs := map[string]bool{}
+	for _, name := range names {
+		ref, err := presets.LoadReference(name)
+		if err != nil {
+			return seed, err
+		}
+		for _, c := range ref.Cities {
+			city := membershipmodel.ReferenceCitySeed{Code: c.Code}
+			for _, d := range c.Districts {
+				city.Districts = append(city.Districts, d.Code)
+			}
+			seed.Cities = append(seed.Cities, city)
+		}
+		for _, n := range ref.NeedCodes() {
+			if !needs[n] {
+				needs[n] = true
+				seed.Needs = append(seed.Needs, n)
+			}
+		}
+	}
+	// Validate refuses a city or district code present in two sets.
+	if err := seed.Validate(); err != nil {
+		return seed, err
+	}
+	return seed, nil
 }
 
 // seedDemoKnowledge inserts DEMO knowledge topics and articles when the

@@ -417,25 +417,25 @@ func (t *pgTx) IsBlocked(ctx context.Context, a, b uuid.UUID) (bool, error) {
 	return blocked != nil && *blocked, nil
 }
 
-// DistrictExists reports whether id is a known district.
-func (t *pgTx) DistrictExists(ctx context.Context, id uuid.UUID) (bool, error) {
-	ok, err := t.q.DistrictExists(ctx, id)
+// DistrictSelectable reports whether id is an active district of an active city.
+func (t *pgTx) DistrictSelectable(ctx context.Context, id uuid.UUID) (bool, error) {
+	ok, err := t.q.DistrictSelectable(ctx, id)
 	if err != nil {
-		return false, fmt.Errorf("membership: district exists: %w", err)
+		return false, fmt.Errorf("membership: district selectable: %w", err)
 	}
 	return ok, nil
 }
 
-// CountKnownNeeds returns how many of the distinct codes exist in the reference table.
-func (t *pgTx) CountKnownNeeds(ctx context.Context, codes []string) (int, error) {
-	n, err := t.q.CountKnownNeeds(ctx, codes)
+// CountSelectableNeeds returns how many of the distinct codes are active needs.
+func (t *pgTx) CountSelectableNeeds(ctx context.Context, codes []string) (int, error) {
+	n, err := t.q.CountSelectableNeeds(ctx, codes)
 	if err != nil {
 		return 0, fmt.Errorf("membership: count needs: %w", err)
 	}
 	return int(n), nil
 }
 
-// Cities returns the deployment's cities with their districts.
+// Cities returns the deployment's active cities with their active districts.
 func (t *pgTx) Cities(ctx context.Context) ([]model.City, error) {
 	cities, err := t.q.ListCities(ctx)
 	if err != nil {
@@ -460,54 +460,13 @@ func (t *pgTx) Cities(ctx context.Context) ([]model.City, error) {
 	return out, nil
 }
 
-// Needs returns the deployment's needs codes.
+// Needs returns the deployment's active needs codes.
 func (t *pgTx) Needs(ctx context.Context) ([]string, error) {
 	codes, err := t.q.ListNeeds(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("membership: list needs: %w", err)
 	}
 	return needs(codes), nil
-}
-
-// SeedReferenceIfEmpty inserts cities, districts and needs when every
-// membership reference table is empty. It never overwrites existing rows.
-// seeded is true only when this call inserted the seed.
-func (p *Postgres) SeedReferenceIfEmpty(ctx context.Context, ref model.ReferenceSeed) (seeded bool, err error) {
-	if len(ref.Cities) == 0 || len(ref.Needs) == 0 {
-		return false, fmt.Errorf("membership: reference seed needs cities and needs")
-	}
-	err = db.InTx(ctx, p.Pool, func(tx pgx.Tx) error {
-		q := store.New(tx)
-		empty, err := q.ReferenceIsEmpty(ctx)
-		if err != nil {
-			return fmt.Errorf("membership: reference empty check: %w", err)
-		}
-		if !empty {
-			return nil
-		}
-		for _, c := range ref.Cities {
-			if c.Code == "" || len(c.Districts) == 0 {
-				return fmt.Errorf("membership: reference seed city needs a code and districts")
-			}
-			id, err := q.InsertCity(ctx, c.Code)
-			if err != nil {
-				return fmt.Errorf("membership: insert city: %w", err)
-			}
-			for _, d := range c.Districts {
-				if err := q.InsertDistrict(ctx, store.InsertDistrictParams{CityID: id, Code: d}); err != nil {
-					return fmt.Errorf("membership: insert district: %w", err)
-				}
-			}
-		}
-		for _, n := range ref.Needs {
-			if err := q.InsertNeed(ctx, n); err != nil {
-				return fmt.Errorf("membership: insert need: %w", err)
-			}
-		}
-		seeded = true
-		return nil
-	})
-	return seeded, err
 }
 
 // Publish stores e in the platform outbox in this transaction.

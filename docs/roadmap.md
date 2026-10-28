@@ -33,7 +33,7 @@ No contract change needed:
 - [x] Push (FCM, APNs) and SMS provider adapters (an SMS provider in Kazakhstan, e.g. SMSC.kz, with a registered sender ID); production refuses the log senders
 - [x] Kratos courier hook so sign-in codes go through notify's SMS guard (the dev stack keeps `cmd/birge-devsms`); to verify against a live Kratos
 - [ ] More than one API replica: shared store for rate limits and PoW replay, previous KEKs in configuration for rotation, merge the wiring HTTP server back into `platform/httpserver`
-- [ ] Reference data (cities, districts, needs) for the pilot country, seeded by `migrate`
+- [x] Reference data (cities, districts, needs) for the pilot country, synced by `migrate` (`presets/kz/reference.json`, `BIRGE_REFERENCE_PRESETS`); Kazakh names await native review
 - [ ] Role matrix for staff and a deny-by-default test generated from the contract (decided to come after the demo)
 
 ### Quality

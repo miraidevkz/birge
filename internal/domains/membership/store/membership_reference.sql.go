@@ -7,74 +7,198 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
-const countKnownNeeds = `-- name: CountKnownNeeds :one
+const countSelectableNeeds = `-- name: CountSelectableNeeds :one
 SELECT count(*) FROM membership.needs
-WHERE code = ANY($1::text[])
+WHERE code = ANY($1::text[]) AND active
 `
 
-func (q *Queries) CountKnownNeeds(ctx context.Context, codes []string) (int64, error) {
-	row := q.db.QueryRow(ctx, countKnownNeeds, codes)
+func (q *Queries) CountSelectableNeeds(ctx context.Context, codes []string) (int64, error) {
+	row := q.db.QueryRow(ctx, countSelectableNeeds, codes)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
-const districtExists = `-- name: DistrictExists :one
-SELECT EXISTS (SELECT 1 FROM membership.districts WHERE id = $1) AS found
+const districtSelectable = `-- name: DistrictSelectable :one
+SELECT EXISTS (
+    SELECT 1
+    FROM membership.districts d
+    JOIN membership.cities c ON c.id = d.city_id
+    WHERE d.id = $1 AND d.active AND c.active
+) AS found
 `
 
-func (q *Queries) DistrictExists(ctx context.Context, id uuid.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, districtExists, id)
+func (q *Queries) DistrictSelectable(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, districtSelectable, id)
 	var found bool
 	err := row.Scan(&found)
 	return found, err
 }
 
-const insertCity = `-- name: InsertCity :one
-INSERT INTO membership.cities (code)
-VALUES ($1)
-RETURNING id
+const insertCity = `-- name: InsertCity :exec
+INSERT INTO membership.cities (id, code, created_at, updated_at)
+VALUES ($1, $2, $3, $3)
 `
 
-func (q *Queries) InsertCity(ctx context.Context, code string) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, insertCity, code)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+type InsertCityParams struct {
+	ID   uuid.UUID
+	Code string
+	Now  time.Time
+}
+
+func (q *Queries) InsertCity(ctx context.Context, arg InsertCityParams) error {
+	_, err := q.db.Exec(ctx, insertCity, arg.ID, arg.Code, arg.Now)
+	return err
 }
 
 const insertDistrict = `-- name: InsertDistrict :exec
-INSERT INTO membership.districts (city_id, code)
-VALUES ($1, $2)
+INSERT INTO membership.districts (id, city_id, code, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $4)
 `
 
 type InsertDistrictParams struct {
+	ID     uuid.UUID
 	CityID uuid.UUID
 	Code   string
+	Now    time.Time
 }
 
 func (q *Queries) InsertDistrict(ctx context.Context, arg InsertDistrictParams) error {
-	_, err := q.db.Exec(ctx, insertDistrict, arg.CityID, arg.Code)
+	_, err := q.db.Exec(ctx, insertDistrict,
+		arg.ID,
+		arg.CityID,
+		arg.Code,
+		arg.Now,
+	)
 	return err
 }
 
 const insertNeed = `-- name: InsertNeed :exec
-INSERT INTO membership.needs (code)
-VALUES ($1)
+INSERT INTO membership.needs (code, created_at, updated_at)
+VALUES ($1, $2, $2)
 `
 
-func (q *Queries) InsertNeed(ctx context.Context, code string) error {
-	_, err := q.db.Exec(ctx, insertNeed, code)
+type InsertNeedParams struct {
+	Code string
+	Now  time.Time
+}
+
+func (q *Queries) InsertNeed(ctx context.Context, arg InsertNeedParams) error {
+	_, err := q.db.Exec(ctx, insertNeed, arg.Code, arg.Now)
 	return err
 }
 
+const listAllCities = `-- name: ListAllCities :many
+SELECT id, code, active
+FROM membership.cities
+ORDER BY code
+`
+
+type ListAllCitiesRow struct {
+	ID     uuid.UUID
+	Code   string
+	Active bool
+}
+
+func (q *Queries) ListAllCities(ctx context.Context) ([]ListAllCitiesRow, error) {
+	rows, err := q.db.Query(ctx, listAllCities)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllCitiesRow
+	for rows.Next() {
+		var i ListAllCitiesRow
+		if err := rows.Scan(&i.ID, &i.Code, &i.Active); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllDistricts = `-- name: ListAllDistricts :many
+SELECT id, city_id, code, active
+FROM membership.districts
+ORDER BY city_id, code
+`
+
+type ListAllDistrictsRow struct {
+	ID     uuid.UUID
+	CityID uuid.UUID
+	Code   string
+	Active bool
+}
+
+func (q *Queries) ListAllDistricts(ctx context.Context) ([]ListAllDistrictsRow, error) {
+	rows, err := q.db.Query(ctx, listAllDistricts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllDistrictsRow
+	for rows.Next() {
+		var i ListAllDistrictsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CityID,
+			&i.Code,
+			&i.Active,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllNeeds = `-- name: ListAllNeeds :many
+SELECT code, active
+FROM membership.needs
+ORDER BY code
+`
+
+type ListAllNeedsRow struct {
+	Code   string
+	Active bool
+}
+
+func (q *Queries) ListAllNeeds(ctx context.Context) ([]ListAllNeedsRow, error) {
+	rows, err := q.db.Query(ctx, listAllNeeds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllNeedsRow
+	for rows.Next() {
+		var i ListAllNeedsRow
+		if err := rows.Scan(&i.Code, &i.Active); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCities = `-- name: ListCities :many
+
 SELECT id, code
 FROM membership.cities
+WHERE active
 ORDER BY code
 `
 
@@ -83,6 +207,8 @@ type ListCitiesRow struct {
 	Code string
 }
 
+// Reads for members and the API return active rows only: a deactivated entry
+// is hidden from new choices, while members who chose it keep its ID.
 func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
 	rows, err := q.db.Query(ctx, listCities)
 	if err != nil {
@@ -104,9 +230,11 @@ func (q *Queries) ListCities(ctx context.Context) ([]ListCitiesRow, error) {
 }
 
 const listDistricts = `-- name: ListDistricts :many
-SELECT id, city_id, code
-FROM membership.districts
-ORDER BY city_id, code
+SELECT d.id, d.city_id, d.code
+FROM membership.districts d
+JOIN membership.cities c ON c.id = d.city_id
+WHERE d.active AND c.active
+ORDER BY d.city_id, d.code
 `
 
 type ListDistrictsRow struct {
@@ -138,6 +266,7 @@ func (q *Queries) ListDistricts(ctx context.Context) ([]ListDistrictsRow, error)
 const listNeeds = `-- name: ListNeeds :many
 SELECT code
 FROM membership.needs
+WHERE active
 ORDER BY code
 `
 
@@ -161,19 +290,65 @@ func (q *Queries) ListNeeds(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
-const referenceIsEmpty = `-- name: ReferenceIsEmpty :one
-SELECT NOT EXISTS (
-    SELECT 1 FROM membership.cities
-    UNION ALL
-    SELECT 1 FROM membership.districts
-    UNION ALL
-    SELECT 1 FROM membership.needs
-) AS empty
+const lockReference = `-- name: LockReference :exec
+
+SELECT pg_advisory_xact_lock(hashtext('membership.reference'))
 `
 
-func (q *Queries) ReferenceIsEmpty(ctx context.Context) (bool, error) {
-	row := q.db.QueryRow(ctx, referenceIsEmpty)
-	var empty bool
-	err := row.Scan(&empty)
-	return empty, err
+// Reference sync (birge migrate). The lock serializes concurrent migrate
+// jobs so their reads and inserts do not interleave.
+func (q *Queries) LockReference(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockReference)
+	return err
+}
+
+const setCityActive = `-- name: SetCityActive :exec
+UPDATE membership.cities
+SET active = $1, updated_at = $2
+WHERE id = $3
+`
+
+type SetCityActiveParams struct {
+	Active bool
+	Now    time.Time
+	ID     uuid.UUID
+}
+
+func (q *Queries) SetCityActive(ctx context.Context, arg SetCityActiveParams) error {
+	_, err := q.db.Exec(ctx, setCityActive, arg.Active, arg.Now, arg.ID)
+	return err
+}
+
+const setDistrictActive = `-- name: SetDistrictActive :exec
+UPDATE membership.districts
+SET active = $1, updated_at = $2
+WHERE id = $3
+`
+
+type SetDistrictActiveParams struct {
+	Active bool
+	Now    time.Time
+	ID     uuid.UUID
+}
+
+func (q *Queries) SetDistrictActive(ctx context.Context, arg SetDistrictActiveParams) error {
+	_, err := q.db.Exec(ctx, setDistrictActive, arg.Active, arg.Now, arg.ID)
+	return err
+}
+
+const setNeedActive = `-- name: SetNeedActive :exec
+UPDATE membership.needs
+SET active = $1, updated_at = $2
+WHERE code = $3
+`
+
+type SetNeedActiveParams struct {
+	Active bool
+	Now    time.Time
+	Code   string
+}
+
+func (q *Queries) SetNeedActive(ctx context.Context, arg SetNeedActiveParams) error {
+	_, err := q.db.Exec(ctx, setNeedActive, arg.Active, arg.Now, arg.Code)
+	return err
 }

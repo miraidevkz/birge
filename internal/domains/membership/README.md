@@ -6,9 +6,9 @@ Members, children, verification requests, blocks (ADR-0019), staff suspension an
 
 | Table (schema `membership`) | Purpose | Personal data |
 |---|---|---|
-| `cities` | Deployment city reference | none |
-| `districts` | Districts of a city | none |
-| `needs` | Special-needs codes (labels in locale files) | none |
+| `cities` | Deployment city reference; `active` (reference sync) | none |
+| `districts` | Districts of a city; `active` | none |
+| `needs` | Special-needs codes (labels in locale files); `active` | none |
 | `members` | One row per identity; created lazily on first authenticated call; optional `verified_at`; optional `suspended_at` / `suspended_reason` from moderation `block_author`; `last_active_day` (activity metric, cleared on deletion); after account deletion a tombstone (`deleted_at`) | `display_name` encrypted (Encryptor / ADR-0009); `identity_id` is an ID |
 | `children` | Child cards (birth year + needs); no names | none |
 | `verification_requests` | Moderator verification queue (`reject_reason` when rejected) | none |
@@ -24,7 +24,7 @@ Operations of tag `membership` in `contracts/openapi/birge.yaml`:
 | `POST /me/children`, `PUT/DELETE /me/children/{id}` | Own children only. `POST` is idempotent on `Idempotency-Key`. Cap `MaxChildren` (10). |
 | `POST /me/verification-requests` | At most one pending request; repeats return the current member without a second event. |
 | `GET /me/blocks`, `PUT/DELETE /me/blocks/{memberId}` | Idempotent block/unblock; no self-block; cap `MaxBlocks` (1000). Blocked member is not notified. |
-| `GET /reference/districts`, `GET /reference/needs` | Anonymous (`security: []`). |
+| `GET /reference/districts`, `GET /reference/needs` | Anonymous (`security: []`). Active entries only (a district also needs an active city). |
 | `GET /staff/members` | Staff `moderator` or `admin`, MFA. Lists verified or suspended members (`status=verified|suspended`, optional `districtId`, keyset `cursor`). Page size 50. Returns `mentor` boolean flag indicating whether she holds the mentor role. Every read is audited as `membership.member.list` (staff ID, status filter, count; never names). Tombstoned members never appear. |
 | `PUT /staff/members/{memberId}/roles/mentor` | Staff `moderator` or `admin`, MFA. Member must exist (404 `not_found`), be verified and not suspended (409). Adds `mentor` to `roles` idempotently. Audited as `membership.member.mentor_grant`. Publishes `membership.MentorRoleChanged` (`mentor: true`) only when the role actually changed. |
 | `DELETE /staff/members/{memberId}/roles/mentor` | Staff `moderator` or `admin`, MFA. Removes `mentor` from `roles` idempotently (unknown member → 204). Audited as `membership.member.mentor_revoke`. Publishes `membership.MentorRoleChanged` (`mentor: false`) only when the role actually changed. |
@@ -82,8 +82,21 @@ Kratos courier hook (`authgw.CourierHook`, not in the public contract): `POST /i
 | `authgw.CourierConfig.AllowedPrefixes` | required | Same list as the gateway (`BIRGE_SMS_ALLOWED_PREFIXES`) |
 | `BIRGE_INTERNAL_ADDR` | unset (no hook) | Worker's internal listener for the courier hook |
 | `BIRGE_TIME_ZONE` (`service.NewActiveDays` location) | `Asia/Almaty` | Zone whose calendar day defines `membership.MemberActiveDay` |
-| `adapter.Postgres.SeedReferenceIfEmpty` | — | `birge migrate` seeds DEMO cities/districts/needs from `presets/demo/reference.json` only when those tables are empty |
+| `BIRGE_REFERENCE_PRESETS` (migrate; `adapter.Postgres.SyncReference`) | `demo,kz` | Reference sets (`presets/<name>/reference.json`) `birge migrate` syncs into cities, districts and needs: see Reference data below |
 | see `docs/development.md` § Configuration | | all variables, defaults and which subcommand reads them |
+
+## Reference data
+
+Cities, districts and needs come from versioned files in `presets/`: `demo` (the synthetic DEMO city, kept for the demo stand) and `kz` (Kazakhstan as of 2026: the 3 cities of republican significance with their districts, the 17 regional centres with one whole-city entry each, the needs list). Each entry has a code and names in kk, ru and en; the database stores codes only and clients label them from the `reference` locale namespace. Every `birge migrate` runs `adapter.Postgres.SyncReference` with the union of the sets in `BIRGE_REFERENCE_PRESETS`, in one transaction under an advisory lock:
+
+- a missing entry is inserted with a stable ID (`model.CityID`, `model.DistrictID`: UUIDv5 from `model.ReferenceNamespace` and the codes), so every deployment and every reseed gives a code the same ID;
+- an existing entry is matched by code (districts by city and code) and keeps its ID, whatever it is: the demo stand's rows, created by the earlier seed with database IDs, stay the rows its members, rooms, cards and listings refer to;
+- an entry no longer in the sets is deactivated (`active = false`), never deleted; a returning entry is reactivated with its old ID;
+- a repeat with the same files changes nothing.
+
+The files own the reference tables: a row added by hand that is in no selected set is deactivated by the next migrate. District codes carry their city prefix and are unique across all sets, because clients label districts and district rooms by code alone (`district.<code>`, `chat.room.district.<code>`).
+
+A deactivated entry is hidden from `GET /reference/*` and refused as a new choice (`unknown_district`, `unknown_need`). A member keeps her deactivated district (a profile update that resends it is not a new choice) and a child card keeps its deactivated needs on edit. Side effects: the sync creates no chat rooms. The DEMO chat seed runs only on an empty `chat.rooms`, so a fresh database gets a district room for every active district (the Kazakhstan ones included) and an existing stand gets none for new districts; deactivation leaves rooms as they are.
 
 ## Invariants
 
@@ -112,8 +125,10 @@ Kratos courier hook (`authgw.CourierHook`, not in the public contract): `POST /i
 
 ## Tests
 
-- Unit: `service/service_test.go`, `service/deletion_test.go` (tombstone refuses the identity, retries), `service/activity_test.go` (once per day in the deployment zone, cache, store failures never block, replicas, payload against the event schema), `model/model_test.go`, `authgw/authgw_test.go`, `authgw/courier_test.go` (secret, templates, numbers, guard refusal → non-2xx, no code/number/secret in logs), `api/server_test.go` — lazy create, idempotent children/verification/blocks, authgw PoW and rate limits, HTTP mapping.
+- Unit: `service/service_test.go`, `service/reference_test.go` (deactivated district and needs kept by the member, refused as new choices), `service/deletion_test.go` (tombstone refuses the identity, retries), `service/activity_test.go` (once per day in the deployment zone, cache, store failures never block, replicas, payload against the event schema), `model/model_test.go`, `authgw/authgw_test.go`, `authgw/courier_test.go` (secret, templates, numbers, guard refusal → non-2xx, no code/number/secret in logs), `api/server_test.go` — lazy create, idempotent children/verification/blocks, authgw PoW and rate limits, HTTP mapping.
 - Integration: `adapter/postgres_integration_test.go` — PostgreSQL store + outbox with `testinfra.Postgres` (including concurrent replicas recording one active day).
+- Integration: `adapter/reference_integration_test.go` — reference sync: existing IDs kept, stable IDs for new rows, idempotent reseed, deactivation and reactivation, concurrent migrate jobs, refused seeds.
+- Wiring: `internal/wiring/migrate_seed_test.go` — `birge migrate` with the default sets, a second migrate, dropping and restoring the DEMO set with a member on a DEMO district; `presets/reference_test.go` — kk/ru/en names, unique codes and stable IDs across sets, the Kazakhstan division.
 - Wiring: `internal/wiring/moderation_e2e_test.go` — verification approve and suspension after `block_author`; `internal/wiring/courier_test.go` — courier hook through notify's sign-in guard and the log sender.
 
 Suspension (moderation `block_author`) refuses every member route with 403 `member_suspended`, except the crisis and own-data routes (`crisisExempt` in wiring): help request, raising and closing her SOS, the emergency plan, consents and the deletion request (non-negotiable 1). `CrisisMemberID` resolves her for those.

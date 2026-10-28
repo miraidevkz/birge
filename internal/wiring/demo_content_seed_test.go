@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -140,12 +141,12 @@ func TestDemoContentSeedOnce(t *testing.T) {
 func TestDemoContentSkippedWithOwnReference(t *testing.T) {
 	ctx := context.Background()
 	pool := testinfra.Postgres(t)
-	seeded, err := (&membershipadapter.Postgres{Pool: pool}).SeedReferenceIfEmpty(ctx, membershipmodel.ReferenceSeed{
+	res, err := (&membershipadapter.Postgres{Pool: pool}).SyncReference(ctx, membershipmodel.ReferenceSeed{
 		Cities: []membershipmodel.ReferenceCitySeed{{Code: "own_city", Districts: []string{"own_district"}}},
 		Needs:  []string{"autism", "hearing"},
-	})
-	if err != nil || !seeded {
-		t.Fatalf("own reference: seeded=%v err=%v", seeded, err)
+	}, time.Now())
+	if err != nil || res.Inserted != 4 {
+		t.Fatalf("own reference: %+v err=%v", res, err)
 	}
 	cc := pool.Config().ConnConfig
 	url := fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=disable", cc.Host, cc.Port, cc.User, cc.Database)
@@ -175,15 +176,11 @@ func TestDemoContentSkippedWithOwnReference(t *testing.T) {
 func TestDemoContentNeverJoinsExistingRows(t *testing.T) {
 	ctx := context.Background()
 	pool := testinfra.Postgres(t)
-	ref, err := presets.LoadReference()
+	seed, err := referenceSeed([]string{presets.ReferenceDemo})
 	if err != nil {
 		t.Fatal(err)
 	}
-	seed := membershipmodel.ReferenceSeed{Needs: ref.Needs}
-	for _, c := range ref.Cities {
-		seed.Cities = append(seed.Cities, membershipmodel.ReferenceCitySeed{Code: c.Code, Districts: c.Districts})
-	}
-	if _, err := (&membershipadapter.Postgres{Pool: pool}).SeedReferenceIfEmpty(ctx, seed); err != nil {
+	if _, err := (&membershipadapter.Postgres{Pool: pool}).SyncReference(ctx, seed, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	var district uuid.UUID

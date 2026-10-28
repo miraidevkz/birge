@@ -83,7 +83,10 @@ type state struct {
 	districts     map[uuid.UUID]uuid.UUID // district -> city
 	cities        []model.City
 	needs         []string
-	activeDays    map[uuid.UUID]time.Time // member -> last active day
+	// Deactivated by the reference sync: hidden from new choices only.
+	inactiveDistricts map[uuid.UUID]bool
+	inactiveNeeds     []string
+	activeDays        map[uuid.UUID]time.Time // member -> last active day
 }
 
 func (s state) clone() state {
@@ -566,18 +569,18 @@ func (t *fakeTx) ListStaffMembers(_ context.Context, f port.StaffMemberListFilte
 	return out, nil
 }
 
-func (t *fakeTx) DistrictExists(_ context.Context, id uuid.UUID) (bool, error) {
-	if err := t.check("DistrictExists"); err != nil {
+func (t *fakeTx) DistrictSelectable(_ context.Context, id uuid.UUID) (bool, error) {
+	if err := t.check("DistrictSelectable"); err != nil {
 		return false, err
 	}
 	_, ok := t.f.st.districts[id]
-	return ok, nil
+	return ok && !t.f.st.inactiveDistricts[id], nil
 }
 
-func (t *fakeTx) CountKnownNeeds(_ context.Context, codes []string) (int, error) {
+func (t *fakeTx) CountSelectableNeeds(_ context.Context, codes []string) (int, error) {
 	n := 0
 	for _, c := range codes {
-		if slices.Contains(t.f.st.needs, c) {
+		if slices.Contains(t.f.st.needs, c) && !slices.Contains(t.f.st.inactiveNeeds, c) {
 			n++
 		}
 	}

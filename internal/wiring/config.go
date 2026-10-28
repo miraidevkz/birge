@@ -162,6 +162,10 @@ type Config struct {
 	CriticalSMSAfter time.Duration
 	DeliveryMode     string
 	ApplyRoles       bool
+	// ReferencePresets names the reference sets (presets/<name>/reference.json)
+	// migrate syncs into the membership reference tables
+	// (BIRGE_REFERENCE_PRESETS; default presets.DefaultReferenceSets).
+	ReferencePresets []string
 
 	// Delivery providers (worker). PushProviders is [log] or a subset of
 	// fcm and apns; SMSProvider is log or smsc. The credentials below are
@@ -260,6 +264,7 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 	cfg.DatabaseURL = l.databaseURL("DATABASE_URL")
 	cfg.ApplyRoles = l.flag("BIRGE_APPLY_ROLES")
 	if cmd == CommandMigrate {
+		cfg.ReferencePresets = l.referencePresets("BIRGE_REFERENCE_PRESETS")
 		return cfg, l.result()
 	}
 	if cmd == CommandKBReindex {
@@ -1222,6 +1227,24 @@ func (l *loader) roleMap(name string) map[string]string {
 }
 
 // list parses a comma-separated list, dropping empty items.
+// referencePresets reads a comma-separated list of reference set names. Unset
+// means presets.DefaultReferenceSets; an unknown or repeated name fails.
+func (l *loader) referencePresets(name string) []string {
+	names := l.list(name)
+	if len(names) == 0 {
+		return slices.Clone(presets.DefaultReferenceSets)
+	}
+	seen := map[string]bool{}
+	for _, n := range names {
+		if !slices.Contains(presets.ReferenceSets, n) || seen[n] {
+			l.fail(fmt.Sprintf("%s: unknown or repeated reference set (known: %s)", name, strings.Join(presets.ReferenceSets, ", ")))
+			return nil
+		}
+		seen[n] = true
+	}
+	return names
+}
+
 func (l *loader) list(name string) []string {
 	var out []string
 	for _, s := range strings.Split(l.getenv(name), ",") {

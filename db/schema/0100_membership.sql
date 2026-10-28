@@ -5,10 +5,15 @@
 CREATE SCHEMA IF NOT EXISTS membership;
 
 -- Reference data of the deployment. Codes are locale keys; labels live in the
--- client locale files.
+-- client locale files. `birge migrate` syncs these tables with the reference
+-- presets (presets/<name>/reference.json): rows are never deleted, because
+-- members, rooms and other contexts keep their IDs. An entry removed from the
+-- presets is deactivated: hidden from new choices, kept by members who chose
+-- it before.
 CREATE TABLE membership.cities (
     id         uuid        PRIMARY KEY DEFAULT uuidv7(),
     code       text        NOT NULL UNIQUE CHECK (code ~ '^[a-z_]{2,40}$'),
+    active     boolean     NOT NULL DEFAULT true,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -17,6 +22,7 @@ CREATE TABLE membership.districts (
     id         uuid        PRIMARY KEY DEFAULT uuidv7(),
     city_id    uuid        NOT NULL REFERENCES membership.cities (id),
     code       text        NOT NULL CHECK (code ~ '^[a-z_]{2,40}$'),
+    active     boolean     NOT NULL DEFAULT true,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (city_id, code)
@@ -24,6 +30,7 @@ CREATE TABLE membership.districts (
 
 CREATE TABLE membership.needs (
     code       text        PRIMARY KEY CHECK (code ~ '^[a-z_]{2,40}$'),
+    active     boolean     NOT NULL DEFAULT true,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );

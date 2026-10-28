@@ -1,16 +1,25 @@
 // Package presets embeds the DEMO configuration and reference data used when a
 // deployment variable is unset, so a fresh binary starts without silent empty
-// configuration. Every preset is marked DEMO or EXAMPLE in its file; wiring
-// logs event=DemoPreset at Warn for each one in use. A real deployment must
-// replace all of them (crisis lexicon and questionnaire thresholds come from
-// the psychologist). Keys and secrets are never presets.
+// configuration. Every DEMO preset is marked DEMO or EXAMPLE in its file;
+// wiring logs event=DemoPreset at Warn for each one in use. A real deployment
+// must replace all of them (crisis lexicon and questionnaire thresholds come
+// from the psychologist). Keys and secrets are never presets.
+//
+// Reference data (cities, districts, needs) is the exception: besides the
+// DEMO set (demo/reference.json) the package carries real, versioned sets per
+// pilot country (kz/reference.json). `birge migrate` syncs the database with
+// the sets a deployment selects (BIRGE_REFERENCE_PRESETS); see LoadReference.
 package presets
 
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
+	"regexp"
+	"slices"
+	"strings"
 
 	"birge/internal/platform/config"
 )
@@ -30,7 +39,7 @@ const (
 	NameAnalyticsK      = "analytics_k"
 )
 
-//go:embed demo
+//go:embed demo kz
 var demoFS embed.FS
 
 // CrisisLexicon returns an fs.FS whose root holds the DEMO crisis lexicon
@@ -109,37 +118,133 @@ func LoadSettings() (Settings, error) {
 	return raw, nil
 }
 
-// City is a DEMO city with district codes (no UUIDs; assigned on seed).
+// Reference set names (directories under presets/ holding reference.json).
+const (
+	// ReferenceDemo is the synthetic DEMO city with its districts and needs.
+	ReferenceDemo = "demo"
+	// ReferenceKZ is Kazakhstan: the cities of republican significance and the
+	// regional centres, the districts of Almaty, Astana and Shymkent.
+	ReferenceKZ = "kz"
+)
+
+// ReferenceSets lists the reference sets this binary carries.
+var ReferenceSets = []string{ReferenceDemo, ReferenceKZ}
+
+// DefaultReferenceSets is what migrate syncs when BIRGE_REFERENCE_PRESETS is
+// unset: the DEMO set keeps a demo stand (and its members, rooms, cards and
+// listings) working, and the pilot country is offered next to it.
+var DefaultReferenceSets = []string{ReferenceDemo, ReferenceKZ}
+
+// ReferenceLangs are the languages every reference name must have.
+var ReferenceLangs = []string{"kk", "ru", "en"}
+
+var referenceCodeRe = regexp.MustCompile(`^[a-z_]{2,40}$`)
+
+// ReferenceEntry is one district or need: a stable code (the locale key and
+// the source of its stable ID) and its names in kk, ru and en. The names are
+// the reviewed source for the client locale files (namespace reference); the
+// database stores codes only.
+type ReferenceEntry struct {
+	Code  string            `json:"code"`
+	Names map[string]string `json:"names"`
+}
+
+// City is a city with its districts.
 type City struct {
-	Code      string   `json:"code"`
-	Districts []string `json:"districts"`
+	Code      string            `json:"code"`
+	Names     map[string]string `json:"names"`
+	Districts []ReferenceEntry  `json:"districts"`
 }
 
-// Reference is the DEMO membership reference data (cities, districts, needs).
+// Reference is one reference set (cities, districts, needs).
 type Reference struct {
-	Cities []City   `json:"cities"`
-	Needs  []string `json:"needs"`
+	Cities []City           `json:"cities"`
+	Needs  []ReferenceEntry `json:"needs"`
 }
 
-// LoadReference reads the DEMO city/district/needs codes.
-func LoadReference() (Reference, error) {
-	b, err := demoFS.ReadFile("demo/reference.json")
+// DistrictCodes returns every district code of the set, city by city.
+func (r Reference) DistrictCodes() []string {
+	var out []string
+	for _, c := range r.Cities {
+		for _, d := range c.Districts {
+			out = append(out, d.Code)
+		}
+	}
+	return out
+}
+
+// NeedCodes returns the needs codes of the set.
+func (r Reference) NeedCodes() []string {
+	out := make([]string, 0, len(r.Needs))
+	for _, n := range r.Needs {
+		out = append(out, n.Code)
+	}
+	return out
+}
+
+// LoadReference reads and validates the reference set name (one of
+// ReferenceSets): valid and unique codes (district codes unique across the
+// set's cities, because clients label them by code alone), every city with at
+// least one district, and a non-empty name in every ReferenceLangs language
+// for every entry.
+func LoadReference(name string) (Reference, error) {
+	if !slices.Contains(ReferenceSets, name) {
+		return Reference{}, fmt.Errorf("presets: reference: unknown set %q", name)
+	}
+	b, err := demoFS.ReadFile(name + "/reference.json")
 	if err != nil {
-		return Reference{}, fmt.Errorf("presets: reference: %w", err)
+		return Reference{}, fmt.Errorf("presets: reference %s: %w", name, err)
 	}
 	var raw Reference
 	if err := json.Unmarshal(b, &raw); err != nil {
-		return Reference{}, fmt.Errorf("presets: reference: %w", err)
+		return Reference{}, fmt.Errorf("presets: reference %s: %w", name, err)
 	}
-	if len(raw.Cities) == 0 || len(raw.Needs) == 0 {
-		return Reference{}, fmt.Errorf("presets: reference: cities and needs required")
-	}
-	for _, c := range raw.Cities {
-		if c.Code == "" || len(c.Districts) == 0 {
-			return Reference{}, fmt.Errorf("presets: reference: each city needs a code and districts")
-		}
+	if err := raw.validate(); err != nil {
+		return Reference{}, fmt.Errorf("presets: reference %s: %w", name, err)
 	}
 	return raw, nil
+}
+
+func (r Reference) validate() error {
+	if len(r.Cities) == 0 || len(r.Needs) == 0 {
+		return errors.New("cities and needs required")
+	}
+	cities, districts, needs := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for _, c := range r.Cities {
+		if err := checkEntry("city", c.Code, c.Names, cities); err != nil {
+			return err
+		}
+		if len(c.Districts) == 0 {
+			return fmt.Errorf("city %s needs districts", c.Code)
+		}
+		for _, d := range c.Districts {
+			if err := checkEntry("district", d.Code, d.Names, districts); err != nil {
+				return err
+			}
+		}
+	}
+	for _, n := range r.Needs {
+		if err := checkEntry("need", n.Code, n.Names, needs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkEntry(kind, code string, names map[string]string, seen map[string]bool) error {
+	if !referenceCodeRe.MatchString(code) {
+		return fmt.Errorf("%s %q: invalid code", kind, code)
+	}
+	if seen[code] {
+		return fmt.Errorf("%s %s: duplicate code", kind, code)
+	}
+	seen[code] = true
+	for _, lang := range ReferenceLangs {
+		if strings.TrimSpace(names[lang]) == "" {
+			return fmt.Errorf("%s %s: missing %s name", kind, code, lang)
+		}
+	}
+	return nil
 }
 
 // KnowledgeTopic is a DEMO knowledge topic (no UUIDs; assigned on seed).

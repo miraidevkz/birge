@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,8 +60,10 @@ func (s *Service) UpdateMe(ctx context.Context, u model.ProfileUpdate) (model.Me
 	}
 	return s.withMe(ctx, func(tx port.Tx, me port.MemberRecord, now time.Time) (port.MemberRecord, error) {
 		patch := port.ProfilePatch{Lang: u.Lang, DistrictID: u.DistrictID}
-		if u.DistrictID != nil {
-			ok, err := tx.DistrictExists(ctx, *u.DistrictID)
+		// A member keeps a district that was deactivated after she chose it
+		// (reference sync): resending her current district is not a new choice.
+		if u.DistrictID != nil && (me.DistrictID == nil || *me.DistrictID != *u.DistrictID) {
+			ok, err := tx.DistrictSelectable(ctx, *u.DistrictID)
 			if err != nil {
 				return me, err
 			}
@@ -106,7 +109,7 @@ func (s *Service) AddChild(ctx context.Context, key uuid.UUID, in model.ChildInp
 		if !errors.Is(err, model.ErrChildNotFound) {
 			return err
 		}
-		if err := checkNeeds(ctx, tx, in.Needs); err != nil {
+		if err := checkNeeds(ctx, tx, in.Needs, nil); err != nil {
 			return err
 		}
 		n, err := tx.CountChildren(ctx, me.ID)
@@ -130,7 +133,11 @@ func (s *Service) UpdateChild(ctx context.Context, childID uuid.UUID, in model.C
 	}
 	var child model.Child
 	err = s.inMyTx(ctx, func(tx port.Tx, me port.MemberRecord, now time.Time) error {
-		if err := checkNeeds(ctx, tx, in.Needs); err != nil {
+		kept, err := childNeeds(ctx, tx, me.ID, childID)
+		if err != nil {
+			return err
+		}
+		if err := checkNeeds(ctx, tx, in.Needs, kept); err != nil {
 			return err
 		}
 		c, err := tx.UpdateChild(ctx, me.ID, childID, in, now)
@@ -408,18 +415,42 @@ func (s *Service) open(ctx context.Context, memberID uuid.UUID, sealed []byte) (
 	return string(plain), nil
 }
 
-func checkNeeds(ctx context.Context, tx port.Tx, needs []string) error {
-	if len(needs) == 0 {
+// checkNeeds accepts active needs codes and the codes in kept: the child's
+// current needs, which stay valid after the reference sync deactivated them,
+// so editing a birth year never forces a mother to drop a need.
+func checkNeeds(ctx context.Context, tx port.Tx, needs, kept []string) error {
+	var fresh []string
+	for _, n := range needs {
+		if !slices.Contains(kept, n) {
+			fresh = append(fresh, n)
+		}
+	}
+	if len(fresh) == 0 {
 		return nil
 	}
-	n, err := tx.CountKnownNeeds(ctx, needs)
+	n, err := tx.CountSelectableNeeds(ctx, fresh)
 	if err != nil {
 		return err
 	}
-	if n != len(needs) {
+	if n != len(fresh) {
 		return model.ErrUnknownNeed
 	}
 	return nil
+}
+
+// childNeeds returns the current needs of the member's child, or nil when
+// she has no such child (UpdateChild then reports not found).
+func childNeeds(ctx context.Context, tx port.Tx, memberID, childID uuid.UUID) ([]string, error) {
+	children, err := tx.Children(ctx, memberID)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range children {
+		if c.ID == childID {
+			return c.Needs, nil
+		}
+	}
+	return nil, nil
 }
 
 func identityOf(ctx context.Context) (uuid.UUID, error) {

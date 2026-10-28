@@ -39,7 +39,7 @@ const demoListingTTL = 365 * 24 * time.Hour
 // data: then no DEMO content is seeded, because it would describe districts
 // and needs the deployment does not have.
 func demoDistricts(ctx context.Context, pool *membershipadapter.Postgres) (districts map[string]uuid.UUID, ok bool, err error) {
-	ref, err := presets.LoadReference()
+	ref, err := presets.LoadReference(presets.ReferenceDemo)
 	if err != nil {
 		return nil, false, err
 	}
@@ -69,19 +69,19 @@ func demoDistricts(ctx context.Context, pool *membershipadapter.Postgres) (distr
 		if !found {
 			return nil, false, nil
 		}
-		for _, code := range c.Districts {
-			id, found := ds[code]
+		for _, d := range c.Districts {
+			id, found := ds[d.Code]
 			if !found {
 				return nil, false, nil
 			}
-			districts[code] = id
+			districts[d.Code] = id
 		}
 	}
 	known := map[string]bool{}
 	for _, n := range needs {
 		known[n] = true
 	}
-	for _, n := range ref.Needs {
+	for _, n := range ref.NeedCodes() {
 		if !known[n] {
 			return nil, false, nil
 		}

@@ -86,3 +86,14 @@ Keys: all of `help.*` and `sos.*`; `chat.room.held`, `chat.room.crisisAction`; `
 - `profile.verification.why` «убедится, что вы мама из нашего сообщества» may sound like suspicion; «познакомится с вами» could be gentler but changes what the call is for.
 - Moderation and report wording (`chat.room.report*`, `chat.room.reasons.*`) and the staff console (`admin.*`, apart from two error texts) are for staff or describe someone else's behaviour; kept.
 - Crisis lexicon and fixed crisis replies in `presets/demo/crisis/` and SMS texts in `presets/demo/sms_texts.json` are outside the locale files and were not audited.
+
+## Reference names for Kazakhstan (native review needed)
+
+File: `presets/kz/reference.json` (cities, districts and needs in kk, ru and en; added with the pilot-country reference data). Please check every Kazakh name against the official orthography; the ru and en columns follow official usage where we knew it. Codes must not change after review: only the names. The client locale files (`reference` namespace) take their labels from this file.
+
+Points we are least sure of:
+- Whole-city entries of the 17 regional centres: «<Қала> (бүкіл қала)» / «<Город> (весь город)» / "<City> (whole city)", for example «Қостанай (бүкіл қала)». A product choice so that a mother in a regional centre can choose her city; the wording is ours.
+- Astana districts in Russian follow the akimat style «район Алматы», «район Байконыр», «район Есиль», «район Нура», «район Сарыарка», «район Сарайшык» rather than adjectives (an adjective «Алматинский район» in Astana would read as Almaty city). Kazakh: «Алматы ауданы», «Байқоңыр ауданы», «Есіл ауданы», «Нұра ауданы», «Сарыарқа ауданы», «Сарайшық ауданы».
+- English transliterations: "Baikonyr", "Yesil", "Sarayshyk", "Al-Farabi", "Enbekshi", "Konaev", "Oskemen", "Oral", "Petropavl", "Semey". The Russian names keep the official Russian forms «Усть-Каменогорск», «Уральск», «Петропавловск».
+- Almaty districts in Kazakh: «Әуезов ауданы», «Бостандық ауданы», «Жетісу ауданы», «Түрксіб ауданы»; Shymkent: «Әл-Фараби ауданы», «Еңбекші ауданы», «Қаратау ауданы», «Тұран ауданы».
+- Needs: «Аутизм», «Есту» (as in the current locale files).

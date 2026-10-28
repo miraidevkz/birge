@@ -155,13 +155,14 @@ type Tx interface {
 	// IsBlocked reports a block between a and b in either direction.
 	IsBlocked(ctx context.Context, a, b uuid.UUID) (bool, error)
 
-	// DistrictExists reports whether id is a known district.
-	DistrictExists(ctx context.Context, id uuid.UUID) (bool, error)
-	// CountKnownNeeds returns how many of the distinct codes exist in the reference.
-	CountKnownNeeds(ctx context.Context, codes []string) (int, error)
-	// Cities returns the deployment's cities with their districts.
+	// DistrictSelectable reports whether id is an active district of an
+	// active city, i.e. one a member may choose now.
+	DistrictSelectable(ctx context.Context, id uuid.UUID) (bool, error)
+	// CountSelectableNeeds returns how many of the distinct codes are active needs.
+	CountSelectableNeeds(ctx context.Context, codes []string) (int, error)
+	// Cities returns the deployment's active cities with their active districts.
 	Cities(ctx context.Context) ([]model.City, error)
-	// Needs returns the deployment's needs codes.
+	// Needs returns the deployment's active needs codes.
 	Needs(ctx context.Context) ([]string, error)
 
 	// Publish stores e in the platform outbox in this transaction.

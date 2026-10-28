@@ -1,10 +1,57 @@
 {
-  "_comment": "DEMO only — synthetic city, districts and needs codes for a fresh deployment. Labels live in locale files. Replace with real reference data for production; migrate never overwrites existing rows.",
+  "_comment": "DEMO only: a synthetic city with districts and the needs list for a demo stand. Codes are locale keys and must never change (the stand's members, rooms, cards and listings refer to these rows); names mirror packages/i18n reference.json. birge migrate syncs the database with the selected sets (BIRGE_REFERENCE_PRESETS) and deactivates, never deletes, an entry removed here.",
   "cities": [
     {
       "code": "demo_city",
-      "districts": ["demo_district_a", "demo_district_b", "demo_district_c"]
+      "names": {
+        "kk": "Демо қала",
+        "ru": "Демо-город",
+        "en": "Demo city"
+      },
+      "districts": [
+        {
+          "code": "demo_district_a",
+          "names": {
+            "kk": "Демо аудан А",
+            "ru": "Демо-район А",
+            "en": "Demo district A"
+          }
+        },
+        {
+          "code": "demo_district_b",
+          "names": {
+            "kk": "Демо аудан Б",
+            "ru": "Демо-район Б",
+            "en": "Demo district B"
+          }
+        },
+        {
+          "code": "demo_district_c",
+          "names": {
+            "kk": "Демо аудан В",
+            "ru": "Демо-район В",
+            "en": "Demo district C"
+          }
+        }
+      ]
     }
   ],
-  "needs": ["autism", "hearing"]
+  "needs": [
+    {
+      "code": "autism",
+      "names": {
+        "kk": "Аутизм",
+        "ru": "Аутизм",
+        "en": "Autism"
+      }
+    },
+    {
+      "code": "hearing",
+      "names": {
+        "kk": "Есту",
+        "ru": "Слух",
+        "en": "Hearing"
+      }
+    }
+  ]
 }

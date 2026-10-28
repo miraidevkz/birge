@@ -1,0 +1,511 @@
+{
+  "_comment": "Kazakhstan reference data as of 2026: the 3 cities of republican significance with their official districts (Astana 6 incl. Nura 2023 and Sarayshyk 2025; Almaty 8; Shymkent 5 incl. Turan 2022) and the centres of the 17 regions, each with one whole-city entry so a member there can choose her city. Codes are locale keys and the source of stable IDs (UUIDv5): never change or reuse a code. Removing an entry deactivates it on the next birge migrate (members keep it); it is never deleted. Kazakh names await native review (docs/content-review-2026-10.md). Needs: the same list as the DEMO set.",
+  "cities": [
+    {
+      "code": "astana",
+      "names": {
+        "kk": "Астана",
+        "ru": "Астана",
+        "en": "Astana"
+      },
+      "districts": [
+        {
+          "code": "astana_almaty",
+          "names": {
+            "kk": "Алматы ауданы",
+            "ru": "район Алматы",
+            "en": "Almaty District"
+          }
+        },
+        {
+          "code": "astana_baikonyr",
+          "names": {
+            "kk": "Байқоңыр ауданы",
+            "ru": "район Байконыр",
+            "en": "Baikonyr District"
+          }
+        },
+        {
+          "code": "astana_yesil",
+          "names": {
+            "kk": "Есіл ауданы",
+            "ru": "район Есиль",
+            "en": "Yesil District"
+          }
+        },
+        {
+          "code": "astana_nura",
+          "names": {
+            "kk": "Нұра ауданы",
+            "ru": "район Нура",
+            "en": "Nura District"
+          }
+        },
+        {
+          "code": "astana_saryarka",
+          "names": {
+            "kk": "Сарыарқа ауданы",
+            "ru": "район Сарыарка",
+            "en": "Saryarka District"
+          }
+        },
+        {
+          "code": "astana_sarayshyk",
+          "names": {
+            "kk": "Сарайшық ауданы",
+            "ru": "район Сарайшык",
+            "en": "Sarayshyk District"
+          }
+        }
+      ]
+    },
+    {
+      "code": "almaty",
+      "names": {
+        "kk": "Алматы",
+        "ru": "Алматы",
+        "en": "Almaty"
+      },
+      "districts": [
+        {
+          "code": "almaty_alatau",
+          "names": {
+            "kk": "Алатау ауданы",
+            "ru": "Алатауский район",
+            "en": "Alatau District"
+          }
+        },
+        {
+          "code": "almaty_almaly",
+          "names": {
+            "kk": "Алмалы ауданы",
+            "ru": "Алмалинский район",
+            "en": "Almaly District"
+          }
+        },
+        {
+          "code": "almaty_auezov",
+          "names": {
+            "kk": "Әуезов ауданы",
+            "ru": "Ауэзовский район",
+            "en": "Auezov District"
+          }
+        },
+        {
+          "code": "almaty_bostandyk",
+          "names": {
+            "kk": "Бостандық ауданы",
+            "ru": "Бостандыкский район",
+            "en": "Bostandyk District"
+          }
+        },
+        {
+          "code": "almaty_zhetysu",
+          "names": {
+            "kk": "Жетісу ауданы",
+            "ru": "Жетысуский район",
+            "en": "Zhetysu District"
+          }
+        },
+        {
+          "code": "almaty_medeu",
+          "names": {
+            "kk": "Медеу ауданы",
+            "ru": "Медеуский район",
+            "en": "Medeu District"
+          }
+        },
+        {
+          "code": "almaty_nauryzbay",
+          "names": {
+            "kk": "Наурызбай ауданы",
+            "ru": "Наурызбайский район",
+            "en": "Nauryzbay District"
+          }
+        },
+        {
+          "code": "almaty_turksib",
+          "names": {
+            "kk": "Түрксіб ауданы",
+            "ru": "Турксибский район",
+            "en": "Turksib District"
+          }
+        }
+      ]
+    },
+    {
+      "code": "shymkent",
+      "names": {
+        "kk": "Шымкент",
+        "ru": "Шымкент",
+        "en": "Shymkent"
+      },
+      "districts": [
+        {
+          "code": "shymkent_abay",
+          "names": {
+            "kk": "Абай ауданы",
+            "ru": "Абайский район",
+            "en": "Abay District"
+          }
+        },
+        {
+          "code": "shymkent_al_farabi",
+          "names": {
+            "kk": "Әл-Фараби ауданы",
+            "ru": "Аль-Фарабийский район",
+            "en": "Al-Farabi District"
+          }
+        },
+        {
+          "code": "shymkent_enbekshi",
+          "names": {
+            "kk": "Еңбекші ауданы",
+            "ru": "Енбекшинский район",
+            "en": "Enbekshi District"
+          }
+        },
+        {
+          "code": "shymkent_karatau",
+          "names": {
+            "kk": "Қаратау ауданы",
+            "ru": "Каратауский район",
+            "en": "Karatau District"
+          }
+        },
+        {
+          "code": "shymkent_turan",
+          "names": {
+            "kk": "Тұран ауданы",
+            "ru": "Туранский район",
+            "en": "Turan District"
+          }
+        }
+      ]
+    },
+    {
+      "code": "kokshetau",
+      "names": {
+        "kk": "Көкшетау",
+        "ru": "Кокшетау",
+        "en": "Kokshetau"
+      },
+      "districts": [
+        {
+          "code": "kokshetau_city",
+          "names": {
+            "kk": "Көкшетау (бүкіл қала)",
+            "ru": "Кокшетау (весь город)",
+            "en": "Kokshetau (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "aktobe",
+      "names": {
+        "kk": "Ақтөбе",
+        "ru": "Актобе",
+        "en": "Aktobe"
+      },
+      "districts": [
+        {
+          "code": "aktobe_city",
+          "names": {
+            "kk": "Ақтөбе (бүкіл қала)",
+            "ru": "Актобе (весь город)",
+            "en": "Aktobe (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "konaev",
+      "names": {
+        "kk": "Қонаев",
+        "ru": "Конаев",
+        "en": "Konaev"
+      },
+      "districts": [
+        {
+          "code": "konaev_city",
+          "names": {
+            "kk": "Қонаев (бүкіл қала)",
+            "ru": "Конаев (весь город)",
+            "en": "Konaev (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "atyrau",
+      "names": {
+        "kk": "Атырау",
+        "ru": "Атырау",
+        "en": "Atyrau"
+      },
+      "districts": [
+        {
+          "code": "atyrau_city",
+          "names": {
+            "kk": "Атырау (бүкіл қала)",
+            "ru": "Атырау (весь город)",
+            "en": "Atyrau (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "oral",
+      "names": {
+        "kk": "Орал",
+        "ru": "Уральск",
+        "en": "Oral"
+      },
+      "districts": [
+        {
+          "code": "oral_city",
+          "names": {
+            "kk": "Орал (бүкіл қала)",
+            "ru": "Уральск (весь город)",
+            "en": "Oral (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "taraz",
+      "names": {
+        "kk": "Тараз",
+        "ru": "Тараз",
+        "en": "Taraz"
+      },
+      "districts": [
+        {
+          "code": "taraz_city",
+          "names": {
+            "kk": "Тараз (бүкіл қала)",
+            "ru": "Тараз (весь город)",
+            "en": "Taraz (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "taldykorgan",
+      "names": {
+        "kk": "Талдықорған",
+        "ru": "Талдыкорган",
+        "en": "Taldykorgan"
+      },
+      "districts": [
+        {
+          "code": "taldykorgan_city",
+          "names": {
+            "kk": "Талдықорған (бүкіл қала)",
+            "ru": "Талдыкорган (весь город)",
+            "en": "Taldykorgan (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "karaganda",
+      "names": {
+        "kk": "Қарағанды",
+        "ru": "Караганда",
+        "en": "Karaganda"
+      },
+      "districts": [
+        {
+          "code": "karaganda_city",
+          "names": {
+            "kk": "Қарағанды (бүкіл қала)",
+            "ru": "Караганда (весь город)",
+            "en": "Karaganda (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "kostanay",
+      "names": {
+        "kk": "Қостанай",
+        "ru": "Костанай",
+        "en": "Kostanay"
+      },
+      "districts": [
+        {
+          "code": "kostanay_city",
+          "names": {
+            "kk": "Қостанай (бүкіл қала)",
+            "ru": "Костанай (весь город)",
+            "en": "Kostanay (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "kyzylorda",
+      "names": {
+        "kk": "Қызылорда",
+        "ru": "Кызылорда",
+        "en": "Kyzylorda"
+      },
+      "districts": [
+        {
+          "code": "kyzylorda_city",
+          "names": {
+            "kk": "Қызылорда (бүкіл қала)",
+            "ru": "Кызылорда (весь город)",
+            "en": "Kyzylorda (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "aktau",
+      "names": {
+        "kk": "Ақтау",
+        "ru": "Актау",
+        "en": "Aktau"
+      },
+      "districts": [
+        {
+          "code": "aktau_city",
+          "names": {
+            "kk": "Ақтау (бүкіл қала)",
+            "ru": "Актау (весь город)",
+            "en": "Aktau (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "pavlodar",
+      "names": {
+        "kk": "Павлодар",
+        "ru": "Павлодар",
+        "en": "Pavlodar"
+      },
+      "districts": [
+        {
+          "code": "pavlodar_city",
+          "names": {
+            "kk": "Павлодар (бүкіл қала)",
+            "ru": "Павлодар (весь город)",
+            "en": "Pavlodar (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "petropavl",
+      "names": {
+        "kk": "Петропавл",
+        "ru": "Петропавловск",
+        "en": "Petropavl"
+      },
+      "districts": [
+        {
+          "code": "petropavl_city",
+          "names": {
+            "kk": "Петропавл (бүкіл қала)",
+            "ru": "Петропавловск (весь город)",
+            "en": "Petropavl (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "turkistan",
+      "names": {
+        "kk": "Түркістан",
+        "ru": "Туркестан",
+        "en": "Turkistan"
+      },
+      "districts": [
+        {
+          "code": "turkistan_city",
+          "names": {
+            "kk": "Түркістан (бүкіл қала)",
+            "ru": "Туркестан (весь город)",
+            "en": "Turkistan (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "semey",
+      "names": {
+        "kk": "Семей",
+        "ru": "Семей",
+        "en": "Semey"
+      },
+      "districts": [
+        {
+          "code": "semey_city",
+          "names": {
+            "kk": "Семей (бүкіл қала)",
+            "ru": "Семей (весь город)",
+            "en": "Semey (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "zhezkazgan",
+      "names": {
+        "kk": "Жезқазған",
+        "ru": "Жезказган",
+        "en": "Zhezkazgan"
+      },
+      "districts": [
+        {
+          "code": "zhezkazgan_city",
+          "names": {
+            "kk": "Жезқазған (бүкіл қала)",
+            "ru": "Жезказган (весь город)",
+            "en": "Zhezkazgan (whole city)"
+          }
+        }
+      ]
+    },
+    {
+      "code": "oskemen",
+      "names": {
+        "kk": "Өскемен",
+        "ru": "Усть-Каменогорск",
+        "en": "Oskemen"
+      },
+      "districts": [
+        {
+          "code": "oskemen_city",
+          "names": {
+            "kk": "Өскемен (бүкіл қала)",
+            "ru": "Усть-Каменогорск (весь город)",
+            "en": "Oskemen (whole city)"
+          }
+        }
+      ]
+    }
+  ],
+  "needs": [
+    {
+      "code": "autism",
+      "names": {
+        "kk": "Аутизм",
+        "ru": "Аутизм",
+        "en": "Autism"
+      }
+    },
+    {
+      "code": "hearing",
+      "names": {
+        "kk": "Есту",
+        "ru": "Слух",
+        "en": "Hearing"
+      }
+    }
+  ]
+}
