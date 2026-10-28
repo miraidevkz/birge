@@ -6,12 +6,12 @@ Phone examples below use the synthetic shape `+70000000000`. Never put real numb
 
 ## Roles at a glance
 
-| Role | Escalations | Duty roster | Moderation queue | Members and rooms | Knowledge | Audit log and metrics |
-| --- | --- | --- | --- | --- | --- | --- |
-| Psychologist | List, take, reveal, close | View; alerts use psychologist / backup phones | No | No | Self-help: draft, review, publish | No |
-| Moderator | Same as psychologist | View | Approve / reject (and verification); legal hold | View members; give / take the mentor role; assign / remove room mentors | No | No |
-| Lawyer | No | No | No | No | Rights: draft, review, publish | No |
-| Admin | Same queue roles as above where granted | Add / cancel shifts | Same as moderator | Same as moderator; lift suspensions | Topics of either kind; review-due for both | Read the log; staff list and cards; pilot metrics and CSV |
+| Role | Escalations | SOS queue | Duty roster | Moderation queue | Members and rooms | Knowledge | Audit log and metrics |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Psychologist | List, take, reveal, close | No | View; alerts use psychologist / backup phones | No | No | Self-help: draft, review, publish | No |
+| Moderator | Same as psychologist | List, seen, close | View | Approve / reject (and verification); legal hold | View members; give / take the mentor role; assign / remove room mentors | No | No |
+| Lawyer | No | No | No | No | No | Rights: draft, review, publish | No |
+| Admin | Same queue roles as above where granted | List, seen, close | Add / cancel shifts | Same as moderator | Same as moderator; lift suspensions | Topics of either kind; review-due for both | Read the log; staff list and cards; pilot metrics and CSV |
 
 The API enforces roles and MFA. If you see “MFA required”, complete the second factor and sign in again. Deny by default: wrong role → 403.
 
@@ -57,6 +57,28 @@ Audited: `escalation.take`, `escalation.reveal_contact`, `escalation.close`.
 - Do not ask the member to leave a child with a neighbour from the app, a stranger, or anyone who is not already a **trusted contact** or a member she has confirmed she **met in person** (AGENTS.md non-negotiable 5).
 - Do not delay taking a case hoping someone else will; the backup SMS is a safety net, not a workflow.
 - Do not use reveal “just to look” without intending to contact.
+
+## SOS requests
+
+Who: **moderator** or **admin**, with MFA. Other roles do not see the **SOS** tab; the server answers them 403.
+
+A member's SOS of a practical kind (no one to leave the child with, an item or medicine, other) lands here. "I feel very bad" is not here: it is an escalation (see above). **You are not the only one who got it.** At the moment she raised it, the SOS went at once to the moderators (critical alert, SMS to the moderator on duty) and to every **confirmed** trusted contact of hers (invited, not yet confirmed contacts get nothing). If she shared it, verified mothers of her district also see it in the district feed and can answer "I can help". A **childcare** SOS ("No one to leave the child with") is never shared to the district: only her trusted contacts and the moderators see it, and the card says so.
+
+1. Open **SOS**. **Open** shows the oldest first; **Closed** the newest first; **Show more** loads the next page. The open list refreshes every 30 seconds while it is on screen and when you come back to the tab. There is no sound: keep the tab open on duty, the SMS alert is the wake-up.
+2. Read the card: kind, her text, first name, district, when it was raised and when it closes by itself (24 hours by default), how many offers of help she has, whether it was shared to the district, and whether a moderator has already marked it seen.
+3. Press **Seen** when you take it into your attention. Only the first "Seen" is kept and shown ("Seen first by …"), so other moderators know someone is on it. Pressing it again changes nothing.
+4. Decide what she needs. Offers of help come from neighbours and trusted contacts; she chooses whom to open a chat with. If the text shows a crisis (she or the child is in danger, she says she cannot cope), treat it as one: follow the escalation path and the emergency numbers, do not wait for the auto-close.
+5. **Close** when the need is met, she has found help, or the request is no longer current (for example a duplicate). The screen asks once more. Closing takes it out of the open queue and out of her district feed, and cancels the automatic close. She does **not** get a notification, so do not close an SOS that is still a live need just to clear the queue. If you do nothing, it closes by itself at the auto-close time.
+
+Every SOS shown to you, every "Seen" and every "Close" is written to the audit log with your staff ID, so the list is not something to open "just to look".
+
+Audited: `emergency_sos.view_staff` (each SOS shown, and repeats), `emergency_sos.seen`, `emergency_sos.close_staff`.
+
+### Never do this with SOS
+
+- Do not suggest leaving a child with anyone except her trusted contacts or a member she has confirmed she met in person (AGENTS.md non-negotiable 5). Do not offer a neighbour from the feed for a childcare SOS.
+- Do not copy her text or name into messengers, email or screenshots outside the product.
+- Do not close an SOS that still needs help to make the queue look tidy.
 
 ## Moderation queue
 
@@ -164,6 +186,7 @@ Shows your subject and roles. Use **Sign out** when you leave a shared machine.
 | Action | Audit meaning |
 | --- | --- |
 | Take / reveal / close escalation | Who took responsibility, who saw contact, outcome |
+| SOS shown / seen / closed by staff | Who saw which SOS, who marked it seen first, who closed it |
 | Duty add / cancel | Who changed on-duty phones and windows |
 | Moderation decision | Approve/reject codes; optional block author / legal hold |
 | Legal hold on a message | Who put or released the hold |

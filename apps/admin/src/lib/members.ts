@@ -1,4 +1,4 @@
-// Staff reads of members and districts shared by the Members and Rooms
+// Staff reads of members and districts shared by the Members, Rooms and SOS
 // screens. Member names live only in the query data: query keys carry the
 // status and district ID, never a name, and nothing here logs.
 import { unwrap, type Schemas } from '@birge/api';

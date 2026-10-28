@@ -8,7 +8,8 @@
     "members": "Members",
     "rooms": "Rooms",
     "audit": "Audit",
-    "metrics": "Metrics"
+    "metrics": "Metrics",
+    "sos": "SOS"
   },
   "signIn": {
     "title": "Staff sign-in",
@@ -603,5 +604,49 @@
       "mean": "Mean",
       "median": "Median"
     }
+  },
+  "sos": {
+    "title": "SOS requests",
+    "intro": "Each request also went to her confirmed trusted contacts when she raised it. Press “Seen” so other moderators know someone is on it, and close it when the need is met or no longer current.",
+    "status": {
+      "label": "Status",
+      "open": "Open",
+      "closed": "Closed"
+    },
+    "emptyOpenTitle": "No open requests right now",
+    "emptyOpenDescription": "A new SOS appears here as soon as a member raises it. The list refreshes every 30 seconds.",
+    "emptyClosedTitle": "No closed requests yet",
+    "emptyClosedDescription": "Requests closed by the member, by a moderator or automatically appear here.",
+    "forbiddenTitle": "Only moderators and admins see SOS",
+    "forbiddenDescription": "SOS requests are open to the moderators and admins of this deployment.",
+    "type": {
+      "childcare": "No one to leave the child with",
+      "item_or_medicine": "Urgently needs an item or medicine",
+      "other": "Other request",
+      "unknown": "Another kind of request"
+    },
+    "childcareOnly": "Goes only to her trusted contacts and the moderators. It is never shared to the district.",
+    "author": "From: {{name}}",
+    "district": "District: {{name}}",
+    "districtUnknown": "District: not in the reference list",
+    "noDistrict": "No district in her profile",
+    "createdAt": "Raised {{time}}",
+    "closesAt": "Closes automatically {{time}}",
+    "closedAt": "Closed {{time}}",
+    "closedNoTime": "Closed",
+    "responses": "Offers of help: {{count}}",
+    "shared": "Shared to her district feed",
+    "notShared": "Not shared to the district",
+    "seenBy": "Seen first by {{name}}, {{time}}",
+    "seenByUnknown": "a moderator",
+    "notSeen": "Not marked as seen yet",
+    "seen": "Seen",
+    "close": "Close",
+    "closeConfirm": {
+      "title": "Close this SOS?",
+      "message": "It leaves the open queue and her district feed, and the automatic close is cancelled. She does not get a notification.",
+      "confirm": "Close SOS"
+    },
+    "gone": "This request is no longer here. The list has been refreshed."
   }
 }

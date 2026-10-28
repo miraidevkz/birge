@@ -71,3 +71,11 @@ export function staffName(id: string, displayName?: string): string {
 export function isAdmin(roles: readonly string[] | undefined): boolean {
   return roles?.includes('admin') ?? false;
 }
+
+/**
+ * canSeeSos reports whether the signed-in roles include moderator or admin,
+ * the roles the SOS queue serves (the tab bar only; the server decides).
+ */
+export function canSeeSos(roles: readonly string[] | undefined): boolean {
+  return roles?.some((r) => r === 'moderator' || r === 'admin') ?? false;
+}

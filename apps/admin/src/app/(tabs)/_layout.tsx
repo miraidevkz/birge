@@ -7,7 +7,7 @@ import { Redirect, Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 
 import { useSession } from '@/lib/session';
-import { isAdmin } from '@/lib/staff';
+import { canSeeSos, isAdmin } from '@/lib/staff';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -35,6 +35,15 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: t('tabs.escalations'), tabBarIcon: icon('alert-circle-outline') }} />
+      {/* Moderators and admins only, like Audit for admins; the server returns 403 to everyone else. */}
+      <Tabs.Screen
+        name="sos"
+        options={{
+          title: t('tabs.sos'),
+          tabBarIcon: icon('hand-left-outline'),
+          href: canSeeSos(profile?.roles) ? undefined : null,
+        }}
+      />
       <Tabs.Screen
         name="moderation"
         options={{ title: t('tabs.moderation'), tabBarIcon: icon('shield-checkmark-outline') }}
