@@ -36,6 +36,17 @@ type EmergencyPlanSend struct {
 	SentAt         time.Time
 }
 
+type EmergencySosLink struct {
+	ID        uuid.UUID
+	TokenHash []byte
+	SosID     uuid.UUID
+	ContactID uuid.UUID
+	OwnerID   uuid.UUID
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	RevokedAt *time.Time
+}
+
 type EmergencySosRequest struct {
 	ID             uuid.UUID
 	MemberID       uuid.UUID

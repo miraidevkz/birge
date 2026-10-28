@@ -5,96 +5,37 @@
 // name. It is crisis-adjacent (the contact may be reading it while helping
 // with the child), so it has no animation (Screen variant "crisis").
 //
-// The token lives only in memory for as long as a retry may need it: it is
-// not stored, not logged and not part of a React Query key (the request is a
-// plain call, not a cached query), so nothing can persist or expose it.
-import { ApiError, unwrap, type Schemas } from '@birge/api';
+// The token is handled by useLinkView: read once from the fragment, kept in
+// memory only for a retry, never stored, logged or used as a query key.
+import { unwrap } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
 import { ErrorState, LoadingState, Screen } from '@birge/ui';
-import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { publicApi } from '@/lib/api';
-import { takePlanToken } from '@/lib/plan-link';
+import { useDocumentTitle, useLinkView } from '@/lib/link-view';
 
 import { SharedPlanCard } from './shared-plan-card';
 
-type SharedPlan = Schemas['SharedPlan'];
-
-type PageState =
-  | { kind: 'loading' }
-  | { kind: 'plan'; plan: SharedPlan }
-  | { kind: 'expired' }
-  | { kind: 'busy' }
-  | { kind: 'offline' };
-
-/**
- * outcome maps a failed request to what the contact sees. Unknown, expired
- * and revoked links all come back as the same 404 (the server cannot tell
- * them apart on purpose), and so does anything else the server refuses.
- * Only a lost connection or a server failure is worth a retry.
- */
-function outcome(err: unknown): PageState {
-  if (err instanceof ApiError) {
-    if (err.status === 429) return { kind: 'busy' };
-    if (err.status >= 500) return { kind: 'offline' };
-    return { kind: 'expired' };
-  }
-  return { kind: 'offline' };
-}
+const viewPlan = (token: string) => unwrap(publicApi.POST('/external/plans/view', { body: { token } }));
 
 /** ExternalPlanScreen reads the link token, fetches the shared plan and shows the child card. */
 export function ExternalPlanScreen() {
   const { t } = useTranslation('emergency');
-  const [state, setState] = useState<PageState>({ kind: 'loading' });
-  const token = useRef<string | null>(null);
-  const taken = useRef(false);
-
-  const load = useCallback(async () => {
-    const value = token.current;
-    if (!value) {
-      setState({ kind: 'expired' });
-      return;
-    }
-    setState({ kind: 'loading' });
-    try {
-      const plan = await unwrap(publicApi.POST('/external/plans/view', { body: { token: value } }));
-      setState({ kind: 'plan', plan });
-    } catch (err) {
-      const next = outcome(err);
-      setState(next);
-      // Only a retry needs the token; otherwise let it go.
-      if (next.kind !== 'offline') token.current = null;
-      return;
-    }
-    token.current = null;
-  }, []);
-
-  useEffect(() => {
-    // Once per page: the fragment is gone after the first read, and a second
-    // effect run (React strict mode) must not turn a good link into "expired".
-    if (taken.current) return;
-    taken.current = true;
-    token.current = takePlanToken();
-    void load();
-  }, [load]);
-
+  const { state, retry } = useLinkView(viewPlan);
   const title = t('external.title');
-  useEffect(() => {
-    // The browser tab shows the same neutral title, not the app's name.
-    if (typeof document !== 'undefined') document.title = title;
-  }, [title]);
+  useDocumentTitle(title);
 
   return (
     <Screen title={title} variant="crisis" testID="external-plan">
       {state.kind === 'loading' ? <LoadingState /> : null}
-      {state.kind === 'plan' ? <SharedPlanCard plan={state.plan} /> : null}
-      {state.kind === 'expired' ? (
+      {state.kind === 'ok' ? <SharedPlanCard plan={state.data} /> : null}
+      {state.kind === 'gone' ? (
         <ErrorState title={t('external.expiredTitle')} description={t('external.expiredDescription')} />
       ) : null}
       {state.kind === 'busy' ? (
         <ErrorState title={t('external.busyTitle')} description={t('external.busyDescription')} />
       ) : null}
-      {state.kind === 'offline' ? <ErrorState onRetry={() => void load()} /> : null}
+      {state.kind === 'offline' ? <ErrorState onRetry={retry} /> : null}
     </Screen>
   );
 }

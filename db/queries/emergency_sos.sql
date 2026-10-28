@@ -184,3 +184,49 @@ WHERE s.status = 'closed'
   )
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT @page_limit;
+
+-- name: InsertSosLink :exec
+INSERT INTO emergency.sos_links (id, token_hash, sos_id, contact_id, owner_id, created_at, expires_at)
+VALUES (@id, @token_hash, @sos_id, @contact_id, @owner_id, @created_at, @expires_at);
+
+-- name: RevokeSosContactLinks :execrows
+UPDATE emergency.sos_links
+SET revoked_at = @revoked_at
+WHERE sos_id = @sos_id
+  AND contact_id = @contact_id
+  AND revoked_at IS NULL;
+
+-- name: GetLiveSosLink :one
+-- One query for every failure (unknown, revoked, expired, SOS closed or past
+-- its auto-close, contact removed, no longer external or confirmed, or not
+-- the author's), so they cannot be told apart by status or by the number of
+-- round trips. The joins re-check at view time what the mint checked: under
+-- READ COMMITTED a mint that read the contact or the SOS before a
+-- concurrent removal or close committed still inserts its link afterwards.
+SELECT l.id, l.sos_id, l.contact_id, l.owner_id, l.created_at, l.expires_at,
+       s.type, s.content, s.status, s.created_at AS sos_created_at, s.closes_at
+FROM emergency.sos_links l
+JOIN emergency.trusted_contacts c ON c.id = l.contact_id
+JOIN emergency.sos_requests s ON s.id = l.sos_id
+WHERE l.token_hash = @token_hash
+  AND l.revoked_at IS NULL
+  AND l.expires_at > @now
+  AND c.removed_at IS NULL
+  AND c.kind = 'external'
+  AND c.status = 'confirmed'
+  AND c.owner_id = l.owner_id
+  AND s.member_id = l.owner_id
+  AND s.status = 'open'
+  AND s.closes_at > @now;
+
+-- name: DeleteExpiredSosLink :execrows
+-- Retention (emergency.SosLinkPurge): only a link that expired before cutoff.
+DELETE FROM emergency.sos_links
+WHERE id = @id
+  AND expires_at <= @cutoff;
+
+-- name: ListOwnerSosLinkIDs :many
+SELECT id FROM emergency.sos_links WHERE owner_id = @owner_id;
+
+-- name: DeleteOwnerSosLinks :execrows
+DELETE FROM emergency.sos_links WHERE owner_id = @owner_id;

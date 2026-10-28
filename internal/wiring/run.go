@@ -389,7 +389,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		},
 		Push:  pushSender,
 		SMS:   smsSender,
-		Links: &PlanSMSLinks{Emergency: emergency, PublicURL: cfg.PublicURL},
+		Links: &EmergencySMSLinks{Emergency: emergency, PublicURL: cfg.PublicURL},
 		Guard: smsGuard(cfg.SMSGuard, limits, "notify", logger),
 		// Same limits, separate counters: sign-in pumping must never use
 		// up what a critical or plan SMS needs (notify SendSignInCode).

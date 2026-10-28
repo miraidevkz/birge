@@ -49,7 +49,8 @@ type Service struct {
 	Push       port.PushSender
 	SMS        port.SMSSender
 	// Links fills the {link} placeholder of an SMS text at send time; nil
-	// skips every SMS whose text has one.
+	// skips every ordinary SMS whose text has one, and sends a critical one
+	// with its text without the link (model.SMSNoLinkSuffix).
 	Links port.SMSLinks
 	Guard *guard.Guard
 	// SignInGuard guards sign-in code SMS (SendSignInCode) with counters of
@@ -522,19 +523,19 @@ func (s *Service) sendSMS(ctx context.Context, notificationID uuid.UUID, mode sm
 	if strings.Contains(text, model.SMSLinkPlaceholder) {
 		// The link is minted only now, after every other check, so a token
 		// exists only in this SMS: never in an event, a table or a log.
-		link, err := s.smsLink(ctx, n)
-		if errors.Is(err, model.ErrNotFound) {
+		var skip bool
+		text, skip, err = s.fillLink(ctx, n, text, lang, critical)
+		if err != nil {
+			// Leave delivery pending so the timer retries with backoff.
+			return fmt.Errorf("link for sms: %w", err)
+		}
+		if skip {
 			_ = s.Store.InTx(ctx, func(tx port.Tx) error {
 				return tx.UpdateDelivery(ctx, deliveryID, model.StatusSkipped, attempts, nil, s.Clock.Now().UTC())
 			})
 			s.log().Info("sms skipped", "event", "ExternalSMSSkipped", "notification_id", notificationID, "reason", "no_link")
 			return nil
 		}
-		if err != nil {
-			// Leave delivery pending so the timer retries with backoff.
-			return fmt.Errorf("link for sms: %w", err)
-		}
-		text = strings.ReplaceAll(text, model.SMSLinkPlaceholder, link)
 	}
 
 	if s.SMS == nil {
@@ -581,14 +582,62 @@ func (s *Service) sendSMS(ctx context.Context, notificationID uuid.UUID, mode sm
 	return nil
 }
 
+// criticalLinkTimeout bounds how long a critical SMS waits for its link:
+// past it the SMS goes out without the link rather than later.
+const criticalLinkTimeout = 5 * time.Second
+
+// fillLink puts the link into text. For an ordinary SMS, no link
+// (model.ErrNotFound) means skip, and a transient failure is returned so
+// the timer retries. A critical SMS is never skipped or retried for its
+// link (crisis path, AGENTS.md N1): on any failure, or after
+// criticalLinkTimeout, it takes the template's text without the link
+// (noLinkText) and goes out now. The link is never logged.
+func (s *Service) fillLink(ctx context.Context, n model.Notification, text, lang string, critical bool) (filled string, skip bool, err error) {
+	if !critical {
+		link, err := s.smsLink(ctx, n)
+		if errors.Is(err, model.ErrNotFound) {
+			return "", true, nil
+		}
+		if err != nil {
+			return "", false, err
+		}
+		return strings.ReplaceAll(text, model.SMSLinkPlaceholder, link), false, nil
+	}
+	linkCtx, cancel := context.WithTimeout(ctx, criticalLinkTimeout)
+	defer cancel()
+	link, err := s.smsLink(linkCtx, n)
+	if err == nil && link != "" {
+		return strings.ReplaceAll(text, model.SMSLinkPlaceholder, link), false, nil
+	}
+	reason := "no_link"
+	if err != nil && !errors.Is(err, model.ErrNotFound) {
+		reason = "link_error"
+		s.log().Error("sms link failed, sending without it", "event", "CriticalSMSLinkFailed", "notification_id", n.ID, "error", err)
+	}
+	s.log().Info("critical sms without link", "event", "CriticalSMSNoLink", "notification_id", n.ID, "reason", reason)
+	return s.noLinkText(n.Template, lang, text), false, nil
+}
+
+// noLinkText is the template's variant without the link
+// (template + model.SMSNoLinkSuffix) in lang, with the same language
+// fallback as smsText. A variant that still has the placeholder, or none
+// at all, falls back to text with the placeholder cut out: a critical SMS
+// must go out even when the configuration forgot the variant.
+func (s *Service) noLinkText(template, lang, text string) string {
+	if t := s.smsText(template+model.SMSNoLinkSuffix, lang); t != "" && !strings.Contains(t, model.SMSLinkPlaceholder) {
+		return t
+	}
+	s.log().Warn("sms text without link not configured", "event", "SMSNoLinkTextMissing", "template", template)
+	return strings.TrimSpace(strings.ReplaceAll(text, model.SMSLinkPlaceholder, ""))
+}
+
 // smsLink asks the SMSLinks port for the link of this notification;
-// without the port no link can be made (model.ErrNotFound: the SMS is
-// skipped rather than sent with a dead placeholder).
+// without the port no link can be made (model.ErrNotFound).
 func (s *Service) smsLink(ctx context.Context, n model.Notification) (string, error) {
 	if s.Links == nil {
 		return "", model.ErrNotFound
 	}
-	return s.Links.LinkFor(ctx, n.Template, n.RecipientKind, n.RecipientRef)
+	return s.Links.LinkFor(ctx, n.Template, n.RecipientKind, n.RecipientRef, n.Params)
 }
 
 func (s *Service) smsText(template, lang string) string {

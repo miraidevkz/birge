@@ -35,6 +35,8 @@ type state struct {
 	sends     map[uuid.UUID]model.PlanSend
 	links     map[uuid.UUID]model.PlanLink
 	purges    map[uuid.UUID]Timer
+	sosLinks  map[uuid.UUID]model.SosLink
+	sosPurges map[uuid.UUID]Timer
 	events    []model.Event
 	timers    map[uuid.UUID]Timer
 	audit     []model.AuditEntry
@@ -49,6 +51,8 @@ func (s *state) clone() *state {
 		sends:     maps.Clone(s.sends),
 		links:     maps.Clone(s.links),
 		purges:    maps.Clone(s.purges),
+		sosLinks:  maps.Clone(s.sosLinks),
+		sosPurges: maps.Clone(s.sosPurges),
 		events:    slices.Clone(s.events),
 		timers:    maps.Clone(s.timers),
 		audit:     slices.Clone(s.audit),
@@ -64,6 +68,9 @@ type MemoryStore struct {
 	// Publish: "Publish:<event type>"); a non-nil result is returned by that
 	// method (to test rollbacks).
 	FailOn func(method string) error
+	// Now is the clock RecentStaffSosViews measures audit entries against
+	// (in PostgreSQL, the database clock); nil uses time.Now.
+	Now func() time.Time
 }
 
 // NewMemoryStore returns an empty MemoryStore.
@@ -76,6 +83,8 @@ func NewMemoryStore() *MemoryStore {
 		sends:     map[uuid.UUID]model.PlanSend{},
 		links:     map[uuid.UUID]model.PlanLink{},
 		purges:    map[uuid.UUID]Timer{},
+		sosLinks:  map[uuid.UUID]model.SosLink{},
+		sosPurges: map[uuid.UUID]Timer{},
 		timers:    map[uuid.UUID]Timer{},
 	}}
 }
@@ -85,7 +94,7 @@ func (m *MemoryStore) InTx(_ context.Context, fn func(tx port.Tx) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	work := m.st.clone()
-	if err := fn(&memoryTx{st: work, failOn: m.FailOn}); err != nil {
+	if err := fn(&memoryTx{st: work, failOn: m.FailOn, now: m.Now}); err != nil {
 		return err
 	}
 	m.st = work
@@ -97,7 +106,7 @@ func (m *MemoryStore) InTx(_ context.Context, fn func(tx port.Tx) error) error {
 func (m *MemoryStore) Tx() (port.Tx, func()) {
 	m.mu.Lock()
 	work := m.st.clone()
-	return &memoryTx{st: work, failOn: m.FailOn}, func() {
+	return &memoryTx{st: work, failOn: m.FailOn, now: m.Now}, func() {
 		m.st = work
 		m.mu.Unlock()
 	}
@@ -158,6 +167,26 @@ func (m *MemoryStore) PurgeTimer(linkID uuid.UUID) (Timer, bool) {
 	return t, ok
 }
 
+// SosLinks returns the committed external SOS links, oldest first.
+func (m *MemoryStore) SosLinks() []model.SosLink {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]model.SosLink, 0, len(m.st.sosLinks))
+	for _, l := range m.st.sosLinks {
+		out = append(out, l)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out
+}
+
+// SosPurgeTimer returns the emergency.SosLinkPurge timer of the link.
+func (m *MemoryStore) SosPurgeTimer(linkID uuid.UUID) (Timer, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	t, ok := m.st.sosPurges[linkID]
+	return t, ok
+}
+
 // Audit returns the committed audit entries.
 func (m *MemoryStore) Audit() []model.AuditEntry {
 	m.mu.Lock()
@@ -206,6 +235,7 @@ func (m *MemoryStore) PutSos(s model.Sos) {
 type memoryTx struct {
 	st     *state
 	failOn func(string) error
+	now    func() time.Time
 }
 
 func (t *memoryTx) fail(method string) error {
@@ -826,6 +856,109 @@ func (t *memoryTx) SchedulePlanLinkPurge(_ context.Context, linkID uuid.UUID, du
 	}
 	t.st.purges[linkID] = Timer{DueAt: dueAt}
 	return true, nil
+}
+
+// InsertSosLink implements port.Tx with the unique token hash.
+func (t *memoryTx) InsertSosLink(_ context.Context, l model.SosLink) error {
+	if err := t.fail("InsertSosLink"); err != nil {
+		return err
+	}
+	for _, cur := range t.st.sosLinks {
+		if bytes.Equal(cur.TokenHash, l.TokenHash) {
+			return errors.New("emergencytest: duplicate token hash")
+		}
+	}
+	l.TokenHash = bytes.Clone(l.TokenHash)
+	t.st.sosLinks[l.ID] = l
+	return nil
+}
+
+// RevokeSosContactLinks implements port.Tx.
+func (t *memoryTx) RevokeSosContactLinks(_ context.Context, sosID, contactID uuid.UUID, at time.Time) (int64, error) {
+	if err := t.fail("RevokeSosContactLinks"); err != nil {
+		return 0, err
+	}
+	var n int64
+	for id, l := range t.st.sosLinks {
+		if l.RevokedAt == nil && l.SosID == sosID && l.ContactID == contactID {
+			at := at
+			l.RevokedAt = &at
+			t.st.sosLinks[id] = l
+			n++
+		}
+	}
+	return n, nil
+}
+
+// GetLiveSosLink implements port.Tx with the same filter as the SQL query.
+func (t *memoryTx) GetLiveSosLink(_ context.Context, tokenHash []byte, now time.Time) (model.LiveSosLink, error) {
+	if err := t.fail("GetLiveSosLink"); err != nil {
+		return model.LiveSosLink{}, err
+	}
+	for _, l := range t.st.sosLinks {
+		if !bytes.Equal(l.TokenHash, tokenHash) || l.RevokedAt != nil || !l.ExpiresAt.After(now) {
+			continue
+		}
+		c, ok := t.st.contacts[l.ContactID]
+		if !ok || !c.Confirmed() || c.Kind != model.ContactExternal || c.OwnerID != l.OwnerID {
+			return model.LiveSosLink{}, model.ErrNotFound
+		}
+		s, ok := t.st.sos[l.SosID]
+		if !ok || s.MemberID != l.OwnerID || s.Status != model.SosOpen || !s.ClosesAt.After(now) {
+			return model.LiveSosLink{}, model.ErrNotFound
+		}
+		return model.LiveSosLink{Link: l, Sos: s}, nil
+	}
+	return model.LiveSosLink{}, model.ErrNotFound
+}
+
+// DeleteExpiredSosLink implements port.Tx.
+func (t *memoryTx) DeleteExpiredSosLink(_ context.Context, linkID uuid.UUID, cutoff time.Time) (int64, error) {
+	if err := t.fail("DeleteExpiredSosLink"); err != nil {
+		return 0, err
+	}
+	l, ok := t.st.sosLinks[linkID]
+	if !ok || l.ExpiresAt.After(cutoff) {
+		return 0, nil
+	}
+	delete(t.st.sosLinks, linkID)
+	return 1, nil
+}
+
+// ScheduleSosLinkPurge implements port.Tx (dedup on an active timer).
+func (t *memoryTx) ScheduleSosLinkPurge(_ context.Context, linkID uuid.UUID, dueAt time.Time) (bool, error) {
+	if err := t.fail("ScheduleSosLinkPurge"); err != nil {
+		return false, err
+	}
+	if cur, ok := t.st.sosPurges[linkID]; ok && !cur.Cancelled {
+		return false, nil
+	}
+	t.st.sosPurges[linkID] = Timer{DueAt: dueAt}
+	return true, nil
+}
+
+// RecentStaffSosViews implements port.Tx over the committed and pending
+// audit entries, measured against MemoryStore.Now.
+func (t *memoryTx) RecentStaffSosViews(_ context.Context, staffID uuid.UUID, sosIDs []uuid.UUID, within time.Duration) (map[uuid.UUID]bool, error) {
+	if err := t.fail("RecentStaffSosViews"); err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	if t.now != nil {
+		now = t.now()
+	}
+	want := map[uuid.UUID]bool{}
+	for _, id := range sosIDs {
+		want[id] = true
+	}
+	out := map[uuid.UUID]bool{}
+	for _, e := range t.st.audit {
+		if e.ActorID == staffID && e.Action == model.AuditViewStaffSos && e.ObjectType == model.AuditObjectSos &&
+			want[e.ObjectID] && e.At.After(now.Add(-within)) {
+			out[e.ObjectID] = true
+		}
+	}
+	return out, nil
 }
 
 // FakeSealer "seals" by prefixing the subject and associated data, so tests

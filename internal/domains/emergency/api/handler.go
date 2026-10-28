@@ -381,3 +381,33 @@ func (s *Server) ViewExternalPlan(ctx context.Context, req ViewExternalPlanReque
 		Headers: ViewExternalPlan200ResponseHeaders{CacheControl: &cc},
 	}, nil
 }
+
+// ViewExternalSos serves the SOS behind the link in an external trusted
+// contact's SOS SMS (security: [], no session). Every failure of the token
+// (unknown, expired, revoked, SOS closed, contact removed) is the same 404
+// problem, so a token cannot be probed; the per-IP limit (429) sits in front
+// of this handler in the wiring. The token is never echoed, logged or put
+// into an error. Cache-Control: no-store.
+func (s *Server) ViewExternalSos(ctx context.Context, req ViewExternalSosRequestObject) (ViewExternalSosResponseObject, error) {
+	if req.Body == nil {
+		st, c, t := invalid()
+		return ViewExternalSosdefaultApplicationProblemPlusJSONResponse{StatusCode: st, Body: problem(st, c, t)}, nil
+	}
+	v, err := s.Service.ViewExternalSos(ctx, req.Body.Token)
+	if err != nil {
+		if errors.Is(err, model.ErrNotFound) {
+			st, c, t, _ := problemFor(model.ErrNotFound)
+			return ViewExternalSos404ApplicationProblemPlusJSONResponse{ProblemApplicationProblemPlusJSONResponse(problem(st, c, t))}, nil
+		}
+		return nil, err
+	}
+	closes := v.ClosesAt
+	cc := noStore
+	return ViewExternalSos200JSONResponse{
+		Body: ExternalSos{
+			OwnerDisplayName: v.OwnerDisplayName, Type: SosType(v.Type), Text: v.Text,
+			Status: ExternalSosStatus(v.Status), CreatedAt: v.CreatedAt, ClosesAt: &closes,
+		},
+		Headers: ViewExternalSos200ResponseHeaders{CacheControl: &cc},
+	}, nil
+}

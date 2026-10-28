@@ -73,3 +73,63 @@ func (t *postgresTx) SchedulePlanLinkPurge(ctx context.Context, linkID uuid.UUID
 		Payload:   map[string]string{},
 	})
 }
+
+// InsertSosLink stores a new external SOS link (keyed hash only).
+func (t *postgresTx) InsertSosLink(ctx context.Context, l model.SosLink) error {
+	if err := t.q.InsertSosLink(ctx, emergencystore.InsertSosLinkParams{
+		ID: l.ID, TokenHash: l.TokenHash, SosID: l.SosID, ContactID: l.ContactID, OwnerID: l.OwnerID,
+		CreatedAt: l.CreatedAt, ExpiresAt: l.ExpiresAt,
+	}); err != nil {
+		// The error never carries the hash: pgx reports the constraint, not values.
+		return fmt.Errorf("insert sos link: %w", err)
+	}
+	return nil
+}
+
+// RevokeSosContactLinks revokes the unrevoked links of the SOS and contact.
+func (t *postgresTx) RevokeSosContactLinks(ctx context.Context, sosID, contactID uuid.UUID, at time.Time) (int64, error) {
+	n, err := t.q.RevokeSosContactLinks(ctx, emergencystore.RevokeSosContactLinksParams{RevokedAt: &at, SosID: sosID, ContactID: contactID})
+	if err != nil {
+		return 0, fmt.Errorf("revoke sos links: %w", err)
+	}
+	return n, nil
+}
+
+// GetLiveSosLink returns the live link with tokenHash and its SOS, or
+// model.ErrNotFound for every failure (one query).
+func (t *postgresTx) GetLiveSosLink(ctx context.Context, tokenHash []byte, now time.Time) (model.LiveSosLink, error) {
+	r, err := t.q.GetLiveSosLink(ctx, emergencystore.GetLiveSosLinkParams{TokenHash: tokenHash, Now: now})
+	if err != nil {
+		return model.LiveSosLink{}, notFound(err, "get sos link")
+	}
+	return model.LiveSosLink{
+		Link: model.SosLink{
+			ID: r.ID, SosID: r.SosID, ContactID: r.ContactID, OwnerID: r.OwnerID,
+			CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt,
+		},
+		Sos: model.Sos{
+			ID: r.SosID, MemberID: r.OwnerID, Type: r.Type, Text: r.Content, Status: r.Status,
+			CreatedAt: r.SosCreatedAt, ClosesAt: r.ClosesAt,
+		},
+	}, nil
+}
+
+// DeleteExpiredSosLink deletes the link when it expired at or before cutoff.
+func (t *postgresTx) DeleteExpiredSosLink(ctx context.Context, linkID uuid.UUID, cutoff time.Time) (int64, error) {
+	n, err := t.q.DeleteExpiredSosLink(ctx, emergencystore.DeleteExpiredSosLinkParams{ID: linkID, Cutoff: cutoff})
+	if err != nil {
+		return 0, fmt.Errorf("delete expired sos link: %w", err)
+	}
+	return n, nil
+}
+
+// ScheduleSosLinkPurge schedules emergency.SosLinkPurge (dedup key = link id).
+func (t *postgresTx) ScheduleSosLinkPurge(ctx context.Context, linkID uuid.UUID, dueAt time.Time) (bool, error) {
+	return timers.Schedule(ctx, t.platform, timers.Timer{
+		Kind:      model.TimerSosLinkPurge,
+		SubjectID: linkID,
+		DedupKey:  linkID.String(),
+		DueAt:     dueAt,
+		Payload:   map[string]string{},
+	})
+}

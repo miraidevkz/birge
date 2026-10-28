@@ -86,12 +86,19 @@ var AnonymousOperations = []string{
 	"GET /v1/reference/districts",
 	"GET /v1/reference/needs",
 	externalPlanView,
+	externalSosView,
 }
 
 // externalPlanView is viewExternalPlan: the SMS link of an external trusted
 // contact, who has no account. It is anonymous and has its own per-IP limit
 // in front of the session middleware.
 const externalPlanView = "POST /v1/external/plans/view"
+
+// externalSosView is viewExternalSos: the SOS SMS link of an external
+// trusted contact. Anonymous like externalPlanView, with a per-IP bucket of
+// its own (same BIRGE_PLAN_LINK_RATE_PER_IP rate) so opening the plan and
+// the SOS do not use up each other's allowance.
+const externalSosView = "POST /v1/external/sos/view"
 
 // APIDeps are the resources the API handler is built from.
 type APIDeps struct {
@@ -185,6 +192,10 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	planLinkLimiter, err := ratelimit.New("plan_link.ip", cfg.PlanLinkPerIP, ratelimit.Options{Store: limits, Clock: d.Clock, Logger: d.Logger})
 	if err != nil {
 		return nil, fmt.Errorf("wiring: plan link rate limit: %w", err)
+	}
+	sosLinkLimiter, err := ratelimit.New("sos_link.ip", cfg.PlanLinkPerIP, ratelimit.Options{Store: limits, Clock: d.Clock, Logger: d.Logger})
+	if err != nil {
+		return nil, fmt.Errorf("wiring: sos link rate limit: %w", err)
 	}
 
 	identities, err := NewKratosIdentities(cfg.KratosAdminURL, "phone", kratosClient)
@@ -363,6 +374,7 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	// The SMS link page posts its token here without a session; the tighter
 	// per-IP bucket answers 429 before anything else runs.
 	byAudience.Handle(externalPlanView, ratelimit.Middleware(planLinkLimiter, clientIP)(sessions.Wrap(validated)))
+	byAudience.Handle(externalSosView, ratelimit.Middleware(sosLinkLimiter, clientIP)(sessions.Wrap(validated)))
 	v1 := ratelimit.Middleware(limiter, clientIP)(byAudience)
 
 	root := http.NewServeMux()

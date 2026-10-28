@@ -246,3 +246,53 @@ func TestExternalPlanOverHTTP(t *testing.T) {
 		}
 	}
 }
+
+// TestExternalSosOverHTTP: the SOS SMS link opens the SOS without a
+// principal, with Cache-Control: no-store; unknown, malformed, a plan token
+// and a closed SOS get the very same 404 problem body.
+func TestExternalSosOverHTTP(t *testing.T) {
+	hs := newHarness()
+	ctx := context.Background()
+	owner := hs.member(false, nil)
+	const text = "example sos text"
+	ext := decode[api.TrustedContact](t, hs.do(t, owner, http.MethodPost, "/me/trusted-contacts",
+		`{"kind":"external","name":"Example Contact","phone":"`+fakePhone+`"}`, key, uuid.NewString()))
+	sos := decode[api.SosRequest](t, hs.do(t, owner, http.MethodPost, "/me/sos", `{"type":"childcare","text":"`+text+`"}`, key, uuid.NewString()))
+	token, err := hs.svc.ExternalSosLink(ctx, ext.Id, sos.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := hs.do(t, nil, http.MethodPost, "/external/sos/view", `{"token":"`+token+`"}`)
+	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("view = %d %q %s", rec.Code, rec.Header().Get("Cache-Control"), rec.Body)
+	}
+	v := decode[api.ExternalSos](t, rec)
+	if v.Text != text || v.OwnerDisplayName != "Example" || v.Type != api.SosType(model.SosChildcare) ||
+		v.Status != api.ExternalSosOpen || v.ClosesAt == nil || strings.Contains(rec.Body.String(), fakePhone) {
+		t.Fatalf("external sos = %+v", v)
+	}
+
+	hs.do(t, owner, http.MethodPut, "/me/emergency-plan/child-card", `{"text":"`+fakeCard+`"}`)
+	if rec := hs.do(t, owner, http.MethodPost, "/me/emergency-plan/send", `{"confirm":"SEND"}`, key, uuid.NewString()); rec.Code != http.StatusAccepted {
+		t.Fatalf("send = %d", rec.Code)
+	}
+	planToken, err := hs.svc.ExternalPlanLink(ctx, ext.Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unknown := hs.do(t, nil, http.MethodPost, "/external/sos/view", `{"token":"`+strings.Repeat("A", 43)+`"}`)
+	malformed := hs.do(t, nil, http.MethodPost, "/external/sos/view", `{"token":"short"}`)
+	plan := hs.do(t, nil, http.MethodPost, "/external/sos/view", `{"token":"`+planToken+`"}`)
+	if rec := hs.do(t, owner, http.MethodPost, "/me/sos/"+sos.Id.String()+"/close", ""); rec.Code != http.StatusOK {
+		t.Fatalf("close = %d %s", rec.Code, rec.Body)
+	}
+	closed := hs.do(t, nil, http.MethodPost, "/external/sos/view", `{"token":"`+token+`"}`)
+	for name, r := range map[string]*httptest.ResponseRecorder{"unknown": unknown, "malformed": malformed, "plan token": plan, "closed": closed} {
+		if r.Code != http.StatusNotFound || r.Body.String() != unknown.Body.String() {
+			t.Errorf("%s = %d %s; want the unknown-token 404 %s", name, r.Code, r.Body, unknown.Body)
+		}
+		if strings.Contains(r.Body.String(), token) || strings.Contains(r.Body.String(), text) {
+			t.Errorf("%s leaks the token or the text: %s", name, r.Body)
+		}
+	}
+}

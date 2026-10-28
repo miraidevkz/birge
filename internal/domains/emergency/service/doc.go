@@ -17,6 +17,10 @@
 //   - ExternalPlanLink: the one-time link token of an external contact,
 //     minted when notify sends the plan SMS; ErrNotFound when there is no
 //     live plan send for the contact.
+//   - ExternalSosLink: the link token of an external contact for one SOS,
+//     minted when notify sends the SOS SMS; ErrNotFound when the SOS is
+//     closed, too old or not her owner's (notify then sends the SMS without
+//     the link).
 //
 // # External plan links
 //
@@ -28,6 +32,17 @@
 // failure is the same ErrNotFound. Every view is audited with the contact
 // and owner ids, never the token or the IP. Expired rows are deleted
 // model.PlanLinkRetention later by the emergency.PlanLinkPurge timer.
+//
+// # External SOS links
+//
+// The SOS SMS of an external contact carries <public URL>/sos-link#<token>
+// (viewExternalSos, no session). The token is hashed under the same key with
+// the prefix sosLinkHashContext, so a plan token never opens an SOS and the
+// reverse. A link ends when the SOS closes or auto-closes and at most
+// model.SosLinkMaxTTL after the raise; the single view lookup re-checks the
+// SOS and the contact, every failure is ErrNotFound, every view is audited
+// before the text is opened, and expired rows are purged
+// model.SosLinkRetention later (emergency.SosLinkPurge).
 //
 // # Atomicity
 //

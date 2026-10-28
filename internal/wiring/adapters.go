@@ -253,40 +253,62 @@ func (rc *Recipients) PhoneFor(ctx context.Context, kind string, ref uuid.UUID) 
 	}
 }
 
-// PlanLinkMinter is the part of emergency the plan SMS link needs.
-type PlanLinkMinter interface {
+// EmergencyLinkMinter is the part of emergency the SMS links need.
+type EmergencyLinkMinter interface {
 	ExternalPlanLink(ctx context.Context, trustedContactID uuid.UUID) (string, error)
+	ExternalSosLink(ctx context.Context, trustedContactID, sosID uuid.UUID) (string, error)
 }
 
-// PlanSMSLinks implements notify's SMSLinks port: the emergency.plan_sent SMS
-// of an external trusted contact carries PublicURL + "/plan#" + token. The
-// token is in the fragment, so it never reaches a server or an access log
-// when the link is opened (the page posts it to viewExternalPlan). The link
-// is returned to notify only for the SMS body; nothing here logs it.
-type PlanSMSLinks struct {
-	Emergency PlanLinkMinter
+// EmergencySMSLinks implements notify's SMSLinks port for the two SMS an
+// external trusted contact gets: emergency.plan_sent carries
+// PublicURL + "/plan#" + token, emergency.sos_raised_contact carries
+// PublicURL + "/sos-link#" + token (the SOS id comes from the notification's
+// sos_id param). The token is in the fragment, so it never reaches a server
+// or an access log when the link is opened (the page posts it to
+// viewExternalPlan or viewExternalSos). The link is returned to notify only
+// for the SMS body; nothing here logs it. Any other template or recipient
+// has no link (ErrNotFound); notify then skips an ordinary SMS and sends a
+// critical one (the SOS) without the link.
+type EmergencySMSLinks struct {
+	Emergency EmergencyLinkMinter
 	// PublicURL is the member web app origin (BIRGE_PUBLIC_URL), without a
 	// trailing slash.
 	PublicURL string
 }
 
-var _ notifyport.SMSLinks = (*PlanSMSLinks)(nil)
+var _ notifyport.SMSLinks = (*EmergencySMSLinks)(nil)
 
-// LinkFor mints the plan link for an external contact's emergency.plan_sent
-// SMS; any other template or recipient has no link (ErrNotFound).
-func (p *PlanSMSLinks) LinkFor(ctx context.Context, template, kind string, ref uuid.UUID) (string, error) {
-	if template != emergencymodel.TemplatePlanSent || kind != notifymodel.RecipientKindExternal || ref == uuid.Nil ||
-		p.Emergency == nil || p.PublicURL == "" {
+// LinkFor mints the link of an external contact's plan or SOS SMS.
+func (p *EmergencySMSLinks) LinkFor(ctx context.Context, template, kind string, ref uuid.UUID, params map[string]string) (string, error) {
+	if kind != notifymodel.RecipientKindExternal || ref == uuid.Nil || p.Emergency == nil || p.PublicURL == "" {
 		return "", notifymodel.ErrNotFound
 	}
-	token, err := p.Emergency.ExternalPlanLink(ctx, ref)
+	var (
+		path  string
+		token string
+		err   error
+	)
+	switch template {
+	case emergencymodel.TemplatePlanSent:
+		path = "/plan#"
+		token, err = p.Emergency.ExternalPlanLink(ctx, ref)
+	case emergencymodel.TemplateSosRaisedContact:
+		sosID, perr := uuid.Parse(params["sos_id"])
+		if perr != nil || sosID == uuid.Nil {
+			return "", notifymodel.ErrNotFound
+		}
+		path = "/sos-link#"
+		token, err = p.Emergency.ExternalSosLink(ctx, ref, sosID)
+	default:
+		return "", notifymodel.ErrNotFound
+	}
 	if errors.Is(err, emergencyservice.ErrNotFound) {
 		return "", notifymodel.ErrNotFound
 	}
 	if err != nil {
-		return "", fmt.Errorf("plan sms link: trusted contact %s: %w", ref, err)
+		return "", fmt.Errorf("emergency sms link: %s: trusted contact %s: %w", template, ref, err)
 	}
-	return strings.TrimRight(p.PublicURL, "/") + "/plan#" + token, nil
+	return strings.TrimRight(p.PublicURL, "/") + path + token, nil
 }
 
 // EmergencyMembers implements emergency's MemberInfo from membership.

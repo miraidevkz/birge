@@ -20,6 +20,7 @@ func (h *TimerHandlers) Handlers() map[string]timers.Handler {
 	return map[string]timers.Handler{
 		model.TimerSosAutoClose:  h.SosAutoClose,
 		model.TimerPlanLinkPurge: h.PlanLinkPurge,
+		model.TimerSosLinkPurge:  h.SosLinkPurge,
 	}
 }
 
@@ -35,4 +36,11 @@ func (h *TimerHandlers) SosAutoClose(ctx context.Context, tx pgx.Tx, due timers.
 // transaction. A link already gone (account deletion) is nothing to do.
 func (h *TimerHandlers) PlanLinkPurge(ctx context.Context, tx pgx.Tx, due timers.Due) error {
 	return h.Service.HandlePlanLinkPurge(ctx, Bind(tx), due.SubjectID)
+}
+
+// SosLinkPurge handles emergency.SosLinkPurge (subject = link id): the
+// retention delete of an expired external SOS link, in the worker's
+// transaction. A link already gone (account deletion) is nothing to do.
+func (h *TimerHandlers) SosLinkPurge(ctx context.Context, tx pgx.Tx, due timers.Due) error {
+	return h.Service.HandleSosLinkPurge(ctx, Bind(tx), due.SubjectID)
 }

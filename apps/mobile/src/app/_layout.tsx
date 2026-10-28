@@ -109,6 +109,8 @@ export default function RootLayout() {
                 <Stack.Screen name="sos" options={{ animation: 'none', presentation: 'fullScreenModal' }} />
                 {/* External plan page (web): no session gate, no Back, no animation. */}
                 <Stack.Screen name="plan" options={{ animation: 'none' }} />
+                {/* External SOS page (web): no session gate, no Back, no animation. */}
+                <Stack.Screen name="sos-link" options={{ animation: 'none' }} />
               </Stack>
             </SosProvider>
           </SessionProvider>

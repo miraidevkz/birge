@@ -28,14 +28,31 @@ var errPlanLinkKey = errors.New("emergency: plan link key not configured")
 // hashPlanLinkToken is the only form in which a token reaches the database:
 // HMAC-SHA256 under the deployment's plan link key. A keyed hash (not plain
 // SHA-256) means a stolen dump cannot be checked against guessed tokens
-// without the key; the token's 256 bits already rule out guessing.
+// without the key; the token's 256 bits already rule out guessing. Plan
+// links hash the bare token (the form already stored); SOS links hash
+// sosLinkHashContext + token (hashSosLinkToken), so the same token string
+// never has the same hash in both tables.
 func (s *Service) hashPlanLinkToken(token string) ([]byte, error) {
+	return s.hashLinkToken("", token)
+}
+
+func (s *Service) hashLinkToken(prefix, token string) ([]byte, error) {
 	if len(s.Settings.PlanLinkKey) == 0 {
 		return nil, errPlanLinkKey
 	}
 	m := hmac.New(sha256.New, s.Settings.PlanLinkKey)
+	m.Write([]byte(prefix))
 	m.Write([]byte(token))
 	return m.Sum(nil), nil
+}
+
+// newLinkToken returns 32 random bytes as 43 characters of unpadded base64url.
+func newLinkToken() (string, error) {
+	raw := make([]byte, model.PlanLinkTokenBytes)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("random: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
 // ExternalPlanLink mints the one-time link token of an external trusted
@@ -51,11 +68,10 @@ func (s *Service) hashPlanLinkToken(token string) ([]byte, error) {
 // contact's earlier links (a retried SMS leaves exactly one working link) and
 // schedules the retention purge, in one transaction.
 func (s *Service) ExternalPlanLink(ctx context.Context, trustedContactID uuid.UUID) (string, error) {
-	raw := make([]byte, model.PlanLinkTokenBytes)
-	if _, err := rand.Read(raw); err != nil {
+	token, err := newLinkToken()
+	if err != nil {
 		return "", fmt.Errorf("emergency: plan link token: %w", err)
 	}
-	token := base64.RawURLEncoding.EncodeToString(raw)
 	hash, err := s.hashPlanLinkToken(token)
 	if err != nil {
 		return "", err

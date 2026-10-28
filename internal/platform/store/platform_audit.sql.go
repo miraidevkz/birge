@@ -56,3 +56,50 @@ func (q *Queries) InsertAuditEntry(ctx context.Context, arg InsertAuditEntryPara
 	)
 	return err
 }
+
+const recentAuditObjects = `-- name: RecentAuditObjects :many
+SELECT DISTINCT object_id::uuid AS object_id
+FROM platform.audit_log
+WHERE object_type = $1
+  AND object_id = ANY($2::uuid[])
+  AND occurred_at > now() - make_interval(secs => $3::double precision)
+  AND actor_id = $4
+  AND action = $5
+`
+
+type RecentAuditObjectsParams struct {
+	ObjectType    string
+	ObjectIds     []uuid.UUID
+	WithinSeconds float64
+	ActorID       uuid.UUID
+	Action        string
+}
+
+// The objects among object_ids that actor already has an entry with action
+// for in the last within_seconds, measured on the database clock (the one
+// that set occurred_at). One indexed scan per page (audit_log_object_idx).
+func (q *Queries) RecentAuditObjects(ctx context.Context, arg RecentAuditObjectsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, recentAuditObjects,
+		arg.ObjectType,
+		arg.ObjectIds,
+		arg.WithinSeconds,
+		arg.ActorID,
+		arg.Action,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var object_id uuid.UUID
+		if err := rows.Scan(&object_id); err != nil {
+			return nil, err
+		}
+		items = append(items, object_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

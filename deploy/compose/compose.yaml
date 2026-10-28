@@ -16,7 +16,7 @@ x-birge-env: &birge-env
   BIRGE_HASH_KEY_FILE: /secrets/hash.key
   BIRGE_PLAN_LINK_KEY_FILE: /secrets/plan-link.key
   BIRGE_ANALYTICS_KEY_FILE: /secrets/analytics.key
-  # Origin of the member web app; plan SMS links are <this>/plan#<token>.
+  # Origin of the member web app; SMS links are <this>/plan#<token> and <this>/sos-link#<token>.
   # Same variable and default as ./up.sh web.
   BIRGE_PUBLIC_URL: ${BIRGE_PUBLIC_URL:-http://localhost:8081}
   BIRGE_SMS_ALLOWED_PREFIXES: ${BIRGE_SMS_ALLOWED_PREFIXES:-+77}

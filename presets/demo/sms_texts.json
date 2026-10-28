@@ -16,6 +16,11 @@
     "en": "[DEMO] Birge: SOS raised. Open the app."
   },
   "emergency.sos_raised_contact": {
+    "kk": "[DEMO] Birge: senimdi baylanys retinde sizden komek suraydy (SOS): {link}",
+    "ru": "[DEMO] Birge: vas kak doverennyy kontakt prosyat o pomoshchi (SOS): {link}",
+    "en": "[DEMO] Birge: you are asked for help as a trusted contact (SOS): {link}"
+  },
+  "emergency.sos_raised_contact.no_link": {
     "kk": "[DEMO] Birge: senimdi baylanys SOS. Qosymshany ashynyz.",
     "ru": "[DEMO] Birge: doverennyy kontakt, SOS. Otkroyte prilozhenie.",
     "en": "[DEMO] Birge: trusted contact SOS. Open the app."

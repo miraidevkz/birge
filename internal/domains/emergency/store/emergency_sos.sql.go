@@ -125,6 +125,26 @@ func (q *Queries) CountSosSince(ctx context.Context, arg CountSosSinceParams) (i
 	return column_1, err
 }
 
+const deleteExpiredSosLink = `-- name: DeleteExpiredSosLink :execrows
+DELETE FROM emergency.sos_links
+WHERE id = $1
+  AND expires_at <= $2
+`
+
+type DeleteExpiredSosLinkParams struct {
+	ID     uuid.UUID
+	Cutoff time.Time
+}
+
+// Retention (emergency.SosLinkPurge): only a link that expired before cutoff.
+func (q *Queries) DeleteExpiredSosLink(ctx context.Context, arg DeleteExpiredSosLinkParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredSosLink, arg.ID, arg.Cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteMemberChildCard = `-- name: DeleteMemberChildCard :execrows
 DELETE FROM emergency.child_cards WHERE member_id = $1
 `
@@ -192,6 +212,80 @@ func (q *Queries) DeleteMemberTrustedContacts(ctx context.Context, memberID uuid
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteOwnerSosLinks = `-- name: DeleteOwnerSosLinks :execrows
+DELETE FROM emergency.sos_links WHERE owner_id = $1
+`
+
+func (q *Queries) DeleteOwnerSosLinks(ctx context.Context, ownerID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteOwnerSosLinks, ownerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getLiveSosLink = `-- name: GetLiveSosLink :one
+SELECT l.id, l.sos_id, l.contact_id, l.owner_id, l.created_at, l.expires_at,
+       s.type, s.content, s.status, s.created_at AS sos_created_at, s.closes_at
+FROM emergency.sos_links l
+JOIN emergency.trusted_contacts c ON c.id = l.contact_id
+JOIN emergency.sos_requests s ON s.id = l.sos_id
+WHERE l.token_hash = $1
+  AND l.revoked_at IS NULL
+  AND l.expires_at > $2
+  AND c.removed_at IS NULL
+  AND c.kind = 'external'
+  AND c.status = 'confirmed'
+  AND c.owner_id = l.owner_id
+  AND s.member_id = l.owner_id
+  AND s.status = 'open'
+  AND s.closes_at > $2
+`
+
+type GetLiveSosLinkParams struct {
+	TokenHash []byte
+	Now       time.Time
+}
+
+type GetLiveSosLinkRow struct {
+	ID           uuid.UUID
+	SosID        uuid.UUID
+	ContactID    uuid.UUID
+	OwnerID      uuid.UUID
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+	Type         string
+	Content      []byte
+	Status       string
+	SosCreatedAt time.Time
+	ClosesAt     time.Time
+}
+
+// One query for every failure (unknown, revoked, expired, SOS closed or past
+// its auto-close, contact removed, no longer external or confirmed, or not
+// the author's), so they cannot be told apart by status or by the number of
+// round trips. The joins re-check at view time what the mint checked: under
+// READ COMMITTED a mint that read the contact or the SOS before a
+// concurrent removal or close committed still inserts its link afterwards.
+func (q *Queries) GetLiveSosLink(ctx context.Context, arg GetLiveSosLinkParams) (GetLiveSosLinkRow, error) {
+	row := q.db.QueryRow(ctx, getLiveSosLink, arg.TokenHash, arg.Now)
+	var i GetLiveSosLinkRow
+	err := row.Scan(
+		&i.ID,
+		&i.SosID,
+		&i.ContactID,
+		&i.OwnerID,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Type,
+		&i.Content,
+		&i.Status,
+		&i.SosCreatedAt,
+		&i.ClosesAt,
+	)
+	return i, err
 }
 
 const getSos = `-- name: GetSos :one
@@ -356,6 +450,34 @@ func (q *Queries) InsertSos(ctx context.Context, arg InsertSosParams) (Emergency
 	return i, err
 }
 
+const insertSosLink = `-- name: InsertSosLink :exec
+INSERT INTO emergency.sos_links (id, token_hash, sos_id, contact_id, owner_id, created_at, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type InsertSosLinkParams struct {
+	ID        uuid.UUID
+	TokenHash []byte
+	SosID     uuid.UUID
+	ContactID uuid.UUID
+	OwnerID   uuid.UUID
+	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
+func (q *Queries) InsertSosLink(ctx context.Context, arg InsertSosLinkParams) error {
+	_, err := q.db.Exec(ctx, insertSosLink,
+		arg.ID,
+		arg.TokenHash,
+		arg.SosID,
+		arg.ContactID,
+		arg.OwnerID,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
 const insertSosResponse = `-- name: InsertSosResponse :one
 INSERT INTO emergency.sos_responses (sos_id, responder_id, created_at)
 VALUES ($1, $2, $3)
@@ -476,6 +598,30 @@ func (q *Queries) ListMySos(ctx context.Context, arg ListMySosParams) ([]ListMyS
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnerSosLinkIDs = `-- name: ListOwnerSosLinkIDs :many
+SELECT id FROM emergency.sos_links WHERE owner_id = $1
+`
+
+func (q *Queries) ListOwnerSosLinkIDs(ctx context.Context, ownerID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOwnerSosLinkIDs, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -790,6 +936,28 @@ func (q *Queries) MarkSosSeen(ctx context.Context, arg MarkSosSeenParams) (Emerg
 		&i.ClosedBy,
 	)
 	return i, err
+}
+
+const revokeSosContactLinks = `-- name: RevokeSosContactLinks :execrows
+UPDATE emergency.sos_links
+SET revoked_at = $1
+WHERE sos_id = $2
+  AND contact_id = $3
+  AND revoked_at IS NULL
+`
+
+type RevokeSosContactLinksParams struct {
+	RevokedAt *time.Time
+	SosID     uuid.UUID
+	ContactID uuid.UUID
+}
+
+func (q *Queries) RevokeSosContactLinks(ctx context.Context, arg RevokeSosContactLinksParams) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeSosContactLinks, arg.RevokedAt, arg.SosID, arg.ContactID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const shareSos = `-- name: ShareSos :one

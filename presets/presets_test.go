@@ -162,28 +162,37 @@ func TestDirectoryAndListingsDemoMarked(t *testing.T) {
 	}
 }
 
-// TestSMSTextsLinkOnlyInPlanSent: the {link} placeholder (a one-time plan
-// link, notify model.SMSLinkPlaceholder) belongs only to the plan SMS of
-// external contacts; every language of that text carries it exactly once.
-func TestSMSTextsLinkOnlyInPlanSent(t *testing.T) {
+// TestSMSTextsLinks: the {link} placeholder (notify model.SMSLinkPlaceholder)
+// belongs only to the two SMS of external contacts that carry a link (the
+// plan and the SOS); every language of those texts carries it exactly once.
+// The SOS SMS is critical, so it also has a variant without the link
+// (notify model.SMSNoLinkSuffix) in every language, which notify sends
+// when the link cannot be made.
+func TestSMSTextsLinks(t *testing.T) {
 	texts, err := presets.SMSTexts()
 	if err != nil {
 		t.Fatal(err)
 	}
+	withLink := map[string]bool{"emergency.plan_sent": true, "emergency.sos_raised_contact": true}
 	for tmpl, byLang := range texts {
 		for lang, body := range byLang {
 			n := strings.Count(body, "{link}")
-			if tmpl == "emergency.plan_sent" && n != 1 {
+			if withLink[tmpl] && n != 1 {
 				t.Errorf("%s/%s: {link} %d times, want once", tmpl, lang, n)
 			}
-			if tmpl != "emergency.plan_sent" && n != 0 {
+			if !withLink[tmpl] && n != 0 {
 				t.Errorf("%s/%s: unexpected {link}", tmpl, lang)
 			}
 		}
 	}
 	for _, lang := range []string{"kk", "ru", "en"} {
-		if texts["emergency.plan_sent"][lang] == "" {
-			t.Errorf("emergency.plan_sent/%s missing", lang)
+		for tmpl := range withLink {
+			if texts[tmpl][lang] == "" {
+				t.Errorf("%s/%s missing", tmpl, lang)
+			}
+		}
+		if texts["emergency.sos_raised_contact.no_link"][lang] == "" {
+			t.Errorf("emergency.sos_raised_contact.no_link/%s missing", lang)
 		}
 	}
 }

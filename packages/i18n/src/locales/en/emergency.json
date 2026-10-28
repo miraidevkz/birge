@@ -115,5 +115,11 @@
     "loadError": "Could not load the request. Please try again in a moment.",
     "unavailableTitle": "This request is not available now",
     "unavailableDescription": "Nothing more is needed from you here."
+  },
+  "externalSos": {
+    "title": "A request for help",
+    "contactHint": "She is asking you directly. Please get in touch with her the way you usually do.",
+    "goneTitle": "This request is no longer open",
+    "goneDescription": "She has closed it, or the link has expired. Nothing more is needed from you here."
   }
 }

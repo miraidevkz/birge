@@ -118,6 +118,27 @@ const TimerSosAutoClose = "emergency.SosAutoClose"
 // expired (ADR-0023); subject and dedup key are the link id.
 const TimerPlanLinkPurge = "emergency.PlanLinkPurge"
 
+// TimerSosLinkPurge deletes an external SOS link SosLinkRetention after it
+// expired (ADR-0023); subject and dedup key are the link id.
+const TimerSosLinkPurge = "emergency.SosLinkPurge"
+
+// External SOS links (viewExternalSos).
+const (
+	// SosLinkMaxTTL caps a link's life from the SOS's creation (contract: at
+	// most 24 hours); it also dies when the SOS closes.
+	SosLinkMaxTTL = 24 * time.Hour
+	// SosLinkRetention is how long an expired SOS link row is kept before
+	// the purge timer deletes it (ADR-0023, as for plan links).
+	SosLinkRetention = 7 * 24 * time.Hour
+)
+
+// StaffViewAuditDedup is how long one emergency_sos.view_staff entry covers
+// later listings of the same SOS by the same staff member: the admin polls
+// listStaffSos every 30 seconds, and one row per item per poll says nothing
+// a row per 10 minutes does not. The first view and every action are still
+// audited.
+const StaffViewAuditDedup = 10 * time.Minute
+
 // External plan links (viewExternalPlan).
 const (
 	// PlanLinkTTL is how long a link works after the plan send (contract: 24 hours).
@@ -139,6 +160,9 @@ const (
 	// link: the actor id is the trusted contact id (she has no account).
 	AuditActorExternalContact = "external_contact"
 	AuditViewExternalPlan     = "emergency_plan.view_external"
+	// AuditViewExternalSos is an external contact opening an SOS through
+	// the link in her SMS (viewExternalSos); object = the SOS.
+	AuditViewExternalSos = "emergency_sos.view_external"
 
 	// AuditObjectSos is the object type of SOS audit entries (object id = SOS id).
 	AuditObjectSos = "emergency.sos"
@@ -170,6 +194,8 @@ const (
 	LockPlan     = "emergency.plan"
 	// LockPlanLink serialises link minting per trusted contact (key = contact id).
 	LockPlanLink = "emergency.plan_link"
+	// LockSosLink serialises SOS link minting per trusted contact (key = contact id).
+	LockSosLink = "emergency.sos_link"
 )
 
 var (
@@ -455,6 +481,40 @@ type PlanLink struct {
 	CreatedAt time.Time
 	ExpiresAt time.Time
 	RevokedAt *time.Time
+}
+
+// SosLink is one stored external SOS link. TokenHash is
+// HMAC-SHA256(link key, "emergency.sos_link|" + token); the token itself is
+// never stored.
+type SosLink struct {
+	ID        uuid.UUID
+	TokenHash []byte
+	SosID     uuid.UUID
+	ContactID uuid.UUID
+	// OwnerID is the SOS author, who owns the contact.
+	OwnerID   uuid.UUID
+	CreatedAt time.Time
+	// ExpiresAt = min(SOS closes_at, SOS created_at + SosLinkMaxTTL).
+	ExpiresAt time.Time
+	RevokedAt *time.Time
+}
+
+// LiveSosLink is what the view lookup returns: the link and its SOS (text
+// still sealed), after every check passed in the same query.
+type LiveSosLink struct {
+	Link SosLink
+	Sos  Sos
+}
+
+// ExternalSos is an SOS as an external trusted contact sees it through her
+// SMS link: the author's first name, the type, the opened text and times.
+type ExternalSos struct {
+	OwnerDisplayName string
+	Type             string
+	Text             string
+	Status           string
+	CreatedAt        time.Time
+	ClosesAt         time.Time
 }
 
 // PlanSend records one "send the plan" confirmation.

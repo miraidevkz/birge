@@ -109,6 +109,20 @@ func TestStaffSosQueuePostgres(t *testing.T) {
 	if got := count(t, e.pool, `SELECT count(*) FROM platform.audit_log WHERE actor_id = $1 AND action = $2`, mod.IdentityID, model.AuditViewStaffSos); got != len(ids) {
 		t.Fatalf("view audit rows = %d, want %d", got, len(ids))
 	}
+	// The next poll (within StaffViewAuditDedup on the database clock) adds
+	// no view rows for her; another staff member's first listing does.
+	if _, err := e.svc.ListStaffSos(ctx, mod, model.SosOpen, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(t, e.pool, `SELECT count(*) FROM platform.audit_log WHERE actor_id = $1 AND action = $2`, mod.IdentityID, model.AuditViewStaffSos); got != len(ids) {
+		t.Fatalf("view audit rows after a repeat poll = %d, want %d", got, len(ids))
+	}
+	if _, err := e.svc.ListStaffSos(ctx, adm, model.SosOpen, page.NextCursor); err != nil {
+		t.Fatal(err)
+	}
+	if got := count(t, e.pool, `SELECT count(*) FROM platform.audit_log WHERE actor_id = $1 AND action = $2`, adm.IdentityID, model.AuditViewStaffSos); got != 1 {
+		t.Fatalf("other staff member's view rows = %d, want 1", got)
+	}
 
 	target := ids[0]
 	if _, err := e.svc.MarkSosSeen(ctx, mod, target); err != nil {

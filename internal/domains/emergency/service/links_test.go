@@ -46,6 +46,11 @@ func newLinkEnv(t *testing.T) *linkEnv {
 					t.Errorf("store holds a token in clear")
 				}
 			}
+			for _, l := range e.store.SosLinks() {
+				if bytes.Contains(l.TokenHash, []byte(tok)) {
+					t.Errorf("store holds a token in clear")
+				}
+			}
 		}
 	})
 	return e

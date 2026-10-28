@@ -88,6 +88,7 @@ var deletionPolicy = map[string]struct {
 	"emergency.trusted_contacts": {"", []string{"owner_id", "contact_member_id"}},
 	"emergency.plan_sends":       {"", []string{"member_id"}},
 	"emergency.plan_links":       {"", []string{"owner_id"}},
+	"emergency.sos_links":        {"", []string{"owner_id"}},
 
 	"assistant.messages": {"", []string{"member_id"}},
 
@@ -277,6 +278,9 @@ func seedEveryContext(t *testing.T, ctx context.Context, pool *pgxpool.Pool, her
 		VALUES ($1, $2, $3, 'external', $4, $4, 'ru', 'confirmed', now(), now(), now())`, herExternal, her, id(), sealed)
 	exec(`INSERT INTO emergency.plan_links (id, token_hash, contact_id, owner_id, sent_at, created_at, expires_at)
 		VALUES ($1, decode(repeat('07', 32), 'hex'), $2, $3, now(), now(), now() + interval '24 hours')`, herLink, herExternal, her)
+	herSosLink := id()
+	exec(`INSERT INTO emergency.sos_links (id, token_hash, sos_id, contact_id, owner_id, created_at, expires_at)
+		VALUES ($1, decode(repeat('08', 32), 'hex'), $2, $3, $4, now(), now() + interval '24 hours')`, herSosLink, herSos, herExternal, her)
 	exec(`INSERT INTO emergency.trusted_contacts (id, owner_id, idempotency_key, kind, contact_member_id, lang, status, created_at)
 		VALUES ($1, $2, $3, 'member', $4, 'ru', 'invited', now())`, id(), s.other, id(), her)
 	exec(`INSERT INTO emergency.plan_sends (id, member_id, idempotency_key, contact_count, sent_at) VALUES ($1, $2, $3, 1, now())`, id(), her, id())
@@ -380,6 +384,7 @@ func seedEveryContext(t *testing.T, ctx context.Context, pool *pgxpool.Pool, her
 		subject uuid.UUID
 	}{
 		{"notify.Push", herNotification}, {"wellbeing.Reminder", her}, {"emergency.SosAutoClose", herSos}, {"emergency.PlanLinkPurge", herLink},
+		{"emergency.SosLinkPurge", herSosLink},
 		{"circle.RequestExpire", herOpen}, {"circle.AskMet", s.match}, {"chat.PushFanout", herMessage},
 		{"sharing.AutoClose", s.herListing},
 	} {

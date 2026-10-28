@@ -167,7 +167,8 @@ type Config struct {
 
 	AuthPerIP, AuthPerNumber, AuthGlobal ratelimit.Rate
 	APIPerIP                             ratelimit.Rate
-	// PlanLinkPerIP limits viewExternalPlan per client IP (BIRGE_PLAN_LINK_RATE_PER_IP).
+	// PlanLinkPerIP limits viewExternalPlan and, in a bucket of its own,
+	// viewExternalSos per client IP (BIRGE_PLAN_LINK_RATE_PER_IP).
 	PlanLinkPerIP ratelimit.Rate
 
 	// TrustedProxyHeader, when set, names the header whose right-most value

@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -90,6 +91,31 @@ func RecordOnce(ctx context.Context, q *store.Queries, e Entry) error {
 		return nil
 	}
 	return Record(ctx, q, e)
+}
+
+// RecentObjects returns the IDs among objectIDs for which actorID already
+// has an entry with action and objectType written within the last within,
+// measured on the database clock that set occurred_at (not the caller's
+// clock, which may differ in tests). It is one query for the whole list, so
+// a caller that audits a page of objects can skip repeats cheaply (the SOS
+// queue polled every 30 seconds). An empty list returns nothing without a
+// query.
+func RecentObjects(ctx context.Context, q *store.Queries, actorID uuid.UUID, action, objectType string, objectIDs []uuid.UUID, within time.Duration) (map[uuid.UUID]bool, error) {
+	out := map[uuid.UUID]bool{}
+	if len(objectIDs) == 0 || within <= 0 {
+		return out, nil
+	}
+	ids, err := q.RecentAuditObjects(ctx, store.RecentAuditObjectsParams{
+		ObjectType: objectType, ObjectIds: objectIDs, WithinSeconds: within.Seconds(),
+		ActorID: actorID, Action: action,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("audit: recent %s: %w", action, err)
+	}
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, nil
 }
 
 // MemberDeleted is the entry a bounded context writes once when it has

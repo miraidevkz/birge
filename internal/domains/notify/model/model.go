@@ -72,10 +72,19 @@ const (
 const ConsumerDeliveryRequested = "notify.DeliveryRequested"
 
 // SMSLinkPlaceholder in a configured SMS text (BIRGE_SMS_TEXTS) is replaced
-// at send time with the link from port.SMSLinks; an SMS whose text has it
-// and that gets no link is skipped. The rest of the text stays a neutral
-// fixed sentence (ADR-0013).
+// at send time with the link from port.SMSLinks. When no link can be made,
+// an ordinary SMS is skipped (not found) or retried (transient failure); a
+// critical SMS is never skipped or delayed for a link: it goes out at once
+// with the text configured under template + SMSNoLinkSuffix. The rest of the
+// text stays a neutral fixed sentence (ADR-0013).
 const SMSLinkPlaceholder = "{link}"
+
+// SMSNoLinkSuffix names the variant of a template's SMS text without the
+// link, for example "emergency.sos_raised_contact.no_link": what a critical
+// SMS says when its link cannot be made (the crisis path never waits for
+// the link). If the variant is missing, the placeholder is cut out of the
+// main text, so the SMS still goes out.
+const SMSNoLinkSuffix = ".no_link"
 
 // Sign-in code length bounds. Kratos generates 6 digits today; the range
 // leaves room for a configuration change and refuses anything that is not a

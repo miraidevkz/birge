@@ -18,6 +18,24 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for ExternalSosStatus.
+const (
+	ExternalSosClosed ExternalSosStatus = "closed"
+	ExternalSosOpen   ExternalSosStatus = "open"
+)
+
+// Valid indicates whether the value is a known member of the ExternalSosStatus enum.
+func (e ExternalSosStatus) Valid() bool {
+	switch e {
+	case ExternalSosClosed:
+		return true
+	case ExternalSosOpen:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SosFeedItemType.
 const (
 	SosFeedItemTypeItemOrMedicine SosFeedItemType = "item_or_medicine"
@@ -223,6 +241,24 @@ type EmergencyPlan struct {
 	LastSentAt *time.Time       `json:"lastSentAt,omitempty"`
 }
 
+// ExternalSos defines model for ExternalSos.
+type ExternalSos struct {
+	// ClosesAt When the SOS closes by itself; the link dies then too.
+	ClosesAt  *time.Time `json:"closesAt,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+
+	// OwnerDisplayName First name only.
+	OwnerDisplayName string `json:"ownerDisplayName"`
+
+	// Status Always open today: a closed SOS answers 404. Kept so a later version can show a closed one.
+	Status ExternalSosStatus `json:"status"`
+	Text   string            `json:"text"`
+	Type   SosType           `json:"type"`
+}
+
+// ExternalSosStatus Always open today: a closed SOS answers 404. Kept so a later version can show a closed one.
+type ExternalSosStatus string
+
 // Problem defines model for Problem.
 type Problem struct {
 	// Code Stable machine-readable error code.
@@ -422,6 +458,11 @@ type ViewExternalPlanJSONBody struct {
 	Token string `json:"token"`
 }
 
+// ViewExternalSosJSONBody defines parameters for ViewExternalSos.
+type ViewExternalSosJSONBody struct {
+	Token string `json:"token"`
+}
+
 // SetChildCardJSONBody defines parameters for SetChildCard.
 type SetChildCardJSONBody struct {
 	// Text Free text from the template (needs, medicines, how to calm, fears). Stored encrypted.
@@ -471,6 +512,9 @@ type ListStaffSosParamsStatus string
 // ViewExternalPlanJSONRequestBody defines body for ViewExternalPlan for application/json ContentType.
 type ViewExternalPlanJSONRequestBody ViewExternalPlanJSONBody
 
+// ViewExternalSosJSONRequestBody defines body for ViewExternalSos for application/json ContentType.
+type ViewExternalSosJSONRequestBody ViewExternalSosJSONBody
+
 // SetChildCardJSONRequestBody defines body for SetChildCard for application/json ContentType.
 type SetChildCardJSONRequestBody SetChildCardJSONBody
 
@@ -488,6 +532,9 @@ type ServerInterface interface {
 	// ViewExternalPlan The child card behind a link an external trusted contact got by SMS.
 	// (POST /external/plans/view)
 	ViewExternalPlan(w http.ResponseWriter, r *http.Request)
+	// ViewExternalSos The SOS behind a link an external trusted contact got by SMS.
+	// (POST /external/sos/view)
+	ViewExternalSos(w http.ResponseWriter, r *http.Request)
 
 	// (GET /me/emergency-plan)
 	GetEmergencyPlan(w http.ResponseWriter, r *http.Request)
@@ -570,6 +617,20 @@ func (siw *ServerInterfaceWrapper) ViewExternalPlan(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ViewExternalPlan(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ViewExternalSos operation middleware
+func (siw *ServerInterfaceWrapper) ViewExternalSos(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ViewExternalSos(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1351,6 +1412,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/staff/sos/{sosId}/close", wrapper.CloseSosAsStaff)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/trusted/plans/{ownerId}", wrapper.GetSharedPlan)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/external/plans/view", wrapper.ViewExternalPlan)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/external/sos/view", wrapper.ViewExternalSos)
 
 	return m
 }
@@ -1425,6 +1487,85 @@ type ViewExternalPlandefaultApplicationProblemPlusJSONResponse struct {
 }
 
 func (response ViewExternalPlandefaultApplicationProblemPlusJSONResponse) VisitViewExternalPlanResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ViewExternalSosRequestObject struct {
+	Body *ViewExternalSosJSONRequestBody
+}
+
+type ViewExternalSosResponseObject interface {
+	VisitViewExternalSosResponse(w http.ResponseWriter) error
+}
+
+type ViewExternalSos200ResponseHeaders struct {
+	CacheControl *string
+}
+
+type ViewExternalSos200JSONResponse struct {
+	Body    ExternalSos
+	Headers ViewExternalSos200ResponseHeaders
+}
+
+func (response ViewExternalSos200JSONResponse) VisitViewExternalSosResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ViewExternalSos404ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ViewExternalSos404ApplicationProblemPlusJSONResponse) VisitViewExternalSosResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ViewExternalSos429ApplicationProblemPlusJSONResponse Problem
+
+func (response ViewExternalSos429ApplicationProblemPlusJSONResponse) VisitViewExternalSosResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ViewExternalSosdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ViewExternalSosdefaultApplicationProblemPlusJSONResponse) VisitViewExternalSosResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -2487,6 +2628,9 @@ type StrictServerInterface interface {
 	// ViewExternalPlan The child card behind a link an external trusted contact got by SMS.
 	// (POST /external/plans/view)
 	ViewExternalPlan(ctx context.Context, request ViewExternalPlanRequestObject) (ViewExternalPlanResponseObject, error)
+	// ViewExternalSos The SOS behind a link an external trusted contact got by SMS.
+	// (POST /external/sos/view)
+	ViewExternalSos(ctx context.Context, request ViewExternalSosRequestObject) (ViewExternalSosResponseObject, error)
 
 	// (GET /me/emergency-plan)
 	GetEmergencyPlan(ctx context.Context, request GetEmergencyPlanRequestObject) (GetEmergencyPlanResponseObject, error)
@@ -2618,6 +2762,37 @@ func (sh *strictHandler) ViewExternalPlan(w http.ResponseWriter, r *http.Request
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ViewExternalPlanResponseObject); ok {
 		if err := validResponse.VisitViewExternalPlanResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ViewExternalSos operation middleware
+func (sh *strictHandler) ViewExternalSos(w http.ResponseWriter, r *http.Request) {
+	var request ViewExternalSosRequestObject
+
+	var body ViewExternalSosJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ViewExternalSos(ctx, request.(ViewExternalSosRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ViewExternalSos")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ViewExternalSosResponseObject); ok {
+		if err := validResponse.VisitViewExternalSosResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

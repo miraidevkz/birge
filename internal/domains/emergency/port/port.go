@@ -1,6 +1,6 @@
 // Package port defines the interfaces the emergency service needs: its store
 // (SOS requests, responses, child cards, trusted contacts, plan sends,
-// external plan links, outbox, timers, audit), field sealing, and what it
+// external plan and SOS links, outbox, timers, audit), field sealing, and what it
 // reads from other contexts (member profiles and blocks from membership, "met in person"
 // from the circle). Adapters for the other contexts are wired later; tests
 // use the fakes in emergencytest.
@@ -165,6 +165,29 @@ type Tx interface {
 	// SchedulePlanLinkPurge schedules emergency.PlanLinkPurge for the link
 	// (dedup key = link id).
 	SchedulePlanLinkPurge(ctx context.Context, linkID uuid.UUID, dueAt time.Time) (bool, error)
+
+	// InsertSosLink stores a new external SOS link (keyed hash only).
+	InsertSosLink(ctx context.Context, l model.SosLink) error
+	// RevokeSosContactLinks revokes the unrevoked links of this SOS and
+	// contact; returns how many.
+	RevokeSosContactLinks(ctx context.Context, sosID, contactID uuid.UUID, at time.Time) (int64, error)
+	// GetLiveSosLink returns the link with tokenHash and its SOS when the
+	// link is neither revoked nor expired, the SOS is open and not past
+	// closes_at, and the contact is active, external, confirmed and the
+	// author's; model.ErrNotFound for every other case (one lookup, so the
+	// failures cannot be told apart).
+	GetLiveSosLink(ctx context.Context, tokenHash []byte, now time.Time) (model.LiveSosLink, error)
+	// DeleteExpiredSosLink deletes the link when it expired at or before
+	// cutoff; returns how many rows went (0 or 1).
+	DeleteExpiredSosLink(ctx context.Context, linkID uuid.UUID, cutoff time.Time) (int64, error)
+	// ScheduleSosLinkPurge schedules emergency.SosLinkPurge for the link
+	// (dedup key = link id).
+	ScheduleSosLinkPurge(ctx context.Context, linkID uuid.UUID, dueAt time.Time) (bool, error)
+
+	// RecentStaffSosViews returns the SOS among sosIDs that staffID already
+	// has an emergency_sos.view_staff audit entry for within the last
+	// within (on the audit log's clock), in one lookup.
+	RecentStaffSosViews(ctx context.Context, staffID uuid.UUID, sosIDs []uuid.UUID, within time.Duration) (map[uuid.UUID]bool, error)
 
 	// Publish enqueues e in this transaction's outbox (ADR-0007).
 	Publish(ctx context.Context, now time.Time, e model.Event) error

@@ -57,7 +57,11 @@ func staffAudit(now time.Time, a staffActor, action string, sosID uuid.UUID) mod
 // type including childcare, at most model.StaffPageLimit per page with a
 // keyset cursor. Each item carries the text, the author's first name and
 // her district, never a phone. One audit entry emergency_sos.view_staff per
-// item is written in the listing transaction, before any text is opened.
+// item is written in the listing transaction, before any text is opened,
+// unless the same staff member already has one for that SOS from the last
+// model.StaffViewAuditDedup (one batched lookup per page): the admin polls
+// every 30 seconds, and the repeats would only bury the entries that matter.
+// Seen and Close are always audited.
 func (s *Service) ListStaffSos(ctx context.Context, p auth.Principal, status, cursor string) (model.StaffSosPage, error) {
 	actor, err := staffOf(p)
 	if err != nil {
@@ -84,11 +88,22 @@ func (s *Service) ListStaffSos(ctx context.Context, p auth.Principal, status, cu
 		if rows, err = tx.ListStaffSos(ctx, f); err != nil {
 			return err
 		}
+		shown := make([]uuid.UUID, 0, len(rows))
 		for i, r := range rows {
 			if i == model.StaffPageLimit {
 				break // the probe row is not shown, so not audited
 			}
-			if err := tx.Audit(ctx, staffAudit(now, actor, model.AuditViewStaffSos, r.ID)); err != nil {
+			shown = append(shown, r.ID)
+		}
+		recent, err := tx.RecentStaffSosViews(ctx, actor.ID, shown, model.StaffViewAuditDedup)
+		if err != nil {
+			return err
+		}
+		for _, id := range shown {
+			if recent[id] {
+				continue // her view of it within StaffViewAuditDedup is on record
+			}
+			if err := tx.Audit(ctx, staffAudit(now, actor, model.AuditViewStaffSos, id)); err != nil {
 				return err
 			}
 		}

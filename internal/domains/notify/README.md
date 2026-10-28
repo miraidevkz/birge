@@ -46,7 +46,7 @@ Other contexts publish `notify.DeliveryRequested`. One exception, for a secret t
 |---|---|
 | `service.Service.SendSignInCode(ctx, phoneE164, code)` | Synchronous sign-in code SMS for membership's Kratos courier hook (wired in `internal/wiring.SignInCodes`). Never touches the store, the outbox or a timer, so the code is kept only in memory and in the provider request. Text fixed as `SignInCodeText` (`Birge: <code>`); code must be 4 to 10 digits (`model.ErrInvalidInput`). `SignInGuard` first: refusal → `ErrSMSRefused` (wraps the guard reason). Provider errors returned as they are (`port.ErrPermanent` or transient); no retry here, Kratos retries. Logs a random `sms_id` and the outcome, never the phone or the code. No authorization: the hook authenticates Kratos. |
 
-Ports used by this context (wired in `internal/wiring`): `Recipients` (`Resolve` for kind/ref/language only; `PhoneFor` at SMS send time), `PushSender`, `SMSSender`, `SMSLinks` (fills `{link}` at send time: the emergency plan link of an external contact, minted by emergency; optional).
+Ports used by this context (wired in `internal/wiring`): `Recipients` (`Resolve` for kind/ref/language only; `PhoneFor` at SMS send time), `PushSender`, `SMSSender`, `SMSLinks` (fills `{link}` at send time: the emergency plan and SOS links of an external contact, minted by emergency, given the template, the recipient and the notification's params such as `sos_id`; optional).
 
 ## Providers
 
@@ -71,7 +71,7 @@ Push payload: `notification_id` and the neutral `Title` (from `Config.PushTitles
 | Variable | Default | Meaning |
 |---|---|---|
 | `service.Config.CriticalSMSAfter` | 60s | Wait for acknowledgement before member critical SMS |
-| `service.Config.SMSTexts` | required for SMS | `template → language →` neutral fixed body (no message content); unset `BIRGE_SMS_TEXTS` → DEMO preset. `{link}` is replaced at send time through `SMSLinks`, after the guard and right before the provider; no link → the SMS is skipped (`no_link`), a transient error → the timer retries. The link is never stored or logged |
+| `service.Config.SMSTexts` | required for SMS | `template → language →` neutral fixed body (no message content); unset `BIRGE_SMS_TEXTS` → DEMO preset. `{link}` is replaced at send time through `SMSLinks`, after the guard and right before the provider. Ordinary SMS: no link → skipped (`no_link`), a transient error → the timer retries. Critical SMS (crisis path): never skipped and never retried for the link; any failure, or a mint slower than 5 s, sends at once the text under `<template>.no_link` (logged `CriticalSMSNoLink`; a missing variant cuts the placeholder out and logs `SMSNoLinkTextMissing`). The link is never stored or logged |
 | `service.Config.PushTitles` | `Birge` | `language →` neutral push title (`BIRGE_PUSH_TITLES`) |
 | `BIRGE_PUSH_PROVIDER`, `BIRGE_SMS_PROVIDER` and credential files | `log` in dev only | see `docs/development.md` § Configuration |
 | `guard.Config.AllowedPrefixes` | empty rejects all | E.164 prefix allow-list |
@@ -94,6 +94,7 @@ Push payload: `notification_id` and the neutral `Title` (from `Config.PushTitles
 - Guard counters are shared by every worker replica (`BIRGE_RATE_LIMIT_STORE=postgres`): N workers keep one per-number limit, one global limit and one daily budget per guard. The store keeps only a keyed hash of the number. A counter store error refuses an ordinary SMS (`guard.ErrUnavailable`, delivery `skipped`) and never a critical one (`SMSGuardStoreError` logged, sent) (guard; `sms/guard/guard_test.go`).
 - Logs and events: IDs and event names only — never text, phones or push tokens (service + ports).
 - Marking critical read acknowledges and cancels CriticalSMS (service).
+- A critical SMS whose text has `{link}` is never skipped or delayed for the link (crisis path, AGENTS.md N1): a failed, missing or slow (> 5 s) link sends the `<template>.no_link` text at once (service; `service/links_test.go` `TestCriticalSMSFallsBackWithoutLink`, `TestCriticalMemberSMSUsesTextWithoutLink`).
 - Account deletion (AGENTS.md N6): her devices, her inbox (`recipient_kind=member`, ref = her) and every notification whose `params` hold her ID (a plan she sent carries `owner_id`) are deleted with their deliveries; their pending push and SMS timers are cancelled in the same transaction. Nothing is tombstoned: a notification is a message to one recipient, no other record depends on it. One audit entry `notify.member_deleted` (actor system).
 
 ## Failure modes
@@ -106,11 +107,12 @@ Push payload: `notification_id` and the neutral `Title` (from `Config.PushTitles
 - Permanent provider rejection (bad number, forbidden text, bad payload): delivery `failed`, no retry.
 - Wrong provider credentials: every send fails transiently and retries with backoff until an operator fixes the file and restarts the worker. A credential file that does not parse refuses startup.
 - Guard / missing SMS text: non-critical → `skipped`; critical guard → `failed` + `CriticalSMSBlocked` log; missing text → `skipped`.
+- Link port down or slow: an ordinary SMS with `{link}` stays pending and retries; a critical one goes out at once without the link (`CriticalSMSLinkFailed`, `CriticalSMSNoLink`).
 - Broker down: outbox from producers lags; this context's consumer stops receiving until JetStream recovers.
 
 ## Tests
 
-- Unit: `service/ladder_test.go`, `service/pagination_test.go`, `service/provider_errors_test.go`, `service/signin_test.go` (guard refusals, separate budget, no store, no code or phone in logs), `sms/guard/guard_test.go`, `api/handler` tests via notifytest fakes — ladder, idempotency, guard, cursor, provider error mapping.
+- Unit: `service/ladder_test.go`, `service/pagination_test.go`, `service/provider_errors_test.go`, `service/signin_test.go` (guard refusals, separate budget, no store, no code or phone in logs), `service/links_test.go` (`{link}` minted at send time, skip and retry for ordinary SMS, the no-link fallback for critical SMS, no link in logs), `sms/guard/guard_test.go`, `api/handler` tests via notifytest fakes — ladder, idempotency, guard, cursor, provider error mapping.
 - Providers: `adapter/push` (httptest FCM with token endpoint and renewal; HTTP/2 TLS httptest APNs; error mapping; bad key files; service end to end with a log grep) and `adapter/smsgw` (httptest SMSC: form, error codes, service end to end with a log grep).
 - Integration: `adapter/integration_test.go` — PostgreSQL + NATS consumer path with `testinfra`; `DeleteRejectedDevice` keeps a re-registered token.
 - Fakes: `notifytest/` (in-memory store, fake push/SMS).

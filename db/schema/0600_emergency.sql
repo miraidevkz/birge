@@ -3,7 +3,7 @@
 -- and phones are sealed with the owner's data key; members are IDs only.
 -- Rows are never deleted: SOS requests are closed, trusted contacts removed
 -- (removed_at), so the only deletion paths are the account-deletion flow and
--- the retention of expired plan links (ADR-0023: 7 days after expiry).
+-- the retention of expired plan and SOS links (ADR-0023: 7 days after expiry).
 
 CREATE SCHEMA IF NOT EXISTS emergency;
 
@@ -176,3 +176,40 @@ CREATE INDEX plan_links_contact_active_idx
     ON emergency.plan_links (contact_id) WHERE revoked_at IS NULL;
 -- Revocation on resend and account deletion per owner.
 CREATE INDEX plan_links_owner_idx ON emergency.plan_links (owner_id);
+
+-- Links to an open SOS for external trusted contacts (no account), sent in
+-- the SOS SMS as <public URL>/sos-link#<token> (viewExternalSos). A table of its
+-- own rather than a kind column on plan_links: the two differ in what keeps
+-- them alive (the plan send against the SOS being open), in what revokes
+-- them and in what they open, and every plan_links query would otherwise
+-- need a kind filter whose omission would let one kind open the other. The
+-- token is never stored: only HMAC-SHA256(BIRGE_PLAN_LINK_KEY_FILE,
+-- "emergency.sos_link|" || token), a different input from the plan link
+-- hash, so a plan token never matches here and the reverse. A link lives
+-- until the SOS closes and at most 24 hours from the SOS (expires_at =
+-- least(closes_at, created_at + 24h)); viewExternalSos also re-checks the
+-- SOS (open) and the contact (active, external, confirmed, still the
+-- author's) in its single lookup. A newer link for the same SOS and contact
+-- (a retried SMS) revokes the older one. The emergency.SosLinkPurge timer
+-- deletes the row 7 days after expires_at (ADR-0023); nothing refers to it,
+-- so no tombstone is kept.
+CREATE TABLE emergency.sos_links (
+    id         uuid        PRIMARY KEY,
+    token_hash bytea       NOT NULL CHECK (octet_length(token_hash) = 32),
+    sos_id     uuid        NOT NULL REFERENCES emergency.sos_requests (id),
+    contact_id uuid        NOT NULL REFERENCES emergency.trusted_contacts (id),
+    -- The SOS author, who is also the contact's owner.
+    owner_id   uuid        NOT NULL,
+    created_at timestamptz NOT NULL,
+    expires_at timestamptz NOT NULL,
+    revoked_at timestamptz,
+    CONSTRAINT sos_links_expiry_check CHECK (expires_at > created_at)
+);
+
+-- The lookup of viewExternalSos, by keyed hash only.
+CREATE UNIQUE INDEX sos_links_token_hash_uidx ON emergency.sos_links (token_hash);
+-- Revocation of an earlier link of the same SOS and contact.
+CREATE INDEX sos_links_sos_contact_active_idx
+    ON emergency.sos_links (sos_id, contact_id) WHERE revoked_at IS NULL;
+-- Account deletion per owner.
+CREATE INDEX sos_links_owner_idx ON emergency.sos_links (owner_id);

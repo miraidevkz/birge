@@ -48,6 +48,7 @@ func newEnv(t *testing.T) *env {
 		clock:   &emergencytest.Clock{T: time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)},
 		logs:    logs,
 	}
+	e.store.Now = e.clock.Now
 	e.svc = &service.Service{
 		Store:         e.store,
 		Sealer:        &emergencytest.FakeSealer{},
