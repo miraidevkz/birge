@@ -257,6 +257,16 @@ func TestLoadRejects(t *testing.T) {
 			func(f fakeFiles) { f["/keys/courier"] = []byte("short") }, "BIRGE_COURIER_SECRET_FILE: the key must be at least 32 bytes"},
 		{"bad internal addr", CommandWorker, map[string]string{"BIRGE_INTERNAL_ADDR": "8090"}, nil, "BIRGE_INTERNAL_ADDR"},
 		{"internal addr on the health port", CommandWorker, map[string]string{"BIRGE_INTERNAL_ADDR": ":8080"}, nil, "another port than BIRGE_HTTP_ADDR"},
+		{"unknown rate limit store", CommandAPI, map[string]string{"BIRGE_RATE_LIMIT_STORE": "redis"}, nil, `BIRGE_RATE_LIMIT_STORE: must be "postgres" or "memory"`},
+		{"worker without hash key on the shared store", CommandWorker, map[string]string{"BIRGE_HASH_KEY_FILE": ""}, nil, "BIRGE_HASH_KEY_FILE is required"},
+		{"worker hash key is the analytics key", CommandWorker, nil, func(f fakeFiles) { f["/keys/hash"] = f["/keys/analytics"] }, "BIRGE_HASH_KEY_FILE must hold its own key"},
+		{"unreadable previous keyset", CommandAPI, map[string]string{"BIRGE_KEK_PREVIOUS_KEYSET_FILES": "local-0=/keys/missing.json"}, nil,
+			"BIRGE_KEK_PREVIOUS_KEYSET_FILES: cannot read the keyset file of KEK local-0"},
+		{"bad previous keyset", CommandWorker, map[string]string{"BIRGE_KEK_PREVIOUS_KEYSET_FILES": "local-0=/keys/old.json"},
+			func(f fakeFiles) { f["/keys/old.json"] = []byte(`{"key":[]}`) }, "BIRGE_KEK_PREVIOUS_KEYSET_FILES: crypto: KEK local-0: unreadable keyset"},
+		{"previous keyset without id", CommandAPI, map[string]string{"BIRGE_KEK_PREVIOUS_KEYSET_FILES": "/keys/kek.json"}, nil, "each entry must be <kek id>=<keyset file>"},
+		{"previous keyset is the primary", CommandAPI, map[string]string{"BIRGE_KEK_PREVIOUS_KEYSET_FILES": "local-1=/keys/kek.json"}, nil, "KEK local-1 is the primary"},
+		{"previous keyset twice", CommandAPI, map[string]string{"BIRGE_KEK_PREVIOUS_KEYSET_FILES": "local-0=/keys/kek.json, local-0=/keys/kek.json"}, nil, "KEK local-0 is listed twice"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -569,5 +579,36 @@ func TestLoadReferencePresets(t *testing.T) {
 	}
 	if !slices.Equal(cfg.ReferencePresets, []string{presets.ReferenceKZ}) {
 		t.Fatalf("reference presets = %v", cfg.ReferencePresets)
+	}
+}
+
+func TestLoadRateLimitStoreAndPreviousKEKs(t *testing.T) {
+	files := validFiles(t)
+	files["/keys/old-1.json"] = testKeysetJSON(t)
+	files["/keys/old-2.json"] = testKeysetJSON(t)
+	env := validEnv(t)
+	env["BIRGE_KEK_PREVIOUS_KEYSET_FILES"] = "local-0=/keys/old-1.json, legacy.a=/keys/old-2.json"
+	for _, cmd := range []Command{CommandAPI, CommandWorker} {
+		cfg, err := load(env, files, cmd)
+		if err != nil {
+			t.Fatalf("%s: %v", cmd, err)
+		}
+		if cfg.RateLimitStore != RateLimitStorePostgres || len(cfg.HashKey) < minKeyBytes {
+			t.Errorf("%s: store %q, hash key %d bytes; want postgres by default with the hash key", cmd, cfg.RateLimitStore, len(cfg.HashKey))
+		}
+		if len(cfg.PreviousKEKs) != 2 || cfg.PreviousKEKs[0].ID() != "local-0" || cfg.PreviousKEKs[1].ID() != "legacy.a" {
+			t.Errorf("%s: previous KEKs not loaded", cmd)
+		}
+	}
+	// The memory store needs no hash key on the worker.
+	env = validEnv(t)
+	env["BIRGE_RATE_LIMIT_STORE"] = "memory"
+	env["BIRGE_HASH_KEY_FILE"] = ""
+	cfg, err := load(env, files, CommandWorker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RateLimitStore != RateLimitStoreMemory || cfg.HashKey != nil || cfg.PreviousKEKs != nil {
+		t.Errorf("memory store: %q, hash key set %v, previous %v", cfg.RateLimitStore, cfg.HashKey != nil, cfg.PreviousKEKs)
 	}
 }

@@ -49,6 +49,35 @@ func (q *Queries) InsertMemberKey(ctx context.Context, arg InsertMemberKeyParams
 	return err
 }
 
+const rewrapMemberKey = `-- name: RewrapMemberKey :execrows
+UPDATE platform.member_keys
+SET wrapped_dek = $1, kek_id = $2
+WHERE member_id = $3 AND kek_id = $4 AND destroyed_at IS NULL
+`
+
+type RewrapMemberKeyParams struct {
+	WrappedDek []byte
+	KekID      string
+	MemberID   uuid.UUID
+	FromKekID  string
+}
+
+// KEK rotation: replaces the wrapping of a live data key, only while it is
+// still wrapped by from_kek_id. A concurrent rewrap (another replica) or a
+// shred that got there first wins, and this statement changes nothing.
+func (q *Queries) RewrapMemberKey(ctx context.Context, arg RewrapMemberKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, rewrapMemberKey,
+		arg.WrappedDek,
+		arg.KekID,
+		arg.MemberID,
+		arg.FromKekID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const shredMemberKey = `-- name: ShredMemberKey :exec
 INSERT INTO platform.member_keys (member_id, wrapped_dek, kek_id, destroyed_at)
 VALUES ($1, ''::bytea, '', $2)

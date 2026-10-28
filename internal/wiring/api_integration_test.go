@@ -3,12 +3,16 @@ package wiring
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -422,4 +426,131 @@ func TestAPIRateLimit(t *testing.T) {
 	if rec := do(t, h, http.MethodGet, "/healthz", "", ""); rec.Code != http.StatusNoContent {
 		t.Fatalf("/healthz: %d", rec.Code)
 	}
+}
+
+// solvePoW fetches an ALTCHA challenge from h and brute-forces it like the
+// client widget, returning the X-Pow-Solution header value.
+func solvePoW(t *testing.T, h http.Handler) string {
+	t.Helper()
+	rec := do(t, h, http.MethodGet, "/auth/pow", "", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /auth/pow: %d", rec.Code)
+	}
+	var c struct {
+		Algorithm string `json:"algorithm"`
+		Challenge string `json:"challenge"`
+		MaxNumber int64  `json:"maxnumber"`
+		Salt      string `json:"salt"`
+		Signature string `json:"signature"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &c); err != nil {
+		t.Fatal(err)
+	}
+	for n := int64(0); n <= c.MaxNumber; n++ {
+		sum := sha256.Sum256([]byte(c.Salt + strconv.FormatInt(n, 10)))
+		if hex.EncodeToString(sum[:]) == c.Challenge {
+			b, err := json.Marshal(map[string]any{
+				"algorithm": c.Algorithm, "challenge": c.Challenge, "number": n, "salt": c.Salt, "signature": c.Signature,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			return base64.StdEncoding.EncodeToString(b)
+		}
+	}
+	t.Fatal("challenge not solvable")
+	return ""
+}
+
+// submitLogin posts a code-method login for an allowed number with solution.
+func submitLogin(t *testing.T, h http.Handler, solution string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/self-service/login?flow=f1",
+		strings.NewReader(`{"method":"code","identifier":"+77001234567"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Pow-Solution", solution)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestTwoReplicasShareLimitsAndPoW runs two API handlers, each with its own
+// pool, on one PostgreSQL: with the shared store they behave like one
+// replica (one limit, one use per PoW solution); with the memory store each
+// counts on its own.
+func TestTwoReplicasShareLimitsAndPoW(t *testing.T) {
+	e := newE2E(t)
+	pool2, err := platformdb.Open(context.Background(), e.env["DATABASE_URL"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool2.Close)
+	replicas := func(cfg Config) (http.Handler, http.Handler) {
+		a := e.handler(cfg)
+		b, err := NewAPIHandler(context.Background(), APIDeps{
+			Config: cfg, Pool: pool2, Envelope: e.envelope, Logger: slog.New(slog.NewJSONHandler(e.logs, nil)),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a, b
+	}
+	cfg := e.cfg
+	if cfg.RateLimitStore != RateLimitStorePostgres {
+		t.Fatalf("default store = %q, want postgres", cfg.RateLimitStore)
+	}
+	cfg.APIPerIP = ratelimit.Rate{Burst: 2, Every: time.Hour}
+	cfg.PoWMaxNumber = 1000
+	a, b := replicas(cfg)
+
+	t.Run("limit exhausted across replicas", func(t *testing.T) {
+		for i, h := range []http.Handler{a, b} {
+			if rec := do(t, h, http.MethodGet, "/v1/meta/client-config", "", ""); rec.Code != http.StatusOK {
+				t.Fatalf("request %d: %d", i, rec.Code)
+			}
+		}
+		for i, h := range []http.Handler{a, b} {
+			if rec := do(t, h, http.MethodGet, "/v1/meta/client-config", "", ""); rec.Code != http.StatusTooManyRequests {
+				t.Fatalf("replica %d after the shared limit: %d, want 429", i, rec.Code)
+			}
+		}
+	})
+
+	t.Run("pow solution accepted once across replicas", func(t *testing.T) {
+		sol := solvePoW(t, a)
+		// Accepted by a: it passes the gateway and reaches (fake) Kratos,
+		// which has no login route and answers 404.
+		if rec := submitLogin(t, a, sol); rec.Code == http.StatusForbidden || rec.Code == http.StatusTooManyRequests {
+			t.Fatalf("first use on replica a: %d %s", rec.Code, rec.Body)
+		}
+		rec := submitLogin(t, b, sol)
+		if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "pow_required") {
+			t.Fatalf("replay on replica b: %d %s, want 403 pow_required", rec.Code, rec.Body)
+		}
+		var claims int
+		if err := e.pool.QueryRow(context.Background(), "SELECT count(*) FROM platform.one_time_claims").Scan(&claims); err != nil {
+			t.Fatal(err)
+		}
+		if claims != 1 {
+			t.Fatalf("claims = %d, want 1", claims)
+		}
+	})
+
+	t.Run("memory store counts per replica", func(t *testing.T) {
+		mem := cfg
+		mem.RateLimitStore = RateLimitStoreMemory
+		ma, mb := replicas(mem)
+		for i, h := range []http.Handler{ma, ma, mb, mb} {
+			if rec := do(t, h, http.MethodGet, "/v1/meta/client-config", "", ""); rec.Code != http.StatusOK {
+				t.Fatalf("request %d: %d (each replica has its own limit)", i, rec.Code)
+			}
+		}
+		sol := solvePoW(t, ma)
+		if rec := submitLogin(t, ma, sol); rec.Code == http.StatusForbidden {
+			t.Fatalf("first use: %d", rec.Code)
+		}
+		if rec := submitLogin(t, mb, sol); rec.Code == http.StatusForbidden {
+			t.Fatalf("the memory store is per replica, the other one cannot know the solution: %d", rec.Code)
+		}
+	})
 }

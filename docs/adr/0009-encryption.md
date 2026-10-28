@@ -12,5 +12,10 @@ Sensitive fields (names, phones, child cards, check-in answers, notes) must be e
 - OpenBao unseal keys are split (Shamir, e.g. 3 of 5) between people, with an offline copy of the master key. Key recovery is drilled like backups.
 - No hand-rolled cryptography.
 
+## Addendum: KEK rotation (2026-10-28)
+- A deployment knows one primary KEK and any number of previous ones (`BIRGE_KEK_PREVIOUS_KEYSET_FILES`). New data keys are wrapped with the primary; a key wrapped by a previous KEK opens and is re-wrapped with the primary when it is first loaded (a conditional update that loses to a concurrent re-wrap or shred). The data keys never change, so no ciphertext is rewritten.
+- Rotation is two rollouts: first every replica learns the new KEK as a previous one, then it becomes primary (during that second rollout a replica not yet updated re-wraps what it loads with its own primary; harmless, since both keyrings open both); a retired KEK leaves the keyring only when no live row names it (`docs/development.md`, KEK rotation). Members inactive since the rotation keep the old wrapping until a re-wrap job exists (roadmap).
+- An unreadable previous keyset stops the process at start.
+
 ## Consequences
 Losing the master key loses all data; key custody is an operational duty, not an afterthought.

@@ -8,7 +8,7 @@ Staff UI steps: [handbook/staff.md](handbook/staff.md). System shape: [overview.
 
 ## 1. Member sign-in by SMS code
 
-Auth gateway (`internal/domains/membership/authgw`) sits at `/auth/` in front of the Kratos public API. Kratos is never exposed directly. Limits and PoW replay are process-local today; a shared store is still required before more than one API replica ([roadmap.md](roadmap.md) wave 1). SMS delivery goes through the Kratos courier → notify webhook path; wiring that courier hook in deployment is still open on the roadmap.
+Auth gateway (`internal/domains/membership/authgw`) sits at `/auth/` in front of the Kratos public API. Kratos is never exposed directly. Limits and PoW replay are shared by every API replica through PostgreSQL (`BIRGE_RATE_LIMIT_STORE=postgres`, the default; `internal/platform/ratelimit`). SMS delivery goes through the Kratos courier → notify webhook path; wiring that courier hook in deployment is still open on the roadmap.
 
 ```mermaid
 sequenceDiagram

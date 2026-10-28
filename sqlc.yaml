@@ -9,6 +9,7 @@ sql:
       - db/queries/platform_keys.sql
       - db/queries/platform_audit.sql
       - db/queries/platform_staff.sql
+      - db/queries/platform_ratelimit.sql
     gen:
       go:
         package: store

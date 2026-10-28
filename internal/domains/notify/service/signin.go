@@ -53,7 +53,7 @@ func (s *Service) SendSignInCode(ctx context.Context, phoneE164, code string) er
 	if s.SMS == nil {
 		return errors.New("notify: sms sender not configured")
 	}
-	if err := s.SignInGuard.Allow(phoneE164, s.Clock.Now()); err != nil {
+	if err := s.SignInGuard.Allow(ctx, phoneE164, s.Clock.Now()); err != nil {
 		s.log().Info("sign-in sms refused", "event", "SignInSMSRefused", "reason", guard.Explain(err))
 		return fmt.Errorf("%w: %w", ErrSMSRefused, err)
 	}

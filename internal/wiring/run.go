@@ -54,7 +54,9 @@ import (
 	"birge/internal/platform/clock"
 	"birge/internal/platform/crypto"
 	platformdb "birge/internal/platform/db"
+	"birge/internal/platform/httpserver"
 	"birge/internal/platform/outbox"
+	"birge/internal/platform/ratelimit"
 	"birge/internal/platform/timers"
 	"birge/presets"
 )
@@ -242,12 +244,18 @@ func seedDemoKnowledge(ctx context.Context, logger *slog.Logger, databaseURL str
 	return nil
 }
 
-// NewEnvelope builds the platform envelope for the configured KEK.
+// NewEnvelope builds the platform envelope for the configured KEK: new
+// member keys are wrapped with cfg.KEK, keys wrapped by one of
+// cfg.PreviousKEKs still open and are re-wrapped with cfg.KEK on first use.
 func NewEnvelope(pool *pgxpool.Pool, cfg Config, clk clock.Clock) (*crypto.Envelope, error) {
 	if cfg.KEK == nil {
 		return nil, errors.New("wiring: no KEK configured")
 	}
-	ring, err := crypto.NewKeyring(cfg.KEK)
+	previous := make([]crypto.KEK, 0, len(cfg.PreviousKEKs))
+	for _, k := range cfg.PreviousKEKs {
+		previous = append(previous, k)
+	}
+	ring, err := crypto.NewKeyring(cfg.KEK, previous...)
 	if err != nil {
 		return nil, fmt.Errorf("wiring: %w", err)
 	}
@@ -286,7 +294,7 @@ func RunAPI(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	return serve(ctx, logger, cfg.HTTPAddr, h)
+	return httpserver.Run(ctx, logger, cfg.HTTPAddr, h)
 }
 
 // RunWorker runs the background loops until ctx is cancelled: the outbox
@@ -334,6 +342,10 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	if err != nil {
 		return err
 	}
+	limits, err := RateLimitStore(cfg, pool)
+	if err != nil {
+		return err
+	}
 	members := membershipservice.New(&membershipadapter.Postgres{Pool: pool}, DisplayNameEncryptor{Sealer: env}, clk)
 	safety := &safetyservice.Service{
 		Store:     &safetyadapter.PostgresStore{Pool: pool},
@@ -376,10 +388,10 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		Push:  pushSender,
 		SMS:   smsSender,
 		Links: &PlanSMSLinks{Emergency: emergency, PublicURL: cfg.PublicURL},
-		Guard: guard.New(cfg.SMSGuard),
+		Guard: smsGuard(cfg.SMSGuard, limits, "notify", logger),
 		// Same limits, separate counters: sign-in pumping must never use
 		// up what a critical or plan SMS needs (notify SendSignInCode).
-		SignInGuard: guard.New(cfg.SMSGuard),
+		SignInGuard: smsGuard(cfg.SMSGuard, limits, "signin", logger),
 		Clock:       clk,
 		Logger:      logger,
 		Config:      notifyservice.Config{CriticalSMSAfter: cfg.CriticalSMSAfter, SMSTexts: cfg.SMSTexts, PushTitles: cfg.PushTitles},
@@ -504,8 +516,8 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 	timerWorker := &timers.Worker{Pool: pool, Clock: clk, Logger: logger, Handlers: handlers, Interval: timersInterval}
 
 	health := http.NewServeMux()
-	health.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	health.Handle("GET /readyz", readiness(logger, poolCheck(pool), natsCheck(nc)))
+	health.Handle("GET /healthz", httpserver.Liveness())
+	health.Handle("GET /readyz", httpserver.Readiness(logger, poolCheck(pool), natsCheck(nc)))
 
 	loops := map[string]func(context.Context) error{
 		"outbox relay":          relay.Run,
@@ -520,14 +532,20 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		"chat mentor role":      chatMentors.Run,
 		"membership moderation": membershipMod.Run,
 		"timers":                timerWorker.Run,
-		"health endpoints":      func(ctx context.Context) error { return serve(ctx, logger, cfg.HTTPAddr, health) },
+		"health endpoints":      func(ctx context.Context) error { return httpserver.Run(ctx, logger, cfg.HTTPAddr, health) },
+	}
+	if limits != nil {
+		// Expired counters and claims of the shared store (API and worker
+		// rows alike); several worker replicas may sweep at once.
+		sweeper := &ratelimit.Sweeper{Pool: pool, Clock: clk, Logger: logger}
+		loops["rate limit sweeper"] = sweeper.Run
 	}
 	if cfg.InternalAddr != "" {
 		internal, err := InternalHandler(cfg, notify, logger)
 		if err != nil {
 			return err
 		}
-		loops["internal endpoints"] = func(ctx context.Context) error { return serve(ctx, logger, cfg.InternalAddr, internal) }
+		loops["internal endpoints"] = func(ctx context.Context) error { return httpserver.Run(ctx, logger, cfg.InternalAddr, internal) }
 	}
 	// One privacy.DataDeletionRequested consumer per context (ADR-0009, AGENTS.md N6).
 	for _, c := range deleters.Consumers(js, pool, logger) {
@@ -542,6 +560,29 @@ func RunWorker(ctx context.Context, logger *slog.Logger, cfg Config) error {
 		}
 	}
 	return runAll(ctx, logger, loops)
+}
+
+// RateLimitStore returns the store that every rate limit, the PoW replay
+// check and the SMS guards of this process share (BIRGE_RATE_LIMIT_STORE).
+// For the memory store it returns nil: each limiter and guard then keeps a
+// private in-memory table, so a flood on one limit cannot fill the table of
+// another.
+func RateLimitStore(cfg Config, pool *pgxpool.Pool) (ratelimit.Store, error) {
+	if cfg.RateLimitStore == RateLimitStoreMemory {
+		return nil, nil
+	}
+	s, err := ratelimit.NewPostgresStore(pool, cfg.HashKey)
+	if err != nil {
+		return nil, fmt.Errorf("wiring: rate limit store: %w", err)
+	}
+	return s, nil
+}
+
+// smsGuard builds one SMS guard on the shared counters; name keeps its
+// counters apart from the other guard's.
+func smsGuard(cfg guard.Config, limits ratelimit.Store, name string, logger *slog.Logger) *guard.Guard {
+	cfg.Store, cfg.Name, cfg.Logger = limits, name, logger
+	return guard.New(cfg)
 }
 
 // EnsureStream creates or updates the events stream: file storage, the
@@ -562,8 +603,9 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, maxAge time.Durat
 	return nil
 }
 
-func natsCheck(nc *nats.Conn) check {
-	return check{name: "nats", fn: func(context.Context) error {
+// natsCheck is the readiness check of the NATS connection.
+func natsCheck(nc *nats.Conn) httpserver.Check {
+	return httpserver.Check{Name: "nats", Fn: func(context.Context) error {
 		if !nc.IsConnected() {
 			return errors.New("not connected")
 		}

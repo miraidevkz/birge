@@ -7,6 +7,10 @@ GRANT USAGE ON SCHEMA platform TO birge_app;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON platform.outbox, platform.processed_events, platform.timers TO birge_app;
 
+-- Shared rate limit counters and one-time claims (package ratelimit): the
+-- worker's sweeper deletes expired rows.
+GRANT SELECT, INSERT, UPDATE, DELETE ON platform.rate_counters, platform.one_time_claims TO birge_app;
+
 -- Data keys: no DELETE; shredding is an UPDATE that leaves a tombstone (ADR-0009).
 GRANT SELECT, INSERT, UPDATE ON platform.member_keys TO birge_app;
 REVOKE DELETE, TRUNCATE ON platform.member_keys FROM birge_app;

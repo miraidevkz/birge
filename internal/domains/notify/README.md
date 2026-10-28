@@ -75,9 +75,10 @@ Push payload: `notification_id` and the neutral `Title` (from `Config.PushTitles
 | `service.Config.PushTitles` | `Birge` | `language →` neutral push title (`BIRGE_PUSH_TITLES`) |
 | `BIRGE_PUSH_PROVIDER`, `BIRGE_SMS_PROVIDER` and credential files | `log` in dev only | see `docs/development.md` § Configuration |
 | `guard.Config.AllowedPrefixes` | empty rejects all | E.164 prefix allow-list |
-| `guard.Config.PerNumberLimit` / `PerNumberWindow` | 0 disabled / 1h | Per-number rate limit |
-| `guard.Config.GlobalLimit` / `GlobalWindow` | 0 disabled / 1m | Process-wide rate limit |
-| `guard.Config.DailyBudget` | 0 unlimited | UTC-day send budget (bypassed for critical) |
+| `guard.Config.PerNumberLimit` / `PerNumberWindow` | 0 disabled / 1h | Per-number rate limit (fixed window) |
+| `guard.Config.GlobalLimit` / `GlobalWindow` | 0 disabled / 1m | Rate limit over all numbers (fixed window) |
+| `guard.Config.DailyBudget` | 0 unlimited | UTC-day send budget (critical SMS count but are never blocked) |
+| `guard.Config.Store` / `Name` | private memory table / `sms` | Counter store (`platform/ratelimit`); the worker passes the shared PostgreSQL store with names `notify` and `signin`, so every worker replica counts against one limit and one budget |
 | `Service.SignInGuard` | nil refuses | Guard for `SendSignInCode`: built from the same `guard.Config`, separate counters |
 | see `docs/development.md` § Configuration | | all variables, defaults and which subcommand reads them |
 
@@ -90,6 +91,7 @@ Push payload: `notification_id` and the neutral `Title` (from `Config.PushTitles
 - Provider adapters never log, and their error texts hold the HTTP status and the provider's reason code only: no token, phone, text or credential (adapters; tests grep logs and errors).
 - Sign-in codes (`SendSignInCode`) are never persisted: no event, notification, delivery or timer row. They pass `SignInGuard`, whose counters are separate from `Guard`, so sign-in traffic cannot block a critical or plan SMS by per-number limit or daily budget (service; `service/signin_test.go` runs without a store).
 - `sms/guard` before every SMS; critical uses `AllowCritical` (no daily budget). Guard rejects for critical → `CriticalSMSBlocked` + delivery `failed` (not `skipped`).
+- Guard counters are shared by every worker replica (`BIRGE_RATE_LIMIT_STORE=postgres`): N workers keep one per-number limit, one global limit and one daily budget per guard. The store keeps only a keyed hash of the number. A counter store error refuses an ordinary SMS (`guard.ErrUnavailable`, delivery `skipped`) and never a critical one (`SMSGuardStoreError` logged, sent) (guard; `sms/guard/guard_test.go`).
 - Logs and events: IDs and event names only — never text, phones or push tokens (service + ports).
 - Marking critical read acknowledges and cancels CriticalSMS (service).
 - Account deletion (AGENTS.md N6): her devices, her inbox (`recipient_kind=member`, ref = her) and every notification whose `params` hold her ID (a plan she sent carries `owner_id`) are deleted with their deliveries; their pending push and SMS timers are cancelled in the same transaction. Nothing is tombstoned: a notification is a message to one recipient, no other record depends on it. One audit entry `notify.member_deleted` (actor system).

@@ -69,6 +69,7 @@ import (
 	"birge/internal/platform/clock"
 	"birge/internal/platform/crypto"
 	"birge/internal/platform/httpapi"
+	"birge/internal/platform/httpserver"
 	"birge/internal/platform/meta"
 	"birge/internal/platform/objectstore"
 	"birge/internal/platform/ratelimit"
@@ -138,6 +139,12 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	}
 	cfg := d.Config
 	clientIP := ClientIP(cfg.TrustedProxyHeader)
+	// One store for every limit of this replica: shared with the other
+	// replicas through PostgreSQL, or nil for private in-memory tables.
+	limits, err := RateLimitStore(cfg, d.Pool)
+	if err != nil {
+		return nil, err
+	}
 
 	gw, err := authgw.New(authgw.Config{
 		KratosPublicURL: cfg.KratosPublicURL,
@@ -148,6 +155,7 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 		PerIP:           cfg.AuthPerIP,
 		PerNumber:       cfg.AuthPerNumber,
 		Global:          cfg.AuthGlobal,
+		Store:           limits,
 		ClientIP:        clientIP,
 		Transport:       d.KratosTransport,
 		Clock:           d.Clock,
@@ -170,11 +178,11 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("wiring: %w", err)
 	}
-	limiter, err := ratelimit.New(cfg.APIPerIP, ratelimit.Options{Clock: d.Clock})
+	limiter, err := ratelimit.New("api.ip", cfg.APIPerIP, ratelimit.Options{Store: limits, Clock: d.Clock, Logger: d.Logger})
 	if err != nil {
 		return nil, fmt.Errorf("wiring: API rate limit: %w", err)
 	}
-	planLinkLimiter, err := ratelimit.New(cfg.PlanLinkPerIP, ratelimit.Options{Clock: d.Clock})
+	planLinkLimiter, err := ratelimit.New("plan_link.ip", cfg.PlanLinkPerIP, ratelimit.Options{Store: limits, Clock: d.Clock, Logger: d.Logger})
 	if err != nil {
 		return nil, fmt.Errorf("wiring: plan link rate limit: %w", err)
 	}
@@ -360,9 +368,9 @@ func NewAPIHandler(ctx context.Context, d APIDeps) (http.Handler, error) {
 	root := http.NewServeMux()
 	root.Handle("/auth/", gw)
 	root.Handle("/v1/", v1)
-	root.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	root.Handle("GET /readyz", readiness(d.Logger, poolCheck(d.Pool)))
-	return logRequests(d.Logger, root, api), nil
+	root.Handle("GET /healthz", httpserver.Liveness())
+	root.Handle("GET /readyz", httpserver.Readiness(d.Logger, poolCheck(d.Pool)))
+	return httpserver.LogRequests(d.Logger, root, api), nil
 }
 
 // noopFanout disables live chat delivery when the API has no NATS connection
@@ -689,130 +697,12 @@ func crisisExempt(path string) bool {
 	return false
 }
 
-// statusRecorder captures the status code and size for the request log.
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-	bytes  int
-}
-
-// WriteHeader records the first status code before passing it on.
-func (s *statusRecorder) WriteHeader(code int) {
-	if s.status == 0 {
-		s.status = code
-	}
-	s.ResponseWriter.WriteHeader(code)
-}
-
-func (s *statusRecorder) Write(b []byte) (int, error) {
-	if s.status == 0 {
-		s.status = http.StatusOK
-	}
-	n, err := s.ResponseWriter.Write(b)
-	s.bytes += n
-	return n, err //nolint:wrapcheck // a ResponseWriter's error is passed through unchanged
-}
-
-// Unwrap lets http.ResponseController (used by the reverse proxy) reach the
-// underlying writer for Flush.
-func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
-
-// logRequests logs one line per request with the route pattern instead of the
-// path: paths and query strings can carry identifiers typed by the client, and
-// patterns keep the log free of them (ADR-0021). No IPs, headers or bodies.
-// api resolves the pattern of /v1 routes, which the root mux only knows as "/v1/".
-func logRequests(logger *slog.Logger, root, api *http.ServeMux) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rec := &statusRecorder{ResponseWriter: w}
-		root.ServeHTTP(rec, r)
-		_, route := root.Handler(r)
-		if route == "/v1/" {
-			if _, p := api.Handler(r); p != "" {
-				route = p
-			}
-		}
-		if route == "" {
-			route = "unmatched"
-		}
-		status := rec.status
-		if status == 0 {
-			status = http.StatusOK
-		}
-		logger.Info("http request", "method", r.Method, "route", route, "status", status,
-			"bytes", rec.bytes, "duration_ms", time.Since(start).Milliseconds())
-	})
-}
-
-// check is one readiness dependency.
-type check struct {
-	name string
-	fn   func(context.Context) error
-}
-
-func poolCheck(pool *pgxpool.Pool) check {
-	return check{name: "database", fn: func(ctx context.Context) error {
+// poolCheck is the readiness check of the database.
+func poolCheck(pool *pgxpool.Pool) httpserver.Check {
+	return httpserver.Check{Name: "database", Fn: func(ctx context.Context) error {
 		if err := pool.Ping(ctx); err != nil {
 			return fmt.Errorf("ping: %w", err)
 		}
 		return nil
 	}}
-}
-
-const readinessTimeout = 2 * time.Second
-
-// readiness answers 204 when every check passes and 503 otherwise. Failures
-// are logged with the dependency name; the response does not say which failed.
-func readiness(logger *slog.Logger, checks ...check) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), readinessTimeout)
-		defer cancel()
-		for _, c := range checks {
-			if err := c.fn(ctx); err != nil {
-				logger.Warn("not ready", "dependency", c.name, "error", err)
-				httpapi.WriteProblem(w, http.StatusServiceUnavailable, "not_ready", "Not ready.")
-				return
-			}
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-}
-
-// shutdownTimeout is the same as in internal/platform/httpserver.
-const shutdownTimeout = 20 * time.Second
-
-// serve runs handler on addr until ctx is cancelled, then shuts down
-// gracefully. It is internal/platform/httpserver.Run without that package's
-// fixed root mux, which cannot mount /auth/ or real readiness checks.
-func serve(ctx context.Context, logger *slog.Logger, addr string, handler http.Handler) error {
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		// WriteTimeout is 0 so long-lived WebSocket connections (chat) are not
-		// killed by the server; per-write deadlines live in the gateway.
-		WriteTimeout:   0,
-		IdleTimeout:    120 * time.Second,
-		MaxHeaderBytes: 16 << 10,
-	}
-	errCh := make(chan error, 1)
-	go func() {
-		logger.Info("http server listening", "addr", addr)
-		errCh <- srv.ListenAndServe()
-	}()
-	select {
-	case err := <-errCh:
-		return fmt.Errorf("listen: %w", err)
-	case <-ctx.Done():
-	}
-	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("shutdown: %w", err)
-	}
-	if err := <-errCh; !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("serve: %w", err)
-	}
-	return nil
 }

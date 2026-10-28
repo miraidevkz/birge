@@ -82,25 +82,27 @@ A fresh deployment can start with no configuration or reference data files: when
 | `NATS_URL` | api, worker | required | `nats://` or `tls://` URLs, comma-separated; the API uses NATS core for chat room fan-out, the worker uses JetStream for domain events |
 | `BIRGE_KEK_ID` | api, worker | required | id of the key-encryption key, stored with every wrapped member key; never reuse an id for other key material |
 | `BIRGE_KEK_KEYSET_FILE` | api, worker | required | file with the KEK as a cleartext Tink AES256-GCM keyset in JSON (development and first deployments; production moves to OpenBao, ADR-0009) |
+| `BIRGE_KEK_PREVIOUS_KEYSET_FILES` | api, worker | unset | retired KEKs as `<kek id>=<keyset file>`, comma-separated (`local-1=/secrets/kek-1.json`): they only open member keys wrapped before a rotation, which are re-wrapped with the primary on first use; new keys always use `BIRGE_KEK_ID`. Every listed file must load, otherwise the process refuses to start naming the KEK id. See [KEK rotation](#kek-rotation) |
+| `BIRGE_RATE_LIMIT_STORE` | api, worker | `postgres` | where rate limits, PoW replay claims and the SMS guard counters live. `postgres`: shared by every replica (`platform.rate_counters`, `platform.one_time_claims`; the worker sweeps expired rows); required with more than one API or worker replica. `memory`: per process, for tests and single-replica development (each replica then allows the full limit). See `internal/platform/ratelimit/README.md` |
 | `BIRGE_BLIND_INDEX_KEY_FILE` | api, worker | optional | key for blind indexes; validated when set, not used by any context yet |
 | `BIRGE_POW_KEY_FILE` | api | required | key that signs the proof-of-work challenges of the auth gateway |
-| `BIRGE_HASH_KEY_FILE` | api | required | key of the hashes of numbers and IPs in gateway logs and limiters; must differ from the PoW key |
+| `BIRGE_HASH_KEY_FILE` | api; worker with `BIRGE_RATE_LIMIT_STORE=postgres` | required | key of the hashes of numbers and IPs in gateway logs and in the shared rate limit tables (the tables store only these hashes); must differ from the PoW, plan link and analytics keys. API and worker use the same file |
 | `BIRGE_PLAN_LINK_KEY_FILE` | api, worker | required | HMAC key of the one-time plan links of external trusted contacts (at least 32 bytes): the worker mints links when it sends the plan SMS, the API finds them by keyed hash; only the hash is stored. Must differ from the PoW and hash keys. Replacing it kills every live link (the member sends the plan again) |
 | `BIRGE_ANALYTICS_KEY_FILE` | worker | required | pseudonym key of the analytics facts, `HMAC-SHA256(key, member_id)` (ADR-0024; at least 32 bytes). Its own key, never the plan link key. Replacing it gives every member a new pseudonym: retention and distinct counts across the change are wrong and account deletion no longer finds facts made with the old key. `birge keygen` and the compose keygen service create it (also on an existing secrets volume) |
 | `BIRGE_ANALYTICS_K` | api | `5` (`1` with the DEMO settings preset) | small-cell threshold of `GET /v1/staff/metrics` and its CSV: every cell built from fewer than k members is reported only as suppressed |
 | `BIRGE_PUBLIC_URL` | worker | required | public origin of the member web app (`https://…`, no credentials); the plan SMS link is `<this>/plan#<token>`. The compose stack defaults to `http://localhost:8081` |
-| `BIRGE_PLAN_LINK_RATE_PER_IP` | api | `10/1m` | per-IP token bucket of `POST /v1/external/plans/view` (anonymous), `<burst>/<interval>`; over it → 429. In memory, per replica |
+| `BIRGE_PLAN_LINK_RATE_PER_IP` | api | `10/1m` | per-IP limit of `POST /v1/external/plans/view` (anonymous), `<burst>/<interval>` (see the gateway row); over it → 429. Shared across replicas with the `postgres` store |
 | `BIRGE_SMS_ALLOWED_PREFIXES` | api, worker | required | allowed E.164 mobile prefixes, comma-separated (`+7700,+7701`); used by the gateway and the notify SMS guard |
 | `BIRGE_AUTH_POW_MAX_NUMBER` | api | `100000` | proof-of-work difficulty |
-| `BIRGE_AUTH_RATE_PER_IP`, `BIRGE_AUTH_RATE_PER_NUMBER`, `BIRGE_AUTH_RATE_GLOBAL` | api | `20/1m`, `3/10m`, `20/1s` | gateway token buckets as `<burst>/<interval>`: burst tokens, one more every interval |
-| `BIRGE_API_RATE_PER_IP` | api | `300/100ms` | per-IP token bucket for `/v1`, same format; in memory, per replica |
+| `BIRGE_AUTH_RATE_PER_IP`, `BIRGE_AUTH_RATE_PER_NUMBER`, `BIRGE_AUTH_RATE_GLOBAL` | api | `20/1m`, `3/10m`, `20/1s` | gateway limits as `<burst>/<interval>`: up to burst requests per fixed window of burst × interval (on average one per interval; `3/10m` is 3 per 30 minutes). A store error refuses sign-in (503) |
+| `BIRGE_API_RATE_PER_IP` | api | `300/100ms` | per-IP limit for `/v1`, same format (300 per 30 s); a store error lets requests through |
 | `BIRGE_TRUSTED_PROXY_HEADER` | api | unset | header set by the ingress (e.g. `X-Forwarded-For`); its right-most value is the client IP. Unset: the connection's address. Set it only behind a proxy that appends to that header |
 | `BIRGE_CONSENT_VERSIONS` | api | DEMO (`*-demo-1`) | current consent text versions, `<type>=<version>` comma-separated, one for every type (`data_processing`, `ai_crossborder`, `research`); unset → `presets/demo/settings.json` |
 | `BIRGE_DELETION_DELAY` | api, worker | `24h` | time from a deletion request to crypto-shredding; at most `24h` |
 | `NOTIFY_CRITICAL_SMS_AFTER` | api, worker | `60s` | wait for an acknowledgement before the critical SMS fallback; at most `15m` |
-| `BIRGE_SMS_PER_NUMBER_LIMIT`, `BIRGE_SMS_PER_NUMBER_WINDOW` | worker | `5`, `1h` | notify SMS guard: sends per number per window |
-| `BIRGE_SMS_GLOBAL_LIMIT`, `BIRGE_SMS_GLOBAL_WINDOW` | worker | `60`, `1m` | notify SMS guard: sends per process per window |
-| `BIRGE_SMS_DAILY_BUDGET` | worker | `1000` | notify SMS guard: sends per UTC day (does not block critical SMS). The `BIRGE_SMS_*` guard settings apply to two guards with separate counters: notifications, and sign-in codes from the courier hook, so sign-in traffic never uses up what critical and plan SMS need. Worst case per worker and day is twice the budget |
+| `BIRGE_SMS_PER_NUMBER_LIMIT`, `BIRGE_SMS_PER_NUMBER_WINDOW` | worker | `5`, `1h` | notify SMS guard: sends per number per fixed window |
+| `BIRGE_SMS_GLOBAL_LIMIT`, `BIRGE_SMS_GLOBAL_WINDOW` | worker | `60`, `1m` | notify SMS guard: sends to all numbers per fixed window |
+| `BIRGE_SMS_DAILY_BUDGET` | worker | `1000` | notify SMS guard: sends per UTC day (counts critical SMS but never blocks them). The `BIRGE_SMS_*` guard settings apply to two guards with separate counters: notifications, and sign-in codes from the courier hook, so sign-in traffic never uses up what critical and plan SMS need. With the `postgres` store the counters are shared by every worker replica: worst case per day is twice the budget however many workers run (with `memory`, twice per worker). A store error refuses ordinary SMS and never a critical one |
 | `BIRGE_INTERNAL_ADDR` | worker | unset | `host:port` of the worker's internal listener, which serves only the Kratos courier hook (`POST /internal/kratos/courier`); must differ from `BIRGE_HTTP_ADDR`. Cluster-internal: never publish it or route it from the ingress. Unset → no listener, no hook |
 | `BIRGE_COURIER_SECRET_FILE` | worker | required with `BIRGE_INTERNAL_ADDR` | shared secret (at least 32 bytes) that Kratos' courier sends as `Authorization: Bearer <secret>`; compared in constant time. The same file feeds the Kratos courier config (`deploy/compose/kratos/courier-hook.yml`) |
 | `BIRGE_SMS_TEXTS` | worker | DEMO preset | neutral fixed SMS bodies, JSON `{"<template>": {"kk": "...", "ru": "...", "en": "..."}}`; unset → `presets/demo/sms_texts.json`; required when `BIRGE_DELIVERY_MODE` is not `dev` and the value is an empty object; an SMS for a template without a text is skipped (and logged). The placeholder `{link}` is replaced at send time with a link the worker mints (today only `emergency.plan_sent` to an external contact); an SMS whose text has `{link}` and gets no link is skipped. Keep the rest of the text a neutral sentence |
@@ -145,6 +147,18 @@ make kb-export   # writes under knowledge/
 ```
 
 Health: `GET /healthz` answers 204 while the process runs; `GET /readyz` answers 204 when the database (and NATS for the API and the worker) is reachable and 503 otherwise.
+
+### KEK rotation
+
+The KEK wraps every member's data key (ADR-0009). Rotating it replaces the wrapping, never the data keys, so no ciphertext is rewritten. The steps keep every replica able to open every row during rolling updates:
+
+1. Generate the new keyset (`birge keygen` into a new directory, take its `kek.json`) and choose a new id that was never used, e.g. `local-2`. Store it in the secret store next to the current one.
+2. Roll out with the new KEK as a *previous* one on every API and worker replica: `BIRGE_KEK_PREVIOUS_KEYSET_FILES=local-2=/secrets/kek-2.json`, `BIRGE_KEK_ID` and `BIRGE_KEK_KEYSET_FILE` unchanged. Nothing is wrapped with it yet; this only makes sure that every replica can open what the next step writes.
+3. When step 2 is on every replica, swap: `BIRGE_KEK_ID=local-2`, `BIRGE_KEK_KEYSET_FILE=/secrets/kek-2.json`, `BIRGE_KEK_PREVIOUS_KEYSET_FILES=local-1=/secrets/kek-1.json`. New members get keys wrapped by `local-2`, and an existing member's key is re-wrapped with `local-2` the first time a replica loads it (best effort; a failed re-wrap is retried on the next load). Replicas still on step 2 can read both; while the rollout runs they re-wrap what they load back to `local-1`, which is harmless (every replica opens both) and undone by the next load on an updated replica.
+4. Keep `local-1` listed while any live row names it: `SELECT kek_id, count(*) FROM platform.member_keys WHERE destroyed_at IS NULL GROUP BY kek_id;`. Members who have not been active since step 3 keep the old wrapping until they are. Only when `local-1` has no live rows, remove it from `BIRGE_KEK_PREVIOUS_KEYSET_FILES`; shredded rows (tombstones) never need a KEK.
+5. Keep the old keyset in offline custody until every backup made before step 4 has expired: a restored backup still has rows wrapped by it.
+
+A listed file that cannot be read or parsed stops the process at start with `BIRGE_KEK_PREVIOUS_KEYSET_FILES: ... KEK <id>`, so a missing secret is noticed at deploy time, not on the first member it wrapped. An id must never be reused for different key material.
 
 ## Running locally
 

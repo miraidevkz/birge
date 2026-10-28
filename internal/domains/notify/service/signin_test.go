@@ -49,12 +49,12 @@ func TestSendSignInCode(t *testing.T) {
 		{"prefix refused", "+19005550100", signInCode, open, nil, service.ErrSMSRefused, 0},
 		{"daily budget refused", signInPhone, signInCode, func() *guard.Guard {
 			g := guard.New(guard.Config{AllowedPrefixes: []string{"+77"}, DailyBudget: 1})
-			_ = g.Allow("+77009999999", time.Date(2026, 10, 28, 11, 0, 0, 0, time.UTC))
+			_ = g.Allow(context.Background(), "+77009999999", time.Date(2026, 10, 28, 11, 0, 0, 0, time.UTC))
 			return g
 		}, nil, service.ErrSMSRefused, 0},
 		{"per-number limit refused", signInPhone, signInCode, func() *guard.Guard {
 			g := guard.New(guard.Config{AllowedPrefixes: []string{"+77"}, PerNumberLimit: 1})
-			_ = g.Allow(signInPhone, time.Date(2026, 10, 28, 11, 59, 0, 0, time.UTC))
+			_ = g.Allow(context.Background(), signInPhone, time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC))
 			return g
 		}, nil, service.ErrSMSRefused, 0},
 		{"no guard refuses", signInPhone, signInCode, func() *guard.Guard { return nil }, nil, errAny, 0},
@@ -118,7 +118,7 @@ func TestSendSignInCodeKeepsNotificationBudget(t *testing.T) {
 	if err := svc.SendSignInCode(ctx, signInPhone, signInCode); !errors.Is(err, service.ErrSMSRefused) {
 		t.Fatalf("second sign-in SMS: err = %v, want refused", err)
 	}
-	if err := svc.Guard.Allow(signInPhone, svc.Clock.Now()); err != nil {
+	if err := svc.Guard.Allow(ctx, signInPhone, svc.Clock.Now()); err != nil {
 		t.Fatalf("notification guard was used by sign-in SMS: %v", err)
 	}
 }

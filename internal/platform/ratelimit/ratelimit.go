@@ -1,38 +1,47 @@
-// Package ratelimit is an in-memory token-bucket limiter keyed by a string
-// (for example the client IP) and an HTTP middleware that answers 429 with a
-// problem body when a key runs out of tokens.
+// Package ratelimit holds fixed-window rate limits and one-time claims, kept
+// in a Store that is either process memory (MemoryStore: tests and a single
+// replica) or PostgreSQL shared by every replica (PostgresStore). With the
+// shared store, N API or worker replicas behave like one: a limit is counted
+// once across all of them, and a claimed key (a proof-of-work solution) is
+// accepted by one replica only. Wiring picks the store from
+// BIRGE_RATE_LIMIT_STORE; see README.md for the design and its trade-offs.
 //
-// Each key has a bucket of Rate.Burst tokens, refilled at one token per
-// Rate.Every. The table of buckets is bounded by MaxKeys: buckets that have
-// refilled completely carry no state and are dropped first; when every bucket
-// is still active, an arbitrary one is dropped to make room. The limiter
-// therefore fails open for a new key under a key-flooding attack instead of
-// refusing everyone: on the API this limit protects capacity, and refusing all
-// clients would also cut mothers off from the crisis endpoints (AGENTS.md,
-// non-negotiable 1). Endpoints that send SMS have their own fail-closed limits
-// (membership/authgw, notify/sms/guard).
+// A Limiter allows Rate.Burst hits per key in each fixed window of
+// Rate.Burst × Rate.Every (the same average rate as a token bucket of that
+// burst and refill interval). Windows are aligned to absolute time, so every
+// replica computes the same window. A refused hit is not counted. At a
+// window boundary a client can get up to twice the burst in a short time;
+// the limits here protect capacity and providers, and that is acceptable.
 //
-// State lives in process memory, so limits hold per replica: with N replicas
-// a client gets up to N times the rate.
+// Store errors (database down, memory table full) are returned to the
+// caller, who decides: Middleware fails open, because it protects capacity
+// and refusing every client would also cut mothers off from the crisis
+// endpoints (AGENTS.md, non-negotiable 1); the auth gateway and the SMS guard
+// fail closed, except that a critical SMS is never blocked by a store error.
 //
-// Keys are kept only in memory and never logged.
+// Keys may be IPs or phone numbers. MemoryStore keeps them in process memory
+// only; PostgresStore stores only a keyed hash of them. Keys are never logged.
 package ratelimit
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
-	"sync"
+	"strings"
 	"time"
 
 	"birge/internal/platform/clock"
 	"birge/internal/platform/httpapi"
 )
 
-// DefaultMaxKeys bounds the bucket table when Options.MaxKeys is zero.
+// DefaultMaxKeys bounds the private MemoryStore of a limiter when
+// Options.MaxKeys is zero.
 const DefaultMaxKeys = 100_000
 
-// Rate is a token bucket: Burst tokens, refilled at one token per Every.
+// Rate is Burst hits per window of Burst × Every: on average one hit per
+// Every, with at most Burst at once. It is configured as "<burst>/<interval>".
 type Rate struct {
 	Burst int
 	Every time.Duration
@@ -41,104 +50,91 @@ type Rate struct {
 // Valid reports whether both fields are positive.
 func (r Rate) Valid() bool { return r.Burst > 0 && r.Every > 0 }
 
+// Window is the length of one fixed window, Burst × Every.
+func (r Rate) Window() time.Duration { return time.Duration(r.Burst) * r.Every }
+
 // Options tune a Limiter. Zero values take the defaults.
 type Options struct {
-	// MaxKeys bounds the number of buckets kept. Default DefaultMaxKeys.
+	// Store keeps the counters. Nil gives the limiter a private MemoryStore
+	// of MaxKeys keys (one replica only).
+	Store Store
+	// MaxKeys bounds the private MemoryStore. Default DefaultMaxKeys.
 	MaxKeys int
 	Clock   clock.Clock
+	// Logger receives Middleware's store failures. Default slog.Default().
+	Logger *slog.Logger
 }
 
-type bucket struct {
-	tokens float64
-	last   time.Time
-}
-
-// Limiter keeps one token bucket per key. It is safe for concurrent use.
+// Limiter counts hits per key in fixed windows. It is safe for concurrent use.
 type Limiter struct {
-	rate    Rate
-	maxKeys int
-	clock   clock.Clock
-
-	mu      sync.Mutex
-	buckets map[string]*bucket
+	name   string
+	rate   Rate
+	store  Store
+	clock  clock.Clock
+	logger *slog.Logger
 }
 
-// New returns a limiter for r.
-func New(r Rate, opts Options) (*Limiter, error) {
+// New returns a limiter for r. name separates its keys from those of other
+// limiters in a shared store; it must be unique per limit, e.g. "api.ip".
+func New(name string, r Rate, opts Options) (*Limiter, error) {
 	if !r.Valid() {
 		return nil, errors.New("ratelimit: burst and interval must be positive")
 	}
-	if opts.MaxKeys <= 0 {
-		opts.MaxKeys = DefaultMaxKeys
+	if name == "" || strings.Contains(name, "|") {
+		return nil, errors.New("ratelimit: name must be non-empty and must not contain '|'")
+	}
+	if opts.Store == nil {
+		opts.Store = NewMemoryStore(opts.MaxKeys)
 	}
 	if opts.Clock == nil {
 		opts.Clock = clock.System{}
 	}
-	return &Limiter{rate: r, maxKeys: opts.MaxKeys, clock: opts.Clock, buckets: make(map[string]*bucket)}, nil
+	if opts.Logger == nil {
+		opts.Logger = slog.Default()
+	}
+	return &Limiter{name: name, rate: r, store: opts.Store, clock: opts.Clock, logger: opts.Logger}, nil
 }
 
-// Allow takes one token for key and reports whether one was available.
-func (l *Limiter) Allow(key string) bool {
-	now := l.clock.Now()
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	b, ok := l.buckets[key]
-	if !ok {
-		if len(l.buckets) >= l.maxKeys {
-			l.makeRoom(now)
-		}
-		b = &bucket{tokens: float64(l.rate.Burst), last: now}
-		l.buckets[key] = b
-	}
-	l.refill(b, now)
-	if b.tokens < 1 {
-		return false
-	}
-	b.tokens--
-	return true
+// Allow counts one hit for key and reports whether it is within the limit.
+// On a store error it returns false with the error; the caller decides
+// whether to fail open or closed.
+func (l *Limiter) Allow(ctx context.Context, key string) (bool, error) {
+	return l.store.Hit(ctx, l.name+"|"+key, l.rate.Window(), l.rate.Burst, l.clock.Now())
 }
 
-// RetryAfter is the whole number of seconds after which a refused key has a
-// token again in the worst case (one refill interval), at least 1.
+// RetryAfter is the whole number of seconds until the current window ends,
+// at least 1: after it a refused key has its full burst again.
 func (l *Limiter) RetryAfter() int {
-	s := int((l.rate.Every + time.Second - 1) / time.Second)
-	return max(s, 1)
+	now := l.clock.Now()
+	w := l.rate.Window()
+	left := WindowStart(now, w).Add(w).Sub(now)
+	return max(int((left+time.Second-1)/time.Second), 1)
 }
 
-func (l *Limiter) refill(b *bucket, now time.Time) {
-	if elapsed := now.Sub(b.last); elapsed > 0 {
-		b.tokens = min(float64(l.rate.Burst), b.tokens+float64(elapsed)/float64(l.rate.Every))
-		b.last = now
-	}
+// WindowStart is the start of the fixed window of length window that
+// contains now. Windows are aligned to the Unix epoch, so every replica
+// (and a day-long window in UTC) agrees on them.
+func WindowStart(now time.Time, window time.Duration) time.Time {
+	n := now.UnixNano()
+	return time.Unix(0, n-n%int64(window)).UTC()
 }
 
-// makeRoom must be called with mu held. It drops full buckets; if none is
-// full, it drops one arbitrary bucket (map order), which resets that key.
-func (l *Limiter) makeRoom(now time.Time) {
-	for k, b := range l.buckets {
-		l.refill(b, now)
-		if b.tokens >= float64(l.rate.Burst) {
-			delete(l.buckets, k)
-		}
-	}
-	if len(l.buckets) < l.maxKeys {
-		return
-	}
-	for k := range l.buckets {
-		delete(l.buckets, k)
-		return
-	}
-}
-
-// Middleware returns next behind the limiter. key derives the bucket key from
-// the request (for example the client IP); a refused request gets 429 with
-// Retry-After and the problem code "rate_limited".
+// Middleware returns next behind the limiter. key derives the limiter key
+// from the request (for example the client IP); a refused request gets 429
+// with Retry-After and the problem code "rate_limited". A store error lets
+// the request through (fail open, see the package doc) and is logged with
+// the limiter name only.
 func Middleware(l *Limiter, key func(*http.Request) string) func(http.Handler) http.Handler {
-	retry := strconv.Itoa(l.RetryAfter())
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !l.Allow(key(r)) {
-				w.Header().Set("Retry-After", retry)
+			ok, err := l.Allow(r.Context(), key(r))
+			if err != nil {
+				l.logger.Warn("rate limit store unavailable, request allowed",
+					"event", "RateLimitStoreError", "limiter", l.name, "error", err)
+				ok = true
+			}
+			if !ok {
+				w.Header().Set("Retry-After", strconv.Itoa(l.RetryAfter()))
 				httpapi.WriteProblem(w, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again later.")
 				return
 			}

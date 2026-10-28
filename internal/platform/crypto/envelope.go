@@ -198,6 +198,9 @@ func wrapAD(memberID uuid.UUID) []byte {
 	return AssociatedData("platform.member_keys.wrapped_dek", memberID)
 }
 
+// unwrap opens the member's data key. A key still wrapped by a previous KEK
+// is re-wrapped with the primary on the way (rewrap), so after a rotation
+// the old KEK is needed only for members who have not been active since.
 func (e *Envelope) unwrap(ctx context.Context, row store.PlatformMemberKey) (tink.AEAD, error) {
 	kek, ok := e.keys.Get(row.KekID)
 	if !ok {
@@ -219,5 +222,25 @@ func (e *Envelope) unwrap(ctx context.Context, row store.PlatformMemberKey) (tin
 	if err != nil {
 		return nil, fmt.Errorf("crypto: key of member %s: %w", row.MemberID, err)
 	}
+	if row.KekID != e.keys.Primary().ID() {
+		e.rewrap(ctx, row.MemberID, row.KekID, raw)
+	}
 	return a, nil
+}
+
+// rewrap stores the member's data key wrapped by the primary KEK in place of
+// the wrapping by from. The key itself does not change, so ciphertexts and
+// cached copies stay valid. It is best effort: on failure the row keeps the
+// old wrapping, which still opens, and the next load from the database
+// tries again. The update applies only while the row is still wrapped by
+// from and not shredded, so a concurrent rewrap or Shred wins.
+func (e *Envelope) rewrap(ctx context.Context, memberID uuid.UUID, from string, raw []byte) {
+	kek := e.keys.Primary()
+	wrapped, err := kek.Wrap(ctx, raw, wrapAD(memberID))
+	if err != nil {
+		return
+	}
+	_, _ = e.q.RewrapMemberKey(ctx, store.RewrapMemberKeyParams{
+		MemberID: memberID, WrappedDek: wrapped, KekID: kek.ID(), FromKekID: from,
+	})
 }

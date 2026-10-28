@@ -107,3 +107,58 @@ func TestSMSLinkPlaceholder(t *testing.T) {
 		})
 	}
 }
+
+// downCounters is a guard counter store whose database is down.
+type downCounters struct{}
+
+func (downCounters) Hit(context.Context, string, time.Duration, int, time.Time) (bool, error) {
+	return false, errors.New("database down")
+}
+
+func (downCounters) Claim(context.Context, string, time.Time, time.Time) (bool, error) {
+	return false, errors.New("database down")
+}
+
+// TestSMSGuardStoreDownIsTransient: when the guard cannot count, an ordinary
+// SMS is neither sent nor skipped; it stays pending and the timer retries.
+func TestSMSGuardStoreDownIsTransient(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)
+	contactID := uuid.Must(uuid.NewV7())
+	store := notifytest.NewMemoryStore()
+	sms := &notifytest.FakeSMS{}
+	svc := &service.Service{
+		Store: store,
+		Recipients: &notifytest.FakeRecipients{
+			ByTrustedContact: map[uuid.UUID]model.ResolvedRecipient{
+				contactID: {Kind: model.RecipientKindExternal, Ref: contactID, Language: "ru"},
+			},
+			PhoneByExternal: map[uuid.UUID]string{contactID: "+77005556677"},
+		},
+		Push: &notifytest.FakePush{},
+		SMS:  sms,
+		Guard: guard.New(guard.Config{AllowedPrefixes: []string{"+7"}, PerNumberLimit: 10, Store: downCounters{},
+			Logger: slog.New(slog.DiscardHandler)}),
+		Links:  &fakeLinks{link: secretLink},
+		Clock:  &fixedClock{t: start},
+		Logger: slog.New(slog.DiscardHandler),
+		Config: service.Config{SMSTexts: map[string]map[string]string{"emergency.plan_sent": {"ru": "Birge: plan {link}"}}},
+	}
+	reqID := uuid.Must(uuid.NewV7())
+	if err := svc.HandleDeliveryRequested(context.Background(), uuid.Must(uuid.NewV7()), model.DeliveryRequest{
+		RequestID: reqID, Recipient: model.Recipient{TrustedContactID: &contactID},
+		Class: model.ClassNormal, Template: "emergency.plan_sent",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	n, _ := store.NotificationByRequest(reqID, model.RecipientKindExternal, contactID)
+	if err := svc.HandleExternalSMS(context.Background(), n.ID); !errors.Is(err, guard.ErrUnavailable) {
+		t.Fatalf("send error = %v, want guard.ErrUnavailable for a retry", err)
+	}
+	if sms.Len() != 0 {
+		t.Fatalf("sms sends = %d", sms.Len())
+	}
+	if status, _ := store.DeliveryStatus(n.ID, model.ChannelSMS); status != model.StatusPending {
+		t.Fatalf("status = %q, want pending", status)
+	}
+}

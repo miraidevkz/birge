@@ -1,6 +1,7 @@
 package authgw
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -13,8 +14,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
+
+	"birge/internal/platform/ratelimit"
 )
 
 // powExpiry is how long an issued challenge stays solvable.
@@ -43,7 +45,9 @@ type solution struct {
 type pow struct {
 	key       []byte
 	maxNumber int64
-	replay    *replayStore
+	// replay holds a claim per accepted challenge until it expires; shared
+	// by every replica with the PostgreSQL store.
+	replay ratelimit.Store
 }
 
 func (p *pow) sign(challengeHex string) string {
@@ -77,10 +81,13 @@ var (
 	errPoWInvalid = errors.New("pow solution invalid")
 	errPoWExpired = errors.New("pow solution expired")
 	errPoWReplay  = errors.New("pow solution already used")
+	errPoWStore   = errors.New("pow replay store unavailable")
 )
 
-// verify checks an encoded solution and marks it used. Each solution is accepted once.
-func (p *pow) verify(encoded string, now time.Time) error {
+// verify checks an encoded solution and marks it used. Each solution is
+// accepted once, across replicas when the replay store is shared. A store
+// failure is errPoWStore: the caller refuses the request (fails closed).
+func (p *pow) verify(ctx context.Context, encoded string, now time.Time) error {
 	if encoded == "" {
 		return errPoWMissing
 	}
@@ -112,7 +119,13 @@ func (p *pow) verify(encoded string, now time.Time) error {
 	if !now.Before(expires) {
 		return errPoWExpired
 	}
-	if !p.replay.use(s.Challenge, expires, now) {
+	// Claimed last, after every check: only a valid, unexpired solution
+	// uses a row, so forged solutions cannot fill the store.
+	fresh, err := p.replay.Claim(ctx, "auth.pow|"+s.Challenge, expires, now)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errPoWStore, err)
+	}
+	if !fresh {
 		return errPoWReplay
 	}
 	return nil
@@ -133,38 +146,4 @@ func saltExpiry(salt string) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	return time.Unix(sec, 0), true
-}
-
-// replayStore remembers used challenges until they expire. It lives in
-// memory, so it protects one replica only (see the package doc).
-type replayStore struct {
-	mu   sync.Mutex
-	max  int
-	used map[string]time.Time
-}
-
-func newReplayStore(maxEntries int) *replayStore {
-	return &replayStore{max: maxEntries, used: make(map[string]time.Time)}
-}
-
-// use records key until expires and reports whether it was unused. When the
-// store is full of live entries it refuses (fails closed).
-func (r *replayStore) use(key string, expires, now time.Time) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if exp, ok := r.used[key]; ok && now.Before(exp) {
-		return false
-	}
-	if len(r.used) >= r.max {
-		for k, exp := range r.used {
-			if !now.Before(exp) {
-				delete(r.used, k)
-			}
-		}
-		if len(r.used) >= r.max {
-			return false
-		}
-	}
-	r.used[key] = expires
-	return true
 }

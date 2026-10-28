@@ -17,3 +17,11 @@ VALUES (@member_id, ''::bytea, '', @destroyed_at)
 ON CONFLICT (member_id) DO UPDATE
 SET wrapped_dek = ''::bytea,
     destroyed_at = coalesce(platform.member_keys.destroyed_at, excluded.destroyed_at);
+
+-- name: RewrapMemberKey :execrows
+-- KEK rotation: replaces the wrapping of a live data key, only while it is
+-- still wrapped by from_kek_id. A concurrent rewrap (another replica) or a
+-- shred that got there first wins, and this statement changes nothing.
+UPDATE platform.member_keys
+SET wrapped_dek = @wrapped_dek, kek_id = @kek_id
+WHERE member_id = @member_id AND kek_id = @from_kek_id AND destroyed_at IS NULL;

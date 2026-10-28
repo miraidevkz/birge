@@ -19,10 +19,12 @@
 // The checked body is re-encoded before forwarding so Kratos sees exactly the
 // values that were checked.
 //
-// Limits of this implementation: the PoW replay store and the rate limiters
-// live in memory, so they hold for one replica only; with more replicas a
-// solution can be replayed once per replica and limits multiply by the
-// replica count. Move them to a shared store before scaling out.
+// The rate limits and the PoW replay store live in Config.Store
+// (platform/ratelimit): with the PostgreSQL store every API replica shares
+// them, so a solution is accepted once across replicas and a limit is not
+// multiplied by the replica count. Without a store each limiter has a
+// private in-memory table (tests, one replica). The gateway fails closed: a
+// store error refuses the request (503) instead of letting it reach Kratos.
 //
 // Logs carry reasons and a keyed hash of the number (number_hash), never the
 // number, the code, the body or the session token.
@@ -42,6 +44,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime"
@@ -54,6 +57,7 @@ import (
 
 	"birge/internal/platform/clock"
 	"birge/internal/platform/httpapi"
+	"birge/internal/platform/ratelimit"
 )
 
 // PoWHeader carries the base64 ALTCHA solution on flow submissions.
@@ -66,6 +70,10 @@ const (
 	defaultPhoneTrait      = "phone"
 	minKeyLen              = 32
 )
+
+// Rate is a fixed-window limit, Burst requests per Burst × Every (see
+// ratelimit.Rate).
+type Rate = ratelimit.Rate
 
 // Config configures the gateway. Keys come from the secret store.
 type Config struct {
@@ -82,9 +90,12 @@ type Config struct {
 	AllowedPrefixes []string
 	// PhoneTrait is the identity trait holding the phone in registration. Default "phone".
 	PhoneTrait string
-	// PerIP, PerNumber and Global are the token buckets; all are required.
+	// PerIP, PerNumber and Global are the limits; all are required.
 	PerIP, PerNumber, Global Rate
-	// MaxKeys bounds each limiter table and the replay store. Default 100000.
+	// Store holds the limits and the PoW replay claims. Nil gives every
+	// limiter and the replay check a private in-memory table (one replica).
+	Store ratelimit.Store
+	// MaxKeys bounds each private in-memory table. Default 100000.
 	MaxKeys int
 	// MaxBodyBytes limits request bodies. Default 16 KiB.
 	MaxBodyBytes int64
@@ -103,9 +114,9 @@ type Config struct {
 type Gateway struct {
 	cfg       Config
 	pow       *pow
-	perIP     *limiter
-	perNumber *limiter
-	global    *limiter
+	perIP     *ratelimit.Limiter
+	perNumber *ratelimit.Limiter
+	global    *ratelimit.Limiter
 	proxy     *httputil.ReverseProxy
 	mux       *http.ServeMux
 }
@@ -125,7 +136,7 @@ func New(cfg Config) (*Gateway, error) {
 		return nil, errors.New("authgw: PoWMaxNumber must be positive")
 	case len(cfg.AllowedPrefixes) == 0:
 		return nil, errors.New("authgw: AllowedPrefixes is empty")
-	case !cfg.PerIP.valid() || !cfg.PerNumber.valid() || !cfg.Global.valid():
+	case !cfg.PerIP.Valid() || !cfg.PerNumber.Valid() || !cfg.Global.Valid():
 		return nil, errors.New("authgw: PerIP, PerNumber and Global rates are required")
 	}
 	for _, p := range cfg.AllowedPrefixes {
@@ -158,12 +169,30 @@ func New(cfg Config) (*Gateway, error) {
 		cfg.Transport = defaultTransport()
 	}
 
+	replay := cfg.Store
+	if replay == nil {
+		replay = ratelimit.NewMemoryStore(cfg.MaxKeys)
+	}
 	g := &Gateway{
-		cfg:       cfg,
-		pow:       &pow{key: cfg.PoWKey, maxNumber: cfg.PoWMaxNumber, replay: newReplayStore(cfg.MaxKeys)},
-		perIP:     newLimiter(cfg.PerIP, cfg.MaxKeys),
-		perNumber: newLimiter(cfg.PerNumber, cfg.MaxKeys),
-		global:    newLimiter(cfg.Global, 1),
+		cfg: cfg,
+		pow: &pow{key: cfg.PoWKey, maxNumber: cfg.PoWMaxNumber, replay: replay},
+	}
+	// Each limiter gets its own private table when Store is nil, so a flood
+	// of IPs cannot fill the table the per-number limit needs.
+	for _, l := range []struct {
+		dst  **ratelimit.Limiter
+		name string
+		rate Rate
+	}{
+		{&g.perIP, "auth.ip", cfg.PerIP},
+		{&g.perNumber, "auth.number", cfg.PerNumber},
+		{&g.global, "auth.global", cfg.Global},
+	} {
+		lim, err := ratelimit.New(l.name, l.rate, ratelimit.Options{Store: cfg.Store, MaxKeys: cfg.MaxKeys, Clock: cfg.Clock, Logger: cfg.Logger})
+		if err != nil {
+			return nil, fmt.Errorf("authgw: %w", err)
+		}
+		*l.dst = lim
 	}
 	g.proxy = &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
@@ -227,8 +256,7 @@ func (g *Gateway) routes() *http.ServeMux {
 
 // ServeHTTP applies the per-IP limit, the body limit and the upstream timeout, then routes.
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !g.perIP.allow(g.keyedHash("ip", g.cfg.ClientIP(r)), g.cfg.Clock.Now()) {
-		g.reject(w, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again later.", "ip_limit", "")
+	if !g.allow(r.Context(), w, g.perIP, g.keyedHash("ip", g.cfg.ClientIP(r)), "ip_limit", "") {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, g.cfg.MaxBodyBytes)
@@ -252,7 +280,12 @@ func (g *Gateway) issueChallenge(w http.ResponseWriter, _ *http.Request) {
 func (g *Gateway) submitFlow(registration bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		now := g.cfg.Clock.Now()
-		if err := g.pow.verify(r.Header.Get(PoWHeader), now); err != nil {
+		if err := g.pow.verify(r.Context(), r.Header.Get(PoWHeader), now); err != nil {
+			if errors.Is(err, errPoWStore) {
+				g.cfg.Logger.Warn("auth gateway: pow replay store unavailable", "event", "AuthLimitStoreError", "error", err)
+				g.reject(w, http.StatusServiceUnavailable, "auth_unavailable", "Sign-in is temporarily unavailable.", "pow store", "")
+				return
+			}
 			g.reject(w, http.StatusForbidden, "pow_required", "Solve the challenge and try again.", "pow: "+err.Error(), "")
 			return
 		}
@@ -283,13 +316,12 @@ func (g *Gateway) submitFlow(registration bool) http.HandlerFunc {
 			}
 		}
 		for _, n := range numbers {
-			if !g.perNumber.allow(g.keyedHash("phone", n), now) {
-				g.reject(w, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again later.", "number_limit", g.keyedHash("phone", n))
+			h := g.keyedHash("phone", n)
+			if !g.allow(r.Context(), w, g.perNumber, h, "number_limit", h) {
 				return
 			}
 		}
-		if !g.global.allow("global", now) {
-			g.reject(w, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again later.", "global_limit", "")
+		if !g.allow(r.Context(), w, g.global, "global", "global_limit", "") {
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(canonical))
@@ -297,6 +329,23 @@ func (g *Gateway) submitFlow(registration bool) http.HandlerFunc {
 		r.Header.Del("Content-Length")
 		g.proxy.ServeHTTP(w, r)
 	}
+}
+
+// allow counts one hit of key on l. When the limit is reached or the store
+// fails it answers the request (429, or 503 for a store error: the gateway
+// fails closed) and returns false. numberHash is optional, for the log.
+func (g *Gateway) allow(ctx context.Context, w http.ResponseWriter, l *ratelimit.Limiter, key, reason, numberHash string) bool {
+	ok, err := l.Allow(ctx, key)
+	switch {
+	case err != nil:
+		g.cfg.Logger.Warn("auth gateway: limit store unavailable", "event", "AuthLimitStoreError", "reason", reason, "error", err)
+		g.reject(w, http.StatusServiceUnavailable, "auth_unavailable", "Sign-in is temporarily unavailable.", reason+": store", numberHash)
+		return false
+	case !ok:
+		g.reject(w, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again later.", reason, numberHash)
+		return false
+	}
+	return true
 }
 
 // reject answers with a problem and logs the reason; numberHash is optional.

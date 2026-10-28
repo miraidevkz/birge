@@ -32,7 +32,8 @@ Contract merged, code pending (answers 501):
 No contract change needed:
 - [x] Push (FCM, APNs) and SMS provider adapters (an SMS provider in Kazakhstan, e.g. SMSC.kz, with a registered sender ID); production refuses the log senders
 - [x] Kratos courier hook so sign-in codes go through notify's SMS guard (the dev stack keeps `cmd/birge-devsms`); to verify against a live Kratos
-- [ ] More than one API replica: shared store for rate limits and PoW replay, previous KEKs in configuration for rotation, merge the wiring HTTP server back into `platform/httpserver`
+- [x] More than one API replica: shared PostgreSQL store for rate limits, PoW replay and the worker's SMS guards (`BIRGE_RATE_LIMIT_STORE`), previous KEKs in configuration for rotation (`BIRGE_KEK_PREVIOUS_KEYSET_FILES`, re-wrap on first use), the wiring HTTP server merged back into `platform/httpserver`
+- [ ] Re-wrap job for member keys of members who stay inactive after a KEK rotation, so the old KEK can be retired without waiting for them
 - [x] Reference data (cities, districts, needs) for the pilot country, synced by `migrate` (`presets/kz/reference.json`, `BIRGE_REFERENCE_PRESETS`); Kazakh names await native review
 - [ ] Role matrix for staff and a deny-by-default test generated from the contract (decided to come after the demo)
 

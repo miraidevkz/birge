@@ -29,6 +29,11 @@ type PlatformMemberKey struct {
 	DestroyedAt *time.Time
 }
 
+type PlatformOneTimeClaim struct {
+	Key       string
+	ExpiresAt time.Time
+}
+
 type PlatformOutbox struct {
 	ID           uuid.UUID
 	EventType    string
@@ -43,6 +48,13 @@ type PlatformProcessedEvent struct {
 	Consumer    string
 	EventID     uuid.UUID
 	ProcessedAt time.Time
+}
+
+type PlatformRateCounter struct {
+	Key         string
+	WindowStart time.Time
+	Hits        int64
+	ExpiresAt   time.Time
 }
 
 type PlatformStaffAccount struct {

@@ -20,7 +20,6 @@ import (
 	"birge/internal/domains/assistant/anonymize"
 	assistantservice "birge/internal/domains/assistant/service"
 	"birge/internal/domains/knowledge/retrieval"
-	"birge/internal/domains/membership/authgw"
 	pushadapter "birge/internal/domains/notify/adapter/push"
 	smsadapter "birge/internal/domains/notify/adapter/smsgw"
 	"birge/internal/domains/notify/sms/guard"
@@ -64,6 +63,17 @@ const (
 const (
 	DeliveryModeDev        = "dev"
 	DeliveryModeProduction = "production"
+)
+
+// Rate limit stores (BIRGE_RATE_LIMIT_STORE).
+const (
+	// RateLimitStorePostgres shares the rate limits, the PoW replay claims
+	// and the SMS guard counters across every API and worker replica
+	// (platform.rate_counters, platform.one_time_claims). The default.
+	RateLimitStorePostgres = "postgres"
+	// RateLimitStoreMemory keeps them in each process: tests and a single
+	// replica only, since with N replicas every limit is N times higher.
+	RateLimitStoreMemory = "memory"
 )
 
 // Push and SMS provider names (BIRGE_PUSH_PROVIDER, BIRGE_SMS_PROVIDER).
@@ -110,6 +120,13 @@ type Config struct {
 
 	// KEK wraps member data keys (ADR-0009); loaded from BIRGE_KEK_KEYSET_FILE.
 	KEK *crypto.LocalKEK
+	// PreviousKEKs are retired KEKs (BIRGE_KEK_PREVIOUS_KEYSET_FILES): they
+	// only unwrap member keys wrapped before a rotation, which are then
+	// re-wrapped with KEK on first use. Never used for new keys.
+	PreviousKEKs []*crypto.LocalKEK
+	// RateLimitStore is RateLimitStorePostgres or RateLimitStoreMemory
+	// (BIRGE_RATE_LIMIT_STORE).
+	RateLimitStore string
 	// BlindIndexKey is reserved for blind indexes (crypto.BlindIndexer); no
 	// context uses one yet, so it is optional.
 	BlindIndexKey []byte
@@ -148,7 +165,7 @@ type Config struct {
 	// SMSTexts maps template -> language -> neutral fixed SMS body (ADR-0013).
 	SMSTexts map[string]map[string]string
 
-	AuthPerIP, AuthPerNumber, AuthGlobal authgw.Rate
+	AuthPerIP, AuthPerNumber, AuthGlobal ratelimit.Rate
 	APIPerIP                             ratelimit.Rate
 	// PlanLinkPerIP limits viewExternalPlan per client IP (BIRGE_PLAN_LINK_RATE_PER_IP).
 	PlanLinkPerIP ratelimit.Rate
@@ -280,6 +297,8 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 	}
 
 	cfg.KEK = l.kek("BIRGE_KEK_ID", "BIRGE_KEK_KEYSET_FILE")
+	cfg.PreviousKEKs = l.previousKEKs("BIRGE_KEK_PREVIOUS_KEYSET_FILES", cfg.KEK)
+	cfg.RateLimitStore = l.rateLimitStore("BIRGE_RATE_LIMIT_STORE")
 	cfg.BlindIndexKey = l.keyFile("BIRGE_BLIND_INDEX_KEY_FILE", false)
 	cfg.SMSPrefixes = l.prefixes("BIRGE_SMS_ALLOWED_PREFIXES")
 	cfg.DeletionDelay = l.duration("BIRGE_DELETION_DELAY", 24*time.Hour, maxDeletionDelay)
@@ -309,9 +328,9 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 			l.fail("BIRGE_PLAN_LINK_KEY_FILE must hold its own key, not the PoW or hash key")
 		}
 		cfg.PoWMaxNumber = int64(l.positiveInt("BIRGE_AUTH_POW_MAX_NUMBER", 100_000))
-		cfg.AuthPerIP = authgw.Rate(l.rate("BIRGE_AUTH_RATE_PER_IP", "20/1m"))
-		cfg.AuthPerNumber = authgw.Rate(l.rate("BIRGE_AUTH_RATE_PER_NUMBER", "3/10m"))
-		cfg.AuthGlobal = authgw.Rate(l.rate("BIRGE_AUTH_RATE_GLOBAL", "20/1s"))
+		cfg.AuthPerIP = l.rate("BIRGE_AUTH_RATE_PER_IP", "20/1m")
+		cfg.AuthPerNumber = l.rate("BIRGE_AUTH_RATE_PER_NUMBER", "3/10m")
+		cfg.AuthGlobal = l.rate("BIRGE_AUTH_RATE_GLOBAL", "20/1s")
 		cfg.APIPerIP = l.rate("BIRGE_API_RATE_PER_IP", "300/100ms")
 		cfg.PlanLinkPerIP = l.rate("BIRGE_PLAN_LINK_RATE_PER_IP", "10/1m")
 		cfg.ConsentVersions = l.consentVersionsOrDemo(&cfg)
@@ -334,6 +353,12 @@ func Load(getenv func(string) string, readFile func(string) ([]byte, error), cmd
 		cfg.AnalyticsKey = l.keyFile("BIRGE_ANALYTICS_KEY_FILE", true)
 		if cfg.AnalyticsKey != nil && bytes.Equal(cfg.AnalyticsKey, cfg.PlanLinkKey) {
 			l.fail("BIRGE_ANALYTICS_KEY_FILE must hold its own key, not the plan link key")
+		}
+		// The shared SMS guard counters store numbers only as a keyed hash,
+		// with the same key as the API's limiter tables.
+		cfg.HashKey = l.keyFile("BIRGE_HASH_KEY_FILE", cfg.RateLimitStore == RateLimitStorePostgres)
+		if cfg.HashKey != nil && (bytes.Equal(cfg.HashKey, cfg.PlanLinkKey) || bytes.Equal(cfg.HashKey, cfg.AnalyticsKey)) {
+			l.fail("BIRGE_HASH_KEY_FILE must hold its own key, not the plan link or analytics key")
 		}
 		l.objectStore(&cfg)
 		cfg.SMSGuard = guard.Config{
@@ -844,6 +869,64 @@ func (l *loader) kek(idName, fileName string) *crypto.LocalKEK {
 	return k
 }
 
+// previousKEKs loads the retired KEKs from "<kek id>=<keyset file>" entries,
+// comma-separated. Every listed file must load: a deployment that cannot
+// open an old key would fail later on every member it wrapped, so it
+// refuses to start instead, naming the KEK id (never the key).
+func (l *loader) previousKEKs(name string, primary *crypto.LocalKEK) []*crypto.LocalKEK {
+	v := strings.TrimSpace(l.getenv(name))
+	if v == "" {
+		return nil
+	}
+	var out []*crypto.LocalKEK
+	seen := map[string]bool{}
+	for _, entry := range strings.Split(v, ",") {
+		id, path, ok := strings.Cut(strings.TrimSpace(entry), "=")
+		id, path = strings.TrimSpace(id), strings.TrimSpace(path)
+		if !ok || id == "" || path == "" {
+			l.fail(name + ": each entry must be <kek id>=<keyset file>, comma-separated")
+			return nil
+		}
+		if primary != nil && id == primary.ID() {
+			l.fail(name + ": KEK " + id + " is the primary (BIRGE_KEK_ID); list only retired KEKs")
+			return nil
+		}
+		if seen[id] {
+			l.fail(name + ": KEK " + id + " is listed twice")
+			return nil
+		}
+		seen[id] = true
+		b, err := l.readFile(path)
+		if err != nil {
+			l.fail(name + ": cannot read the keyset file of KEK " + id)
+			return nil
+		}
+		k, err := crypto.NewLocalKEK(id, b)
+		clear(b)
+		if err != nil {
+			// crypto errors never carry key material.
+			l.fail(name + ": " + err.Error())
+			return nil
+		}
+		out = append(out, k)
+	}
+	return out
+}
+
+// rateLimitStore reads BIRGE_RATE_LIMIT_STORE; unset is postgres, so a
+// deployment that adds a replica keeps one set of limits without a change.
+func (l *loader) rateLimitStore(name string) string {
+	switch v := strings.TrimSpace(l.getenv(name)); v {
+	case "", RateLimitStorePostgres:
+		return RateLimitStorePostgres
+	case RateLimitStoreMemory:
+		return RateLimitStoreMemory
+	default:
+		l.fail(name + `: must be "postgres" or "memory"`)
+		return RateLimitStorePostgres
+	}
+}
+
 func (l *loader) prefixes(name string) []string {
 	v := l.required(name)
 	if v == "" {
@@ -900,7 +983,8 @@ func (l *loader) positiveInt64(name string, def int64) int64 {
 	return n
 }
 
-// rate parses "<burst>/<interval>": burst tokens, one more every interval.
+// rate parses "<burst>/<interval>": up to burst requests per fixed window of
+// burst × interval (on average one per interval, see ratelimit.Rate).
 func (l *loader) rate(name, def string) ratelimit.Rate {
 	v := strings.TrimSpace(l.getenv(name))
 	if v == "" {

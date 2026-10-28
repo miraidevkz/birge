@@ -87,3 +87,33 @@ CREATE TABLE platform.member_keys (
     CONSTRAINT member_keys_tombstone_check
         CHECK ((destroyed_at IS NULL) = (octet_length(wrapped_dek) > 0))
 );
+
+-- Fixed-window rate limit counters shared by every replica (package
+-- ratelimit, PostgresStore): the API, plan link and auth gateway limits and
+-- the worker's SMS guards. key is an HMAC of the limiter name and its key
+-- (BIRGE_HASH_KEY_FILE), never an IP or a phone number. One row per key and
+-- window, so a hit is one INSERT ... ON CONFLICT DO UPDATE; rows past
+-- expires_at are never read again and the worker's sweeper deletes them. A
+-- regular (logged) table, not UNLOGGED: the SMS daily budget lives here and
+-- must survive a crash or a failover (internal/platform/ratelimit/README.md).
+CREATE TABLE platform.rate_counters (
+    key          text        NOT NULL,
+    window_start timestamptz NOT NULL,
+    hits         bigint      NOT NULL CHECK (hits >= 1),
+    expires_at   timestamptz NOT NULL,
+    PRIMARY KEY (key, window_start)
+);
+
+CREATE INDEX rate_counters_expires_idx ON platform.rate_counters (expires_at);
+
+-- One-time claims shared by every replica (package ratelimit): a proof-of-work
+-- solution of the auth gateway is accepted once. key is an HMAC like above.
+-- Logged on purpose: losing it in a crash or a failover would let solutions
+-- issued shortly before be used again. The worker's sweeper deletes rows
+-- past expires_at.
+CREATE TABLE platform.one_time_claims (
+    key        text        PRIMARY KEY,
+    expires_at timestamptz NOT NULL
+);
+
+CREATE INDEX one_time_claims_expires_idx ON platform.one_time_claims (expires_at);

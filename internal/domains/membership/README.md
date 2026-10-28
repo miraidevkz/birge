@@ -31,7 +31,7 @@ Operations of tag `membership` in `contracts/openapi/birge.yaml`:
 | `GET /staff/members/{memberId}/suspension` | Staff `moderator` or `admin`, MFA. |
 | `DELETE /staff/members/{memberId}/suspension` | Staff `admin`, MFA; lifts suspension; audited. |
 
-Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 prefix allow-list, per-IP / per-number / global rate limits before proxying to Kratos. Limits are process-local (one replica).
+Auth gateway (`authgw/`, mounted at `/auth/`): PoW (`X-Pow-Solution`), E.164 prefix allow-list, per-IP / per-number / global rate limits before proxying to Kratos. Limits and PoW replay claims live in the `platform/ratelimit` store, shared by every API replica with `BIRGE_RATE_LIMIT_STORE=postgres` (a solution is accepted once across replicas); a store error refuses the request with 503 `auth_unavailable` (fails closed).
 
 Kratos courier hook (`authgw.CourierHook`, not in the public contract): `POST /internal/kratos/courier` on the worker's internal listener (`BIRGE_INTERNAL_ADDR`), never routed by the ingress. `Authorization: Bearer <secret>` from `BIRGE_COURIER_SECRET_FILE`, compared in constant time (401 otherwise). Body `{"to", "template", "code"}` built by `deploy/compose/kratos/courier-hook.jsonnet`; only templates `login_code_valid` and `registration_code_valid` (422 otherwise), E.164 in an allowed range (422), code of 4 to 10 digits (400). The code goes to the interface `authgw.CodeSender`, implemented in wiring by notify's synchronous `SendSignInCode`: 204 sent, 429 refused by the SMS guard, 422 refused for good by the provider, 503 provider failure. Kratos retries every non-2xx.
 

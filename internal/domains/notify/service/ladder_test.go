@@ -308,7 +308,7 @@ func TestCriticalSMSIgnoresDailyBudget(t *testing.T) {
 		DailyBudget:     1,
 	})
 	// Exhaust daily budget with a non-critical allow.
-	if err := g.Allow("+77009998877", start); err != nil {
+	if err := g.Allow(context.Background(), "+77009998877", start); err != nil {
 		t.Fatal(err)
 	}
 	svc := &service.Service{

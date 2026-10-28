@@ -189,34 +189,97 @@ func TestEnvelopeWrappedKeyBoundToMember(t *testing.T) {
 	mustOpen(ctx, t, e, b, seal(ctx, t, e, b, []byte("more"), adB), adB, []byte("more"))
 }
 
+// TestEnvelopeKEKRotation follows the rotation procedure in
+// docs/development.md: data sealed under the old KEK opens after the
+// rotation, its data key moves to the new primary on first use, new data is
+// sealed under the new primary, and once every live row is re-wrapped the
+// old KEK can leave the keyring.
 func TestEnvelopeKEKRotation(t *testing.T) {
 	ctx := context.Background()
 	pool := testinfra.Postgres(t)
 	k1, k2 := newKEK(t, "local-1"), newKEK(t, "local-2")
-	old := uuid.New()
-	ad := crypto.AssociatedData(field, old)
-	ct := seal(ctx, t, newEnvelope(t, pool, k1), old, []byte("before rotation"), ad)
-
-	rotated := newEnvelope(t, pool, k2, k1)
-	mustOpen(ctx, t, rotated, old, ct, ad, []byte("before rotation"))
-	// The old member keeps their key; new members get keys wrapped by the new primary.
-	mustOpen(ctx, t, rotated, old, seal(ctx, t, rotated, old, []byte("after"), ad), ad, []byte("after"))
-	fresh := uuid.New()
-	seal(ctx, t, rotated, fresh, []byte("new member"), ad)
-
 	kekOf := func(id uuid.UUID) string {
+		t.Helper()
 		var k string
 		if err := pool.QueryRow(ctx, `SELECT kek_id FROM platform.member_keys WHERE member_id = $1`, id).Scan(&k); err != nil {
 			t.Fatal(err)
 		}
 		return k
 	}
-	if got := kekOf(old); got != "local-1" {
-		t.Fatalf("old member kek = %s", got)
+	old, idle, gone := uuid.New(), uuid.New(), uuid.New()
+	ad, adIdle, adGone := crypto.AssociatedData(field, old), crypto.AssociatedData(field, idle), crypto.AssociatedData(field, gone)
+	before := newEnvelope(t, pool, k1)
+	ct := seal(ctx, t, before, old, []byte("before rotation"), ad)
+	ctIdle := seal(ctx, t, before, idle, []byte("idle member"), adIdle)
+	seal(ctx, t, before, gone, []byte("deleted member"), adGone)
+	if err := before.Shred(ctx, gone); err != nil {
+		t.Fatal(err)
 	}
+
+	// Step 1: every replica learns the new KEK as a previous one; nothing
+	// is wrapped with it yet and nothing moves.
+	step1 := newEnvelope(t, pool, k1, k2)
+	mustOpen(ctx, t, step1, old, ct, ad, []byte("before rotation"))
+	if got := kekOf(old); got != "local-1" {
+		t.Fatalf("step 1 moved the key to %s", got)
+	}
+
+	// Step 2: the new KEK becomes primary. The old ciphertext opens, and its
+	// data key is re-wrapped with the primary on the way.
+	rotated := newEnvelope(t, pool, k2, k1)
+	mustOpen(ctx, t, rotated, old, ct, ad, []byte("before rotation"))
+	if got := kekOf(old); got != "local-2" {
+		t.Fatalf("after first use the key is wrapped by %s, want local-2", got)
+	}
+	after := seal(ctx, t, rotated, old, []byte("after"), ad)
+	fresh := uuid.New()
+	adFresh := crypto.AssociatedData(field, fresh)
+	ctFresh := seal(ctx, t, rotated, fresh, []byte("new member"), adFresh)
 	if got := kekOf(fresh); got != "local-2" {
 		t.Fatalf("new member kek = %s", got)
 	}
+	// A replica still on the step-1 keyring (rolling update) reads rows the
+	// new primary wrapped. It re-wraps them with its own primary, local-1;
+	// harmless, both keyrings open both, and the first load on an updated
+	// replica moves the row back once the rollout is done.
+	lagging := newEnvelope(t, pool, k1, k2)
+	mustOpen(ctx, t, lagging, fresh, ctFresh, adFresh, []byte("new member"))
+	if got := kekOf(fresh); got != "local-1" {
+		t.Fatalf("after a lagging replica: %s, want local-1", got)
+	}
+	mustOpen(ctx, t, newEnvelope(t, pool, k2, k1), fresh, ctFresh, adFresh, []byte("new member"))
+	if got := kekOf(fresh); got != "local-2" {
+		t.Fatalf("after an updated replica: %s, want local-2", got)
+	}
+	// A shredded row is never re-wrapped or revived.
+	if _, err := rotated.Open(ctx, gone, []byte("x"), adGone); !errors.Is(err, crypto.ErrShredded) {
+		t.Fatalf("shredded member: %v", err)
+	}
+	if got := kekOf(gone); got != "local-1" {
+		t.Fatalf("shredded row kek = %q, want it untouched (local-1)", got)
+	}
+
+	// The idle member has not been read since the rotation: still local-1,
+	// so local-1 must stay in the keyring. Reading her moves her too.
+	if got := kekOf(idle); got != "local-1" {
+		t.Fatalf("idle member kek = %s", got)
+	}
+	var left int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM platform.member_keys WHERE kek_id = 'local-1' AND destroyed_at IS NULL`).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
+	if left != 1 {
+		t.Fatalf("%d live rows on local-1, want 1 (the idle member)", left)
+	}
+	mustOpen(ctx, t, newEnvelope(t, pool, k2, k1), idle, ctIdle, adIdle, []byte("idle member"))
+
+	// Step 3: no live row names local-1; it leaves the keyring and
+	// everything still opens with the new KEK alone.
+	retired := newEnvelope(t, pool, k2)
+	mustOpen(ctx, t, retired, old, ct, ad, []byte("before rotation"))
+	mustOpen(ctx, t, retired, old, after, ad, []byte("after"))
+	mustOpen(ctx, t, retired, idle, ctIdle, adIdle, []byte("idle member"))
+	mustOpen(ctx, t, retired, fresh, ctFresh, adFresh, []byte("new member"))
 }
 
 func TestEnvelopeConcurrentFirstSeal(t *testing.T) {

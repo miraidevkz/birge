@@ -490,9 +490,15 @@ func (s *Service) sendSMS(ctx context.Context, notificationID uuid.UUID, mode sm
 	if s.Guard != nil {
 		var guardErr error
 		if critical {
-			guardErr = s.Guard.AllowCritical(phone, s.Clock.Now())
+			guardErr = s.Guard.AllowCritical(ctx, phone, s.Clock.Now())
 		} else {
-			guardErr = s.Guard.Allow(phone, s.Clock.Now())
+			guardErr = s.Guard.Allow(ctx, phone, s.Clock.Now())
+		}
+		if errors.Is(guardErr, guard.ErrUnavailable) {
+			// The counter store is down, not a limit reached: leave the
+			// delivery pending so the timer retries with backoff. (A
+			// critical SMS never gets this error; it is sent.)
+			return fmt.Errorf("sms guard: %w", guardErr)
 		}
 		if guardErr != nil {
 			reason := guard.Explain(guardErr)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"birge/internal/platform/ratelimit"
 )
 
 type fakeClock struct {
@@ -216,7 +219,7 @@ func TestPoWRejections(t *testing.T) {
 
 	wrongNumber := s
 	wrongNumber.Number = (s.Number + 1) % 501
-	otherKey := &pow{key: bytes.Repeat([]byte("x"), 32), maxNumber: 500, replay: newReplayStore(10)}
+	otherKey := &pow{key: bytes.Repeat([]byte("x"), 32), maxNumber: 500, replay: ratelimit.NewMemoryStore(10)}
 	forged := s
 	forged.Signature = otherKey.sign(s.Challenge)
 	tooBig := s
@@ -366,10 +369,14 @@ func TestRateLimits(t *testing.T) {
 		if !strings.Contains(h.logs.String(), "number_hash=") || strings.Contains(h.logs.String(), allowedNumber) {
 			t.Errorf("logs = %s", h.logs)
 		}
-		// The bucket refills over time.
+		// The next window (2 per 2h) starts from zero.
+		h.clock.advance(time.Hour)
+		if rec := h.do("POST", "/auth/self-service/login?flow=f", h.solve(), jsonType, loginBody(allowedNumber)); rec.Code != 429 {
+			t.Fatalf("same window: status = %d, want 429", rec.Code)
+		}
 		h.clock.advance(time.Hour)
 		if rec := h.do("POST", "/auth/self-service/login?flow=f", h.solve(), jsonType, loginBody(allowedNumber)); rec.Code != 200 {
-			t.Fatalf("after refill: status = %d", rec.Code)
+			t.Fatalf("next window: status = %d", rec.Code)
 		}
 	})
 	t.Run("per ip", func(t *testing.T) {
@@ -464,20 +471,65 @@ func TestNewRejectsBadConfig(t *testing.T) {
 	}
 }
 
-func TestReplayStoreBounded(t *testing.T) {
-	r := newReplayStore(2)
-	now := time.Unix(1000, 0)
-	if !r.use("a", now.Add(time.Minute), now) || !r.use("b", now.Add(time.Second), now) {
-		t.Fatal("fresh keys refused")
+// failingStore stands for a shared store that is down.
+type failingStore struct{}
+
+func (failingStore) Hit(context.Context, string, time.Duration, int, time.Time) (bool, error) {
+	return false, errors.New("database down")
+}
+
+func (failingStore) Claim(context.Context, string, time.Time, time.Time) (bool, error) {
+	return false, errors.New("database down")
+}
+
+func TestStoreErrorFailsClosed(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Store = failingStore{} })
+	rec := h.do("GET", "/auth/pow", "", "", "")
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "auth_unavailable") {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
 	}
-	if r.use("c", now.Add(time.Minute), now) {
-		t.Fatal("full store accepted a new key")
+	if !strings.Contains(h.logs.String(), "AuthLimitStoreError") {
+		t.Errorf("logs = %s", h.logs)
 	}
-	later := now.Add(2 * time.Second) // "b" expired and is swept
-	if !r.use("c", later.Add(time.Minute), later) {
-		t.Fatal("expired entry not swept")
+	if n := h.kratos.count(); n != 0 {
+		t.Fatalf("kratos reached %d times", n)
 	}
-	if r.use("a", later.Add(time.Minute), later) {
-		t.Fatal("replay accepted")
+}
+
+// claimFailing passes every limit and fails only the PoW replay claim.
+type claimFailing struct{ ratelimit.Store }
+
+func (claimFailing) Claim(context.Context, string, time.Time, time.Time) (bool, error) {
+	return false, errors.New("database down")
+}
+
+func TestReplayStoreErrorFailsClosed(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Store = claimFailing{ratelimit.NewMemoryStore(100)} })
+	rec := h.do("POST", "/auth/self-service/login?flow=f", h.solve(), jsonType, loginBody(allowedNumber))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+	if n := h.kratos.count(); n != 0 {
+		t.Fatalf("kratos reached %d times", n)
+	}
+}
+
+func TestSharedStoreAcrossGateways(t *testing.T) {
+	shared := ratelimit.NewMemoryStore(100)
+	a := newHarness(t, func(c *Config) { c.Store = shared; c.Global = Rate{Burst: 2, Every: time.Hour} })
+	b := newHarness(t, func(c *Config) { c.Store = shared; c.Global = Rate{Burst: 2, Every: time.Hour} })
+	sol := a.solve()
+	if rec := a.do("POST", "/auth/self-service/login?flow=f", sol, jsonType, loginBody(allowedNumber)); rec.Code != 200 {
+		t.Fatalf("first use on a: status = %d", rec.Code)
+	}
+	if rec := b.do("POST", "/auth/self-service/login?flow=f", sol, jsonType, loginBody(allowedNumber)); rec.Code != http.StatusForbidden {
+		t.Fatalf("replay on b: status = %d, want 403", rec.Code)
+	}
+	// The global limit (2) is shared too: one on a, one on b, then refused.
+	if rec := b.do("POST", "/auth/self-service/login?flow=f", b.solve(), jsonType, loginBody(otherAllowed)); rec.Code != 200 {
+		t.Fatalf("second on b: status = %d", rec.Code)
+	}
+	if rec := a.do("POST", "/auth/self-service/login?flow=f", a.solve(), jsonType, loginBody(otherAllowed)); rec.Code != 429 {
+		t.Fatalf("third on a: status = %d, want 429", rec.Code)
 	}
 }

@@ -9,8 +9,12 @@
 // platform.member_keys wrapped by a key-encryption key (KEK). The row records
 // which KEK wrapped it (kek_id), so KEKs can be rotated: new DEKs are wrapped
 // with the primary KEK of a Keyring, existing ones are unwrapped with the KEK
-// named by their row. Re-wrapping old rows under a new KEK is a separate,
-// later job; until it runs, retired KEKs must stay in the Keyring.
+// named by their row (the primary or a previous one). A DEK found wrapped by
+// a previous KEK is re-wrapped with the primary when it is loaded from the
+// database (best effort, the DEK itself is unchanged), so after a rotation
+// every active member moves to the new KEK. Members who are not active keep
+// the old wrapping: a retired KEK must stay in the Keyring while any live row
+// names it (docs/development.md, KEK rotation).
 //
 // LocalKEK holds the KEK in process memory, loaded from a cleartext Tink
 // keyset that the caller reads from the secret store. Production must use

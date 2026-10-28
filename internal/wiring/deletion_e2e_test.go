@@ -54,6 +54,11 @@ var deletionPolicy = map[string]struct {
 	"platform.member_keys":      {"shredded key tombstone (ADR-0009)", []string{"member_id"}},
 	// Staff accounts hold staff, never members: no row may name a member.
 	"platform.staff_accounts": {"", []string{"staff_id"}},
+	// Rate limit counters and PoW claims hold no member ID, only keyed
+	// hashes of IPs, numbers and challenges; rows expire with their window
+	// and the worker's sweeper deletes them (platform/ratelimit).
+	"platform.rate_counters":   {"", nil},
+	"platform.one_time_claims": {"", nil},
 
 	"membership.cities":                {"", nil},
 	"membership.districts":             {"", nil},
