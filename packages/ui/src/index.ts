@@ -32,6 +32,8 @@ export { Heading, Text } from './text';
 export type { HeadingProps, TextProps, TextTone, TextVariant } from './text';
 export { CallItem, LifeThreatBanner } from './call';
 export type { CallItemProps, LifeThreatBannerProps } from './call';
+export { Illustration } from './illustration';
+export type { IllustrationName, IllustrationProps } from './illustration';
 export { LanguagePicker } from './language-picker';
 export type { LanguagePickerProps } from './language-picker';
 export { Logo } from './logo';

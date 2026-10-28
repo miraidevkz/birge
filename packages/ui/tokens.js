@@ -127,6 +127,12 @@ const touchTarget = 48;
  */
 const motion = { fast: 150, base: 200, slow: 250 };
 
+/**
+ * Illustration sizes in px (square, ADR-0025): `md` for onboarding scenes,
+ * `sm` beside a success message so it never pushes the next action away.
+ */
+const illustration = { sm: 96, md: 160 };
+
 module.exports = {
   colors,
   spacing,
@@ -138,4 +144,5 @@ module.exports = {
   contentWidth,
   touchTarget,
   motion,
+  illustration,
 };

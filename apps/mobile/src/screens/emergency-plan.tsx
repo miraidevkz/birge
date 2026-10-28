@@ -7,6 +7,7 @@ import {
   Button,
   ErrorState,
   Heading,
+  Illustration,
   List,
   ListItem,
   LoadingState,
@@ -46,14 +47,17 @@ export function EmergencyPlanScreen() {
   const [phone, setPhone] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [confirmSend, setConfirmSend] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  // The key, not the text, so the screen can tell the sent notice apart.
+  const [notice, setNotice] = useState<'childCard.saved' | 'send.sent' | 'send.needCard' | 'send.needContact' | null>(
+    null,
+  );
 
   const cardValue = card ?? plan.data?.childCard ?? '';
 
   const saveCard = useMutation({
     mutationFn: () => unwrap(api.PUT('/me/emergency-plan/child-card', { body: { text: cardValue } })),
     onSuccess: async () => {
-      setNotice(t('childCard.saved'));
+      setNotice('childCard.saved');
       await queryClient.invalidateQueries({ queryKey: ['emergency-plan'] });
     },
   });
@@ -81,7 +85,7 @@ export function EmergencyPlanScreen() {
     mutationFn: () => unwrap(api.POST('/me/emergency-plan/send', { body: { confirm: 'SEND' } })),
     onSuccess: async () => {
       setConfirmSend(false);
-      setNotice(t('send.sent'));
+      setNotice('send.sent');
       await queryClient.invalidateQueries({ queryKey: ['emergency-plan'] });
     },
   });
@@ -125,11 +129,11 @@ export function EmergencyPlanScreen() {
 
   function onSend() {
     if (!cardValue.trim()) {
-      setNotice(t('send.needCard'));
+      setNotice('send.needCard');
       return;
     }
     if (confirmed.length === 0) {
-      setNotice(t('send.needContact'));
+      setNotice('send.needContact');
       return;
     }
     setConfirmSend(true);
@@ -212,7 +216,8 @@ export function EmergencyPlanScreen() {
         header={
           <>
             <Text>{t('intro')}</Text>
-            {notice ? <Banner tone="info">{notice}</Banner> : null}
+            {notice === 'send.sent' ? <Illustration name="done" size="sm" /> : null}
+            {notice ? <Banner tone="info">{t(notice)}</Banner> : null}
             {saveCard.isError || addContact.isError || sendPlan.isError || removeContact.isError ? (
               <Banner tone="danger">{t('saveError')}</Banner>
             ) : null}

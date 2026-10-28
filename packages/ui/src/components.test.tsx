@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { initialsOf, tintOf } from './avatar';
 import { Button } from './button';
+import { Illustration, type IllustrationName } from './illustration';
 import { ChoiceGroup } from './choice-group';
 import { List } from './list';
 import { ListItem } from './list-item';
@@ -197,5 +198,17 @@ describe('MessageBubble', () => {
     expect(onPress).toHaveBeenCalled();
     await render(<MessageBubble text="Mine" author="Me" mine />);
     expect(screen.queryByText('Me')).toBeNull();
+  });
+});
+
+describe('Illustration', () => {
+  const names: IllustrationName[] = ['welcome', 'inside', 'privacy', 'done'];
+
+  it.each(names)('%s renders and is hidden from assistive technologies', async (name) => {
+    await render(<Illustration name={name} size="sm" />);
+    const box = screen.getByTestId(`illustration-${name}`, { includeHiddenElements: true });
+    expect(box).toBeTruthy();
+    // Default queries skip hidden elements: decorative means not announced.
+    expect(screen.queryByTestId(`illustration-${name}`)).toBeNull();
   });
 });

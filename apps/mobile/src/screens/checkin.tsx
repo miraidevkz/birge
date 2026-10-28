@@ -3,7 +3,7 @@
 // offers requestHumanHelp via the outbox. Never a diagnosis.
 import { unwrap, type Schemas } from '@birge/api';
 import { i18n, useTranslation } from '@birge/i18n';
-import { Banner, Button, ErrorState, Heading, LoadingState, Screen, Text } from '@birge/ui';
+import { Banner, Button, ErrorState, Heading, Illustration, LoadingState, Screen, Text } from '@birge/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -187,6 +187,8 @@ export function CheckinScreen() {
       }
       testID="checkin-result"
     >
+      {/* A check mark only for a calm result: on "elevated" it would read as "all is well". */}
+      {result?.flag === 'none' ? <Illustration name="done" size="sm" /> : null}
       <Text>{feedback}</Text>
       <Heading>{t('suggestion.heading')}</Heading>
       <Text tone="muted">{t(suggestionKey)}</Text>

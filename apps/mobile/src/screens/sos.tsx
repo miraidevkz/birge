@@ -10,6 +10,7 @@ import {
   Button,
   CallItem,
   Heading,
+  Illustration,
   LifeThreatBanner,
   List,
   ListItem,
@@ -244,6 +245,8 @@ export function SosScreen() {
         header={
           <>
             <LifeThreatBanner message={tHelp('lifeThreat')} callTitle={tHelp('call112')} />
+            {/* Static, so it is allowed on this crisis screen (no animation). */}
+            {banner?.tone === 'success' ? <Illustration name="done" size="sm" /> : null}
             {banner ? <Banner tone={banner.tone}>{t(banner.key)}</Banner> : null}
             {phones.length > 0 ? <Heading>{t('phonesHeading')}</Heading> : null}
             {signedIn && open.length > 0 ? (

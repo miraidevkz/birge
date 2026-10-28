@@ -10,7 +10,7 @@
 //     a session (and then links to sign-in).
 import { unwrap, type Schemas } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
-import { Banner, Button, CallItem, Heading, LifeThreatBanner, List, Screen, Text } from '@birge/ui';
+import { Banner, Button, CallItem, Heading, Illustration, LifeThreatBanner, List, Screen, Text } from '@birge/ui';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -130,6 +130,8 @@ export function HelpScreen({ source }: { source: Source }) {
           <>
             <LifeThreatBanner message={t('lifeThreat')} callTitle={t('call112')} />
             <Text variant="label">{t('intro')}</Text>
+            {/* Static, so it is allowed on this crisis screen (no animation). */}
+            {status === 'sent' ? <Illustration name="done" size="sm" /> : null}
             {banner ? <Banner tone={banner.tone}>{t(banner.key)}</Banner> : null}
             {phones.length > 0 ? <Heading>{t('phonesHeading')}</Heading> : null}
           </>

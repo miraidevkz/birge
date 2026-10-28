@@ -2,7 +2,7 @@
 // welcome and language, what is inside, how her data is kept. Shown once per
 // device; "Skip" goes straight to sign-in. Nothing here needs the network.
 import { useTranslation } from '@birge/i18n';
-import { Button, Card, Heading, LanguagePicker, Logo, Screen, Text } from '@birge/ui';
+import { Button, Card, Heading, Illustration, LanguagePicker, Logo, Screen, Text } from '@birge/ui';
 import { useState } from 'react';
 
 import { chooseLanguage, currentLanguage } from '@/lib/language';
@@ -62,7 +62,9 @@ export function OnboardingScreen({ onDone }: OnboardingScreenProps) {
       }
       testID={`onboarding-${key}`}
     >
-      <Logo size={step === 0 ? 'lg' : 'md'} name={step === 0 ? t('common:appName') : undefined} />
+      {/* Step 1 keeps the mark with the product name; every step has its scene. */}
+      {step === 0 ? <Logo size="lg" name={t('common:appName')} /> : null}
+      <Illustration name={key} />
       <Heading>{t(`${key}.title`)}</Heading>
       <Text>{t(`${key}.body`)}</Text>
       {key === 'welcome' ? (
