@@ -213,7 +213,6 @@ export function AssistantScreen() {
         empty={{ title: t('emptyTitle'), description: t('emptyDescription') }}
         header={
           <>
-            <Button title={t('back')} variant="secondary" onPress={() => router.back()} testID="assistant-back" />
             <Text>{t('intro')}</Text>
             <ChoiceGroup
               label={t('scope.heading')}

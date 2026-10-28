@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
+import { ScreenBackProvider } from '@birge/ui';
+
 import { storage } from '@/lib/storage';
 import { Providers } from '@/test-utils';
 
@@ -73,12 +75,18 @@ describe('KnowledgeArticleScreen', () => {
     expect(await screen.findByText('Article not found.')).toBeTruthy();
   });
 
-  it('goes back', async () => {
-    const { router } = require('expo-router');
+  it('goes back through the screen header when the navigator provides Back', async () => {
+    const onBack = jest.fn();
     mockFetch.mockResolvedValue(json(article));
-    await renderArticle();
+    await render(
+      <Providers>
+        <ScreenBackProvider onBack={onBack}>
+          <KnowledgeArticleScreen articleId={articleId} />
+        </ScreenBackProvider>
+      </Providers>,
+    );
     await screen.findByText('Submit the form at the local office.');
-    await fireEvent.press(screen.getByTestId('article-back'));
-    await waitFor(() => expect(router.back).toHaveBeenCalled());
+    await fireEvent.press(screen.getByTestId('screen-back'));
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
   });
 });

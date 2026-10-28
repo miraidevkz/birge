@@ -2,6 +2,8 @@
 // from (ADR-0014). See README.md for when to use each component.
 export { Avatar, initialsOf, tintOf } from './avatar';
 export type { AvatarProps } from './avatar';
+export { ScreenBackProvider, useScreenBack } from './back';
+export type { ScreenBackProviderProps } from './back';
 export { Banner } from './banner';
 export type { BannerProps, BannerTone } from './banner';
 export { Button } from './button';

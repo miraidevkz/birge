@@ -3,7 +3,6 @@ import { unwrap } from '@birge/api';
 import { i18n, useTranslation, type Language } from '@birge/i18n';
 import { Banner, Button, ErrorState, LoadingState, Screen, Text } from '@birge/ui';
 import { useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
 import { Linking } from 'react-native';
 
 import { api } from '@/lib/api';
@@ -42,19 +41,13 @@ export function KnowledgeArticleScreen({ articleId }: { articleId: string }) {
     return (
       <Screen title={t('article.title')}>
         <ErrorState title={t('article.notFound')} onRetry={() => void article.refetch()} />
-        <Button title={t('article.back')} variant="secondary" onPress={() => router.back()} />
       </Screen>
     );
   }
 
   const data = article.data!;
   return (
-    <Screen
-      title={data.title}
-      footer={
-        <Button title={t('article.back')} variant="secondary" onPress={() => router.back()} testID="article-back" />
-      }
-    >
+    <Screen title={data.title}>
       {data.status === 'being_rechecked' ? <Banner tone="warning">{t('article.rechecking')}</Banner> : null}
       <Text tone="muted">{t('article.reviewed', { date: formatDate(data.reviewedAt, i18n.language) })}</Text>
       <Text testID="article-body">{data.body}</Text>

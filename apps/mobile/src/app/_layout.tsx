@@ -3,7 +3,7 @@
 import '../../global.css';
 
 import { initI18n } from '@birge/i18n';
-import { fonts, SosProvider } from '@birge/ui';
+import { fonts, ScreenBackProvider, SosProvider } from '@birge/ui';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { getLocales } from 'expo-localization';
@@ -17,10 +17,14 @@ import { kratos } from '@/lib/api';
 import { loadCrisisPhones, refreshCrisisPhones } from '@/lib/crisis-phones';
 import { flushOutbox, startOutboxReplay } from '@/lib/help-outbox';
 import { loadSavedLanguage } from '@/lib/language';
+import { goBack } from '@/lib/nav';
 import { createQueryClient, syncFocusWithAppState } from '@/lib/query';
 import { SessionProvider, useSession } from '@/lib/session';
 
 // Synchronous: texts are bundled, so the first frame is already translated.
+// Routes that are roots: everything else is stacked above them and gets Back.
+const ROOTS = new Set(['(tabs)', 'sign-in', 'onboarding']);
+
 initI18n(getLocales().map((l) => l.languageTag));
 
 const openHelp = () => router.push('/sos');
@@ -63,7 +67,12 @@ export default function RootLayout() {
             <SosProvider onPress={openHelp}>
               <StatusBar style="auto" />
               <FlushOnSignIn />
-              <Stack screenOptions={{ headerShown: false }}>
+              <Stack
+                screenOptions={{ headerShown: false }}
+                screenLayout={({ children, route }) =>
+                  ROOTS.has(route.name) ? children : <ScreenBackProvider onBack={goBack}>{children}</ScreenBackProvider>
+                }
+              >
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="onboarding" />
                 <Stack.Screen name="sign-in" />

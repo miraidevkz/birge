@@ -3,11 +3,14 @@ import { ScrollView, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useScreenBack } from './back';
+import { Button } from './button';
 import { cn } from './cn';
 import { NoMotion } from './motion';
 import { SosButton } from './sos';
 import { Heading } from './text';
 import { tokens } from './theme';
+import { useTranslation } from '@birge/i18n';
 
 /** ScreenProps: the frame of every screen. */
 export interface ScreenProps {
@@ -53,6 +56,8 @@ export function Screen({
   const crisis = variant === 'crisis';
   const form = layout === 'form';
   const bottomPad = Math.max(insets.bottom, tokens.spacing[3]);
+  const onBack = useScreenBack();
+  const { t } = useTranslation('ui');
 
   const header = (
     <View
@@ -61,6 +66,7 @@ export function Screen({
         title && !form ? 'justify-between' : 'justify-end',
       )}
     >
+      {onBack ? <Button title={t('back')} variant="secondary" size="sm" onPress={onBack} testID="screen-back" /> : null}
       {title && !form ? (
         <View className="flex-1">
           <Heading level={1}>{title}</Heading>

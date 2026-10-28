@@ -101,7 +101,6 @@ export function PrivacyScreen() {
         empty={{ title: t('consents.emptyTitle'), description: t('consents.emptyDescription') }}
         header={
           <>
-            <Button title={t('back')} variant="secondary" onPress={() => router.back()} testID="privacy-back" />
             <Heading>{t('consents.heading')}</Heading>
           </>
         }

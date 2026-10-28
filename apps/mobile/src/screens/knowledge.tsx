@@ -93,12 +93,6 @@ export function KnowledgeScreen() {
         empty={{ title: t('topics.emptyTitle'), description: t('topics.emptyDescription') }}
         header={
           <>
-            <Button
-              title={t('article.back')}
-              variant="secondary"
-              onPress={() => router.back()}
-              testID="knowledge-back"
-            />
             <ChoiceGroup
               label={t('kinds.heading')}
               value={kind}
