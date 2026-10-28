@@ -1046,6 +1046,45 @@ paths:
         '429': {$ref: '#/components/responses/Problem'}
         default: {$ref: '#/components/responses/Problem'}
 
+  /external/sos/view:
+    post:
+      operationId: viewExternalSos
+      tags: [emergency]
+      summary: The SOS behind a link an external trusted contact got by SMS.
+      description: |
+        No session: the link in the SMS is `<public URL>/sos-link#<token>`. The fragment never
+        reaches a server or its access log; the static page reads it and posts it here.
+        The token is 32 random bytes (base64url, 43 characters); only its keyed hash is
+        stored, under a different context from plan links, so a plan token never opens an
+        SOS and an SOS token never opens a plan. It is minted when the SMS is sent and is
+        valid until the SOS is closed (by the member, a moderator or auto-close) and at
+        most 24 hours; it dies earlier when the member removes that contact. Every view is
+        audited (contact id, no IP). Rate limited per client IP; unknown, expired, revoked
+        and closed all answer the same 404 so a token cannot be probed.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+      responses:
+        '200':
+          description: The SOS.
+          headers:
+            Cache-Control:
+              schema: {type: string, enum: [no-store]}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExternalSos'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        default: {$ref: '#/components/responses/Problem'}
+
   /me/assistant/messages:
     post:
       operationId: sendAssistantMessage
@@ -2630,6 +2669,21 @@ components:
           maxItems: 50
           items: {$ref: '#/components/schemas/StaffSos'}
         nextCursor: {type: string, maxLength: 128}
+    ExternalSos:
+      type: object
+      additionalProperties: false
+      required: [ownerDisplayName, type, text, createdAt, status]
+      properties:
+        ownerDisplayName: {type: string, maxLength: 40, description: First name only.}
+        type: {$ref: '#/components/schemas/SosType'}
+        text: {type: string, maxLength: 300}
+        createdAt: {type: string, format: date-time}
+        status:
+          type: string
+          enum: [open, closed]
+          x-enum-varnames: [ExternalSosOpen, ExternalSosClosed]
+          description: "Always open today: a closed SOS answers 404. Kept so a later version can show a closed one."
+        closesAt: {type: string, format: date-time, description: "When the SOS closes by itself; the link dies then too."}
     SharedPlan:
       type: object
       additionalProperties: false

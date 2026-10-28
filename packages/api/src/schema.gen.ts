@@ -901,6 +901,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/external/sos/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The SOS behind a link an external trusted contact got by SMS.
+         * @description No session: the link in the SMS is `<public URL>/sos-link#<token>`. The fragment never
+         *     reaches a server or its access log; the static page reads it and posts it here.
+         *     The token is 32 random bytes (base64url, 43 characters); only its keyed hash is
+         *     stored, under a different context from plan links, so a plan token never opens an
+         *     SOS and an SOS token never opens a plan. It is minted when the SMS is sent and is
+         *     valid until the SOS is closed (by the member, a moderator or auto-close) and at
+         *     most 24 hours; it dies earlier when the member removes that contact. Every view is
+         *     audited (contact id, no IP). Rate limited per client IP; unknown, expired, revoked
+         *     and closed all answer the same 404 so a token cannot be probed.
+         */
+        post: operations["viewExternalSos"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/assistant/messages": {
         parameters: {
             query?: never;
@@ -2153,6 +2181,24 @@ export interface components {
         StaffSosPage: {
             items: components["schemas"]["StaffSos"][];
             nextCursor?: string;
+        };
+        ExternalSos: {
+            /** @description First name only. */
+            ownerDisplayName: string;
+            type: components["schemas"]["SosType"];
+            text: string;
+            /** Format: date-time */
+            createdAt: string;
+            /**
+             * @description Always open today: a closed SOS answers 404. Kept so a later version can show a closed one.
+             * @enum {string}
+             */
+            status: "open" | "closed";
+            /**
+             * Format: date-time
+             * @description When the SOS closes by itself; the link dies then too.
+             */
+            closesAt?: string;
         };
         SharedPlan: {
             ownerDisplayName: string;
@@ -4089,6 +4135,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SharedPlan"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    viewExternalSos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The SOS. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalSos"];
                 };
             };
             404: components["responses"]["Problem"];
