@@ -13,6 +13,12 @@
 	handle /auth/* {
 		reverse_proxy api:8080
 	}
+	# The external emergency plan page: never cached, and no Referer leaves it
+	# (the token itself is in the fragment and cleared by the page).
+	header /plan {
+		Cache-Control "no-store"
+		Referrer-Policy "no-referrer"
+	}
 	handle {
 		root * /srv
 		try_files {path} /index.html
