@@ -18,6 +18,7 @@ web)
 	(cd ../../apps/mobile &&
 		EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=$member_url/v1 \
 			EXPO_PUBLIC_KRATOS_URL=$member_url/auth \
+			EXPO_PUBLIC_DEMO_CODES_URL=$member_url/demo/code \
 			npx expo export --platform web --output-dir dist --clear)
 	(cd ../../apps/admin &&
 		EXPO_NO_TELEMETRY=1 EXPO_PUBLIC_API_URL=http://localhost:8082/v1 \

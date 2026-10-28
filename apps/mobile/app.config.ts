@@ -50,6 +50,9 @@ const appConfig = (config: ConfigContext['config']): ExpoConfig => ({
     // Crisis numbers shown before the app has ever reached the server, as JSON
     // [{"number":"...","label":"..."}]. Empty by default: they are country data.
     crisisPhones: env.EXPO_PUBLIC_CRISIS_PHONES ?? '[]',
+    // Demo builds only: where the dev stack serves sign-in codes of its
+    // synthetic demo numbers (cmd/birge-devsms). Empty = no demo codes.
+    demoCodesUrl: env.EXPO_PUBLIC_DEMO_CODES_URL ?? '',
   },
 });
 

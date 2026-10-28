@@ -14,6 +14,12 @@ export interface AppConfig {
   kratosUrl: string;
   /** crisisPhones is the build-time fallback list, used until the server has answered once. */
   crisisPhones: CrisisPhone[];
+  /**
+   * demoCodesUrl is set only in demo builds: the dev stack's endpoint that
+   * returns the sign-in code of a synthetic demo number while no SMS provider
+   * is connected. Undefined everywhere else.
+   */
+  demoCodesUrl?: string;
   appVersion: string;
   platform: AppPlatform;
 }
@@ -56,6 +62,10 @@ export function parseConfig(
     apiUrl: url('apiUrl', extra?.apiUrl),
     kratosUrl: url('kratosUrl', extra?.kratosUrl),
     crisisPhones: phones(extra?.crisisPhones),
+    demoCodesUrl:
+      typeof extra?.demoCodesUrl === 'string' && extra.demoCodesUrl !== ''
+        ? url('demoCodesUrl', extra.demoCodesUrl)
+        : undefined,
     appVersion: version && /^\d+\.\d+\.\d+$/.test(version) ? version : '0.0.0',
     platform,
   };

@@ -224,6 +224,9 @@ services:
     environment:
       BIRGE_DEVSMS_TOKEN_FILE: /run/devsms/telegram-gateway.token
       BIRGE_SMS_ALLOWED_PREFIXES: ${BIRGE_SMS_ALLOWED_PREFIXES:-+77}
+      # +7 700 000 00 00..99: synthetic demo numbers whose codes the demo app
+      # shows on screen (GET /demo/code). Empty turns demo codes off.
+      BIRGE_DEVSMS_DEMO_PREFIX: ${BIRGE_DEVSMS_DEMO_PREFIX-+770000000}
     volumes:
       - ${HOME}/.config/birge:/run/devsms:ro
 

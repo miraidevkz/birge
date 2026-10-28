@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 
 import { isCrisisPhone, parseConfig } from './config';
+import { fetchDemoCode } from './demo-code';
 import { nextCheckin } from './next-checkin';
 import { notificationKey } from './notification-text';
 
@@ -59,5 +60,38 @@ describe('notificationKey', () => {
     expect(notificationKey('chat.new_message', exists)).toBe('templates.chat.new_message');
     expect(notificationKey('chat.unknown', exists)).toBe('fallback');
     expect(notificationKey('help:intro', () => true)).toBe('fallback');
+  });
+});
+
+describe('demo codes', () => {
+  const extra = { apiUrl: 'https://api.example.invalid/v1', kratosUrl: 'https://api.example.invalid/auth' };
+
+  it('are off unless the build sets a URL', () => {
+    expect(parseConfig(extra, '1.0.0', 'android').demoCodesUrl).toBeUndefined();
+    expect(parseConfig({ ...extra, demoCodesUrl: '' }, '1.0.0', 'android').demoCodesUrl).toBeUndefined();
+    expect(
+      parseConfig({ ...extra, demoCodesUrl: 'https://demo.example.invalid/demo/code' }, '1.0.0', 'android')
+        .demoCodesUrl,
+    ).toBe('https://demo.example.invalid/demo/code');
+  });
+
+  it('accept only a code-shaped answer', async () => {
+    const realFetch = global.fetch;
+    const answer = (status: number, body: unknown) =>
+      jest.fn(async () => ({ ok: status === 200, status, json: async () => body }) as unknown as Response);
+    try {
+      global.fetch = answer(200, { code: '482913' }) as unknown as typeof fetch;
+      expect(await fetchDemoCode('https://d.example.invalid/demo/code', '+77000000012')).toBe('482913');
+      global.fetch = answer(200, { code: '<b>x</b>' }) as unknown as typeof fetch;
+      expect(await fetchDemoCode('https://d.example.invalid/demo/code', '+77000000012')).toBeNull();
+      global.fetch = answer(404, null) as unknown as typeof fetch;
+      expect(await fetchDemoCode('https://d.example.invalid/demo/code', '+77011234567')).toBeNull();
+      global.fetch = jest.fn(async () => {
+        throw new Error('offline');
+      }) as unknown as typeof fetch;
+      expect(await fetchDemoCode('https://d.example.invalid/demo/code', '+77000000012')).toBeNull();
+    } finally {
+      global.fetch = realFetch;
+    }
   });
 });

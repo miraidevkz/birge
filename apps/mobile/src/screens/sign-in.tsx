@@ -5,10 +5,12 @@
 // shown from locale texts by code, never with the input echoed.
 import { E164, SignInError, type PendingSignIn, type SignInErrorCode } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
-import { Button, PhoneField, Screen, Text, TextField } from '@birge/ui';
+import { Banner, Button, PhoneField, Screen, Text, TextField } from '@birge/ui';
 import { useState } from 'react';
 
 import { kratos } from '@/lib/api';
+import { config } from '@/lib/config';
+import { useDemoCode } from '@/lib/demo-code';
 import { useSession } from '@/lib/session';
 
 function codeOf(err: unknown): SignInErrorCode {
@@ -29,6 +31,9 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
   const [pending, setPending] = useState<PendingSignIn | null>(null);
   const [error, setError] = useState<SignInErrorCode | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sentAt, setSentAt] = useState(0);
+  // Demo builds only (lib/demo-code): the code of a synthetic demo number.
+  const demoCode = useDemoCode(pending?.phone ?? null, sentAt);
 
   async function sendCode() {
     if (!E164.test(phone)) {
@@ -39,6 +44,7 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
     setError(null);
     try {
       setPending(await kratos.startSignIn(phone));
+      setSentAt(Date.now());
       setCode('');
     } catch (err) {
       setError(codeOf(err));
@@ -75,6 +81,7 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
         footer={<Button title={t('sendCode')} onPress={sendCode} loading={busy} />}
       >
         <Text>{t('intro')}</Text>
+        {config.demoCodesUrl ? <Text tone="muted">{t('demo.numbers')}</Text> : null}
         <PhoneField
           label={t('phone.label')}
           hint={t('phone.hint')}
@@ -108,6 +115,11 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
         </>
       }
     >
+      {demoCode !== undefined ? (
+        <Banner tone="info" testID="sign-in-demo-code">
+          {demoCode ? t('demo.banner', { code: demoCode }) : t('demo.waiting')}
+        </Banner>
+      ) : null}
       <TextField
         label={t('code.label')}
         hint={t('code.hint', { phone: pending.phone })}

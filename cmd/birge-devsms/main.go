@@ -23,9 +23,17 @@
 //     the token owner's is paid, so a retry must never send twice.
 //   - Logs carry only the last two digits of the number, never the code.
 //
+// Demo numbers: for numbers starting with BIRGE_DEVSMS_DEMO_PREFIX (for
+// example +770000000, a hundred synthetic numbers) the last code is kept in
+// memory for ten minutes and served at GET /demo/code?phone=<E.164>, so a
+// demo app can show it on screen while no SMS provider is connected. Only
+// that range is ever served: a real number's code is never readable, and
+// demo numbers are not sent to Telegram. Unset prefix = no demo codes.
+//
 // Configuration: LISTEN (default :4000), BIRGE_DEVSMS_TELEGRAM,
 // BIRGE_DEVSMS_TOKEN_FILE (the Gateway API token), BIRGE_DEVSMS_GATEWAY_URL
-// (default https://gatewayapi.telegram.org), BIRGE_SMS_ALLOWED_PREFIXES.
+// (default https://gatewayapi.telegram.org), BIRGE_SMS_ALLOWED_PREFIXES,
+// BIRGE_DEVSMS_DEMO_PREFIX.
 package main
 
 import (
@@ -39,6 +47,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -65,11 +74,58 @@ type server struct {
 	gw       *gateway
 	prefixes []string
 	log      *slog.Logger
+	demo     *demoCodes
+}
+
+// demoTTL is how long a demo code can be read; Kratos codes live longer.
+const demoTTL = 10 * time.Minute
+
+// demoCodes holds the last code per demo number (synthetic numbers only).
+type demoCodes struct {
+	prefix string
+	now    func() time.Time
+	mu     sync.Mutex
+	codes  map[string]demoCode
+}
+
+type demoCode struct {
+	code string
+	at   time.Time
+}
+
+func (d *demoCodes) covers(phone string) bool {
+	return d != nil && d.prefix != "" && strings.HasPrefix(phone, d.prefix)
+}
+
+func (d *demoCodes) put(phone, code string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	now := d.now()
+	for p, c := range d.codes {
+		if now.Sub(c.at) > demoTTL {
+			delete(d.codes, p)
+		}
+	}
+	d.codes[phone] = demoCode{code: code, at: now}
+}
+
+func (d *demoCodes) get(phone string) (string, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c, ok := d.codes[phone]
+	if !ok || d.now().Sub(c.at) > demoTTL {
+		return "", false
+	}
+	return c.code, true
 }
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	s := &server{log: log, prefixes: prefixesFrom(os.Getenv("BIRGE_SMS_ALLOWED_PREFIXES"))}
+	if p := strings.TrimSpace(os.Getenv("BIRGE_DEVSMS_DEMO_PREFIX")); p != "" {
+		s.demo = &demoCodes{prefix: p, now: time.Now, codes: map[string]demoCode{}}
+		log.Warn("demo codes are readable for the synthetic range", "event", "DevSMSDemoCodes", "prefix", p)
+	}
 	if os.Getenv("BIRGE_DEVSMS_TELEGRAM") == "1" {
 		token, err := readToken(os.Getenv("BIRGE_DEVSMS_TOKEN_FILE"))
 		if err != nil {
@@ -99,6 +155,7 @@ func main() {
 func newMux(s *server) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /sms", s.sms)
+	mux.HandleFunc("GET /demo/code", s.demoCode)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	return mux
 }
@@ -157,6 +214,11 @@ func (s *server) sms(w http.ResponseWriter, r *http.Request) {
 		s.log.Info("no code in body", "event", "DevSMSDropped", "reason", "no_code", "tail", tail(phone))
 		return
 	}
+	if s.demo.covers(phone) {
+		s.demo.put(phone, code)
+		s.log.Info("demo code kept", "event", "DevSMSDemoCode", "tail", tail(phone))
+		return
+	}
 	if s.gw == nil {
 		s.log.Info("code kept for up.sh codes", "event", "DevSMSDropped", "reason", "telegram_off", "tail", tail(phone))
 		return
@@ -167,6 +229,23 @@ func (s *server) sms(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("code sent through telegram", "event", "DevSMSTelegramSent", "tail", tail(phone), "request_id", id)
+}
+
+// demoCode serves the last code of a demo number; anything else is 404.
+func (s *server) demoCode(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	phone := strings.TrimSpace(r.URL.Query().Get("phone"))
+	if !e164Re.MatchString(phone) || !s.demo.covers(phone) {
+		http.NotFound(w, r)
+		return
+	}
+	code, ok := s.demo.get(phone)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"code": code})
 }
 
 func (s *server) allowed(phone string) bool {

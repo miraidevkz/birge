@@ -2,6 +2,11 @@
 # CORS: /v1 and /auth go to the birge api, everything else is the exported
 # Expo web app (apps/mobile/dist, a single-page app).
 :8081 {
+	# Demo sign-in codes of the synthetic demo numbers only (cmd/birge-devsms
+	# answers 404 for every other number and when no demo prefix is set).
+	handle /demo/code {
+		reverse_proxy devsms:4000
+	}
 	handle /v1/* {
 		reverse_proxy api:8080
 	}
