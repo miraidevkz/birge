@@ -6,8 +6,9 @@ import { Text } from './text';
 /** LOGO_SIZES are the mark's sizes in px; the wordmark scales with them. */
 const sizes = { sm: 'h-12 w-12', md: 'h-16 w-16', lg: 'h-20 w-20' } as const;
 
-// The six dots of the "Shenber" mark (branding/render.py: ring 124, dot 40 on
-// a 512 grid), as percentages of the box so any size keeps the same shape.
+// The "Shenber" mark (branding/render.py: six dots of radius 40 on a ring of
+// radius 124, 512 grid), as percentages of the box so any size keeps the
+// same shape, connecting ring included.
 const DOTS = [0, 1, 2, 3, 4, 5].map((k) => {
   const a = ((-90 + 60 * k) * Math.PI) / 180;
   const c = 50 + (124 / 512) * 100 * Math.cos(a);
@@ -15,6 +16,10 @@ const DOTS = [0, 1, 2, 3, 4, 5].map((k) => {
   const d = (80 / 512) * 100;
   return { left: `${c - d / 2}%`, top: `${m - d / 2}%`, width: `${d}%`, height: `${d}%` } as const;
 });
+const RING = (() => {
+  const d = ((2 * 124) / 512) * 100;
+  return { left: `${50 - d / 2}%`, top: `${50 - d / 2}%`, width: `${d}%`, height: `${d}%` } as const;
+})();
 
 /** LogoProps: size of the mark; withName adds the wordmark from the caller's locale. */
 export interface LogoProps {
@@ -24,7 +29,7 @@ export interface LogoProps {
 }
 
 /**
- * Logo is the brand mark (six dots in a circle, docs/adr/0025 and
+ * Logo is the brand mark (six dots on a connecting ring, docs/adr/0025 and
  * branding/README.md) drawn from views in the primary colour, so it follows
  * the theme and dark mode without image files. Decorative: the name, when
  * shown, is the accessible text.
@@ -37,6 +42,7 @@ export function Logo({ size = 'md', name }: LogoProps) {
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
       >
+        <View className="absolute rounded-full border-2 border-primary/45" style={RING} />
         {DOTS.map((style, i) => (
           // Positions are geometry derived from the mark, not design tokens.
           <View key={i} className="absolute rounded-full bg-primary" style={style} />

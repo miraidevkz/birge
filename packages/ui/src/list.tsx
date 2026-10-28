@@ -57,21 +57,26 @@ export function List<T>({
         {t('error.description')}
       </Banner>
     ) : null;
+  // The list scrolls the whole screen width, so its scrollbar sits at the
+  // screen edge: it cancels the screen's 20 px gutter (Screen, px-5) and
+  // pads its own content instead. A List always lives directly in a Screen.
   return (
-    <FlashList
-      testID={testID}
-      data={data ?? []}
-      renderItem={renderItem}
-      keyExtractor={keyExtractor}
-      ListHeaderComponent={
-        <View className="gap-4 pb-2">
-          {header}
-          {staleError}
-          {body}
-        </View>
-      }
-      ListEmptyComponent={data !== undefined ? <EmptyState {...empty} /> : null}
-      contentContainerStyle={{ paddingBottom: tokens.spacing[6] }}
-    />
+    <View className="-mx-5 flex-1">
+      <FlashList
+        testID={testID}
+        data={data ?? []}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={
+          <View className="gap-4 pb-2">
+            {header}
+            {staleError}
+            {body}
+          </View>
+        }
+        ListEmptyComponent={data !== undefined ? <EmptyState {...empty} /> : null}
+        contentContainerStyle={{ paddingBottom: tokens.spacing[6], paddingHorizontal: tokens.spacing[5] }}
+      />
+    </View>
   );
 }

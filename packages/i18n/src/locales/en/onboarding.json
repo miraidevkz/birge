@@ -1,0 +1,43 @@
+{
+  "next": "Next",
+  "back": "Back",
+  "skip": "Skip",
+  "start": "Get started",
+  "progress": "Step {{step}} of {{total}}",
+  "welcome": {
+    "title": "Welcome",
+    "body": "Birge is a place where mothers support each other. Say how you are in peace, find people who understand, and get help quickly. Choose your language: the whole app will use it."
+  },
+  "inside": {
+    "title": "What is inside",
+    "body": "Three main things you can come back to at any time.",
+    "checkin": {
+      "title": "How am I",
+      "body": "A short weekly wellbeing check-in. You see how you are doing over time."
+    },
+    "circle": {
+      "title": "Circle",
+      "body": "Mothers nearby and by topic: chats, tea with someone who understands, useful listings."
+    },
+    "help": {
+      "title": "Help",
+      "body": "When it gets hard, the psychologist on duty will contact you. 112 is always one tap away."
+    }
+  },
+  "privacy": {
+    "title": "Your data is protected",
+    "body": "We take care of what you share.",
+    "jurisdiction": {
+      "title": "Stored in Kazakhstan",
+      "body": "Your data is stored on a server in Kazakhstan."
+    },
+    "ai": {
+      "title": "An assistant that sees only what it needs",
+      "body": "The AI assistant gets only anonymized text, and only with your consent."
+    },
+    "delete": {
+      "title": "You can delete everything",
+      "body": "Delete your account and all your data at any time in your profile."
+    }
+  }
+}

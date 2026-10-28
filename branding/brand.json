@@ -1,6 +1,8 @@
 {
-  "primary": "#3F6F63",
-  "onPrimary": "#FFFFFF",
-  "primaryDark": "#5E9384",
-  "onPrimaryDark": "#141816"
+  "background": "#F2E3D3",
+  "mark": "#3F6F63",
+  "ring": "#9DC0B4",
+  "backgroundDark": "#3A2D22",
+  "markDark": "#8FBFB0",
+  "ringDark": "#5E8378"
 }

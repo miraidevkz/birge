@@ -5,12 +5,13 @@
 // shown from locale texts by code, never with the input echoed.
 import { E164, SignInError, type PendingSignIn, type SignInErrorCode } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
-import { Banner, Button, Heading, Logo, PhoneField, Screen, Text, TextField } from '@birge/ui';
+import { Banner, Button, Heading, LanguagePicker, Logo, PhoneField, Screen, Text, TextField } from '@birge/ui';
 import { useState } from 'react';
 
-import { kratos } from '@/lib/api';
+import { api, kratos } from '@/lib/api';
 import { config } from '@/lib/config';
 import { useDemoCode } from '@/lib/demo-code';
+import { chooseLanguage, currentLanguage } from '@/lib/language';
 import { useSession } from '@/lib/session';
 
 function codeOf(err: unknown): SignInErrorCode {
@@ -60,6 +61,11 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
     try {
       const s = await kratos.verifyCode(pending, code);
       await session.signIn(s);
+      // The language chosen on this device goes to the server (notification
+      // texts); never the other way round. A failure here is not a sign-in failure.
+      void Promise.resolve()
+        .then(() => api.PATCH('/me', { body: { lang: currentLanguage() } }))
+        .catch(() => undefined);
       onSignedIn();
     } catch (err) {
       const c = codeOf(err);
@@ -78,6 +84,7 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
       <Screen layout="form" footer={<Button title={t('sendCode')} onPress={sendCode} loading={busy} />}>
         {/* The brand opens the app: the name is the screen's heading here. */}
         <Logo size="lg" name={t('common:appName')} />
+        <LanguagePicker value={currentLanguage()} onChange={(l) => void chooseLanguage(l)} testID="sign-in-language" />
         <Heading>{t('title')}</Heading>
         <Text>{t('intro')}</Text>
         {config.demoCodesUrl ? <Text tone="muted">{t('demo.numbers')}</Text> : null}

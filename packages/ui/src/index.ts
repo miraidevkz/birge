@@ -26,6 +26,8 @@ export { Heading, Text } from './text';
 export type { HeadingProps, TextProps, TextTone, TextVariant } from './text';
 export { CallItem, LifeThreatBanner } from './call';
 export type { CallItemProps, LifeThreatBannerProps } from './call';
+export { LanguagePicker } from './language-picker';
+export type { LanguagePickerProps } from './language-picker';
 export { Logo } from './logo';
 export type { LogoProps } from './logo';
 export { PhoneField } from './phone-field';

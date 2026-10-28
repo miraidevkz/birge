@@ -1,11 +1,11 @@
 // Profile: view and edit the member, switch language, open related screens, sign out.
 import { unwrap, type Schemas } from '@birge/api';
-import { i18n, languages, useTranslation, type Language } from '@birge/i18n';
+import { useTranslation, type Language } from '@birge/i18n';
 import {
   Banner,
   Button,
   Card,
-  ChoiceGroup,
+  LanguagePicker,
   ErrorState,
   Heading,
   ListItem,
@@ -16,9 +16,10 @@ import {
 } from '@birge/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { api } from '@/lib/api';
+import { chooseLanguage, currentLanguage } from '@/lib/language';
 import { useSession } from '@/lib/session';
 
 type Member = Schemas['Member'];
@@ -37,12 +38,6 @@ export function ProfileScreen() {
   const name = draftName ?? me.data?.displayName ?? '';
   const [status, setStatus] = useState<'idle' | 'saved' | 'failed'>('idle');
 
-  useEffect(() => {
-    if (!me.data) return;
-    // Keep the UI language in sync with the profile when it loads (external i18n system).
-    if (me.data.lang !== i18n.language) void i18n.changeLanguage(me.data.lang);
-  }, [me.data]);
-
   const saveName = useMutation({
     mutationFn: (displayName: string) => unwrap(api.PATCH('/me', { body: { displayName } })),
     onSuccess: (member) => {
@@ -57,7 +52,6 @@ export function ProfileScreen() {
     mutationFn: (lang: Language) => unwrap(api.PATCH('/me', { body: { lang } })),
     onSuccess: (member) => {
       client.setQueryData(['me'], member);
-      void i18n.changeLanguage(member.lang);
       setStatus('saved');
     },
     onError: () => setStatus('failed'),
@@ -85,7 +79,8 @@ export function ProfileScreen() {
   }
 
   const member = me.data as Member;
-  const lang = (saveLang.isPending ? i18n.language : member.lang) as Language;
+  // The device's choice is what the member sees; the server copy follows it.
+  const lang: Language = currentLanguage();
 
   return (
     <Screen
@@ -121,15 +116,15 @@ export function ProfileScreen() {
         />
       </Card>
 
-      <ChoiceGroup
-        label={t('language.heading')}
+      <LanguagePicker
         value={lang}
         onChange={(next) => {
           setStatus('idle');
+          // The interface follows at once; the server copy is for notifications.
+          void chooseLanguage(next);
           saveLang.mutate(next);
         }}
         disabled={saveLang.isPending}
-        options={languages.map((code) => ({ value: code, label: t(`language.${code}`) }))}
         testID="profile-language"
       />
 

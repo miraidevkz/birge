@@ -1,6 +1,6 @@
 # Birge brand
 
-The mark is **Shenber** («Шеңбер», "circle"): six dots sitting in a circle, like the Circle tab of the app. Nobody has the head of the table, and the circle is open. Chosen by the product owner and the customer on 2026-10-28 from six options; the design language around it is [ADR-0025](../docs/adr/0025-warm-design-language.md).
+The mark is **Shenber** («Шеңбер», "circle"): six dots joined by a light ring, like the Circle tab of the app. Nobody has the head of the table, and the circle is open. Chosen by the product owner and the customer on 2026-10-28 from six options; the design language around it is [ADR-0025](../docs/adr/0025-warm-design-language.md).
 
 ## Files
 
@@ -20,18 +20,18 @@ In the apps, `Logo` in `packages/ui` draws the mark from views in the theme's `p
 
 ## Recolour
 
-Edit the four colours in `brand.json` and run, from the repository root:
+Edit the colours in `brand.json` (`background` sand, `mark` sage dots, `ring` light sage, and their dark variants) and run, from the repository root:
 
 ```sh
 python3 branding/render.py          # SVGs (standard library only)
 python3 branding/render.py --png    # SVGs and PNGs, needs Playwright (see the script's docstring)
 ```
 
-Keep `primary` equal to `primary` in `packages/ui/tokens.js` and the Android `adaptiveIcon.backgroundColor` in `apps/mobile/app.config.ts`, and keep the icon's dots at 3:1 contrast or more against its ground.
+Keep `background` equal to `accent` and `mark` equal to `primary` in `packages/ui/tokens.js`, and `background` equal to the Android `adaptiveIcon.backgroundColor` in `apps/mobile/app.config.ts`; keep the dots at 3:1 contrast or more against the ground (the ring is decorative).
 
 ## Rules
 
-- **One shape at every size.** Six dots, same geometry from 16 px to 1024 px; nothing is dropped or simplified at small sizes.
+- **One shape at every size.** Six dots on the ring, same geometry from 16 px to 1024 px; nothing is dropped or simplified at small sizes.
 - **Clear space** around the mark: at least one dot diameter on every side. Smallest size: 16 px.
 - **Discretion.** The icon sits on a mother's home screen where others can see it. No medical or diagnosis symbols, no "SOS", no red, and store and PWA texts stay neutral ("Birge — together"), never naming the app's subject.
 - Do not stretch, rotate, outline, add shadows or effects, or put the mark on a busy photo.

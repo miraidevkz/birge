@@ -9,5 +9,13 @@
   "comingSoon": {
     "title": "Скоро здесь",
     "description": "Этот раздел готовится."
+  },
+  "language": {
+    "label": "Язык / Тіл / Language",
+    "native": {
+      "kk": "Қазақша",
+      "ru": "Русский",
+      "en": "English"
+    }
   }
 }

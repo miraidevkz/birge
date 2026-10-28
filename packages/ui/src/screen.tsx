@@ -72,7 +72,10 @@ export function Screen({
   const formBody = (
     <KeyboardAvoidingView
       className="flex-1"
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      // Android too: with edge-to-edge (Expo SDK 58) the window no longer
+      // resizes for the keyboard, so without a behaviour the keyboard covered
+      // the phone and code fields (seen on a Nokia 7.2).
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={insets.top}
     >
       <ScrollView

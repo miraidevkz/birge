@@ -37,7 +37,8 @@ const appConfig = (config: ConfigContext['config']): ExpoConfig => ({
     adaptiveIcon: {
       foregroundImage: './assets/brand/adaptive-foreground.png',
       monochromeImage: './assets/brand/adaptive-monochrome.png',
-      backgroundColor: '#3F6F63',
+      // brand.json background: the sand of the interface's accent.
+      backgroundColor: '#F2E3D3',
     },
   },
   web: {

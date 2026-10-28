@@ -105,6 +105,15 @@ const fontSize = {
   tab: [12, 16],
 };
 
+/**
+ * Layout breakpoints in px of window width: phones below `tablet`; from
+ * `tablet` the tabs become a side rail; from `desktop` the rail shows labels.
+ */
+const breakpoints = { tablet: 600, desktop: 1024 };
+
+/** Width in px of the side rail of tabs on desktops (labels beside icons). */
+const railWidth = 240;
+
 /** Widest content column in px: on tablets and the web the screen stays one readable column. */
 const contentWidth = 640;
 
@@ -118,4 +127,15 @@ const touchTarget = 48;
  */
 const motion = { fast: 150, base: 200, slow: 250 };
 
-module.exports = { colors, spacing, radius, fontFamily, fontSize, contentWidth, touchTarget, motion };
+module.exports = {
+  colors,
+  spacing,
+  radius,
+  fontFamily,
+  fontSize,
+  breakpoints,
+  railWidth,
+  contentWidth,
+  touchTarget,
+  motion,
+};

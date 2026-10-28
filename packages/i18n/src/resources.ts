@@ -14,6 +14,7 @@ import enEmergency from './locales/en/emergency.json';
 import enHelp from './locales/en/help.json';
 import enHome from './locales/en/home.json';
 import enInbox from './locales/en/inbox.json';
+import enOnboarding from './locales/en/onboarding.json';
 import enKnowledge from './locales/en/knowledge.json';
 import enPrivacy from './locales/en/privacy.json';
 import enProfile from './locales/en/profile.json';
@@ -32,6 +33,7 @@ import kkEmergency from './locales/kk/emergency.json';
 import kkHelp from './locales/kk/help.json';
 import kkHome from './locales/kk/home.json';
 import kkInbox from './locales/kk/inbox.json';
+import kkOnboarding from './locales/kk/onboarding.json';
 import kkKnowledge from './locales/kk/knowledge.json';
 import kkPrivacy from './locales/kk/privacy.json';
 import kkProfile from './locales/kk/profile.json';
@@ -50,6 +52,7 @@ import ruEmergency from './locales/ru/emergency.json';
 import ruHelp from './locales/ru/help.json';
 import ruHome from './locales/ru/home.json';
 import ruInbox from './locales/ru/inbox.json';
+import ruOnboarding from './locales/ru/onboarding.json';
 import ruKnowledge from './locales/ru/knowledge.json';
 import ruPrivacy from './locales/ru/privacy.json';
 import ruProfile from './locales/ru/profile.json';
@@ -66,6 +69,7 @@ export const namespaces = [
   'admin',
   'home',
   'inbox',
+  'onboarding',
   'help',
   'circle',
   'chat',
@@ -92,6 +96,7 @@ export const resources = {
     admin: kkAdmin,
     home: kkHome,
     inbox: kkInbox,
+    onboarding: kkOnboarding,
     help: kkHelp,
     circle: kkCircle,
     chat: kkChat,
@@ -112,6 +117,7 @@ export const resources = {
     admin: ruAdmin,
     home: ruHome,
     inbox: ruInbox,
+    onboarding: ruOnboarding,
     help: ruHelp,
     circle: ruCircle,
     chat: ruChat,
@@ -132,6 +138,7 @@ export const resources = {
     admin: enAdmin,
     home: enHome,
     inbox: enInbox,
+    onboarding: enOnboarding,
     help: enHelp,
     circle: enCircle,
     chat: enChat,

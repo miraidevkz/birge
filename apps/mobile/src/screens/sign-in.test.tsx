@@ -11,7 +11,7 @@ import { SignInScreen } from './sign-in';
 jest.mock('expo-constants', () => require('@/test-mocks').expoConstants());
 jest.mock('@/lib/storage', () => require('@/test-mocks').memoryStorage());
 jest.mock('@/lib/api', () => ({
-  api: {},
+  api: { PATCH: jest.fn(async () => ({ data: {}, response: new Response() })) },
   kratos: { startSignIn: jest.fn(), verifyCode: jest.fn(), signOut: jest.fn() },
 }));
 

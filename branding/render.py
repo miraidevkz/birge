@@ -24,15 +24,23 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 BRAND = ROOT / "branding"
 SVG = BRAND / "svg"
 
-# Geometry on a 512 grid. Six dots, the same at every size: small sizes used
-# to drop the ring and dots, which changed the shape (owner, 2026-10-28).
-RING, DOT, CORNER = 124, 40, 112
+# Geometry on a 512 grid: six dots on a connecting ring, the same at every
+# size (owner, 2026-10-28: small sizes used to drop the ring and dots).
+RING, DOT, RING_STROKE, CORNER = 124, 40, 16, 112
 # Android adaptive icons crop to a 66/108 safe zone; the mark is scaled into it.
 ADAPTIVE_SCALE = 0.72
 
 
-def dots(fill: str, scale: float = 1.0) -> str:
-    out = []
+def ring_el(colour: str, scale: float = 1.0, opacity: float = 1.0) -> str:
+    alpha = f' stroke-opacity="{opacity}"' if opacity < 1 else ""
+    return (
+        f'<circle cx="256" cy="256" r="{RING * scale:.1f}" fill="none" stroke="{colour}"'
+        f' stroke-width="{RING_STROKE * scale:.1f}"{alpha}/>'
+    )
+
+
+def dots(fill: str, scale: float = 1.0, ring: str | None = None) -> str:
+    out = [ring_el(ring, scale)] if ring else []
     for k in range(6):
         a = math.radians(-90 + 60 * k)
         x, y = 256 + RING * scale * math.cos(a), 256 + RING * scale * math.sin(a)
@@ -47,18 +55,29 @@ def svg(body: str, note: str = "") -> str:
 
 def write_svgs(c: dict) -> dict:
     files = {
-        "mark.svg": svg(dots("currentColor"), "Mark only; currentColor takes the colour of its context."),
-        "icon.svg": svg(f'<rect width="512" height="512" rx="{CORNER}" fill="{c["primary"]}"/>' + dots(c["onPrimary"]), "App icon."),
+        "mark.svg": svg(
+            ring_el("currentColor", opacity=0.45) + dots("currentColor"),
+            "Mark only; currentColor takes the colour of its context (ring at 45%).",
+        ),
+        "icon.svg": svg(
+            f'<rect width="512" height="512" rx="{CORNER}" fill="{c["background"]}"/>' + dots(c["mark"], ring=c["ring"]),
+            "App icon.",
+        ),
         "icon-dark.svg": svg(
-            f'<rect width="512" height="512" rx="{CORNER}" fill="{c["primaryDark"]}"/>' + dots(c["onPrimaryDark"]),
+            f'<rect width="512" height="512" rx="{CORNER}" fill="{c["backgroundDark"]}"/>'
+            + dots(c["markDark"], ring=c["ringDark"]),
             "App icon for dark surfaces.",
         ),
         "icon-square.svg": svg(
-            f'<rect width="512" height="512" fill="{c["primary"]}"/>' + dots(c["onPrimary"]),
+            f'<rect width="512" height="512" fill="{c["background"]}"/>' + dots(c["mark"], ring=c["ring"]),
             "Full-bleed square: iOS rounds the corners itself.",
         ),
-        "icon-adaptive-foreground.svg": svg(dots(c["onPrimary"], ADAPTIVE_SCALE), "Android adaptive foreground."),
-        "icon-monochrome.svg": svg(dots("#000000", ADAPTIVE_SCALE), "Android 13+ themed icon; the system tints it."),
+        "icon-adaptive-foreground.svg": svg(
+            dots(c["mark"], ADAPTIVE_SCALE, ring=c["ring"]), "Android adaptive foreground (background: brand.json background)."
+        ),
+        "icon-monochrome.svg": svg(
+            dots("#000000", ADAPTIVE_SCALE, ring="#000000"), "Android 13+ themed icon; the system tints it."
+        ),
     }
     SVG.mkdir(exist_ok=True)
     for name, text in files.items():
