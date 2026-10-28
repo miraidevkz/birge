@@ -25,7 +25,7 @@
 //
 // Demo numbers: for numbers starting with BIRGE_DEVSMS_DEMO_PREFIX (for
 // example +770000000, a hundred synthetic numbers) the last code is kept in
-// memory for ten minutes and served at GET /demo/code?phone=<E.164>, so a
+// memory for ten minutes and served once at GET /demo/code?phone=<E.164>, so a
 // demo app can show it on screen while no SMS provider is connected. Only
 // that range is ever served: a real number's code is never readable, and
 // demo numbers are not sent to Telegram. Unset prefix = no demo codes.
@@ -109,10 +109,14 @@ func (d *demoCodes) put(phone, code string) {
 	d.codes[phone] = demoCode{code: code, at: now}
 }
 
+// get returns the code once and forgets it: a second sign-in to the same demo
+// number must never be shown the previous, already used code while the new
+// one is still on its way from the courier.
 func (d *demoCodes) get(phone string) (string, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	c, ok := d.codes[phone]
+	delete(d.codes, phone)
 	if !ok || d.now().Sub(c.at) > demoTTL {
 		return "", false
 	}

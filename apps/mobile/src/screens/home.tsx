@@ -1,7 +1,8 @@
-// Home: the next weekly check-in and the latest inbox items.
+// Home: a greeting, the next weekly check-in as the one thing to do, and the
+// latest inbox items (ADR-0025: one clear action, warm and personal).
 import { unwrap, type Schemas } from '@birge/api';
 import { i18n, useTranslation } from '@birge/i18n';
-import { Card, Heading, List, ListItem, Screen, Text } from '@birge/ui';
+import { Button, Card, Heading, List, ListItem, Screen, Text } from '@birge/ui';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 
@@ -35,16 +36,15 @@ function CheckinCard() {
   else if (next) body = formatDateTime(next, i18n.language, true);
   else body = schedule.data.enabled === false ? t('checkin.off') : t('checkin.none');
   return (
-    <Card
-      testID="home-checkin"
-      onPress={() => router.push('/checkin')}
-      accessibilityLabel={`${t('checkin.openLabel')}. ${t('checkin.action')}`}
-    >
+    <Card tone="accent" testID="home-checkin">
       <Heading>{t('checkin.heading')}</Heading>
-      <Text tone={next ? 'default' : 'muted'}>{body}</Text>
-      <Text variant="label" tone="primary">
-        {t('checkin.action')}
-      </Text>
+      <Text>{body}</Text>
+      <Button
+        title={t('checkin.action')}
+        accessibilityHint={t('checkin.openLabel')}
+        onPress={() => router.push('/checkin')}
+        testID="home-checkin-start"
+      />
     </Card>
   );
 }
@@ -57,10 +57,12 @@ export function HomeScreen() {
     queryKey: ['inbox', { limit: INBOX_PREVIEW }],
     queryFn: () => unwrap(api.GET('/me/inbox', { params: { query: { limit: INBOX_PREVIEW } } })),
   });
+  const me = useQuery({ queryKey: ['me'], queryFn: () => unwrap(api.GET('/me')) });
   const exists = (key: string) => i18n.exists(key, { ns: 'inbox' });
+  const name = me.data?.displayName?.trim();
 
   return (
-    <Screen title={t('title')} scroll={false}>
+    <Screen title={name ? t('greeting', { name }) : t('greetingNoName')} scroll={false}>
       <List<Notification>
         data={inbox.data?.items}
         loading={inbox.isLoading}
@@ -80,6 +82,7 @@ export function HomeScreen() {
         empty={{ title: t('inbox.emptyTitle'), description: t('inbox.emptyDescription') }}
         header={
           <>
+            <Text tone="muted">{t('howAreYou')}</Text>
             <CheckinCard />
             <Heading>{t('inbox.heading')}</Heading>
           </>

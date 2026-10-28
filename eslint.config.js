@@ -32,6 +32,7 @@ module.exports = defineConfig([
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/dist-stack/**',
       '**/.expo/**',
       'packages/api/src/schema.gen.ts',
       'bin/**',

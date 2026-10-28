@@ -12,8 +12,8 @@ const variants = {
 } as const satisfies Record<string, { box: string; tone: TextTone; spinner: ColorName }>;
 
 const sizes = {
-  md: 'min-h-touch px-4 py-2',
-  sm: 'min-h-touch px-3 py-1',
+  md: 'min-h-touch px-6 py-3',
+  sm: 'min-h-touch px-4 py-2',
 } as const;
 
 /** ButtonVariant: one primary action per screen (ADR-0014); destructive for SOS and irreversible actions. */
@@ -66,7 +66,8 @@ export function Button({
       onPress={onPress}
       testID={testID}
       className={cn(
-        'flex-row items-center justify-center gap-2 rounded-md active:opacity-80',
+        // Fully rounded (ADR-0025): soft, friendly, and clearly tappable.
+        'flex-row items-center justify-center gap-2 rounded-full active:opacity-80',
         v.box,
         sizes[size],
         disabled && 'opacity-50',

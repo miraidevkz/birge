@@ -44,6 +44,8 @@ module.exports = {
       sans: [tokens.fontFamily.regular],
       'sans-semibold': [tokens.fontFamily.semibold],
       'sans-bold': [tokens.fontFamily.bold],
+      heading: [tokens.fontFamily.heading],
+      display: [tokens.fontFamily.display],
     },
     fontSize: Object.fromEntries(
       Object.entries(tokens.fontSize).map(([k, [size, line]]) => [k, [`${size}px`, { lineHeight: `${line}px` }]]),
@@ -52,6 +54,7 @@ module.exports = {
     extend: {
       minHeight: { touch: `${tokens.touchTarget}px` },
       minWidth: { touch: `${tokens.touchTarget}px` },
+      maxWidth: { content: `${tokens.contentWidth}px` },
     },
   },
   plugins: [

@@ -1,5 +1,17 @@
 import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { extendTailwindMerge } from 'tailwind-merge';
+
+import { tokens } from './theme';
+
+/**
+ * twMerge taught our type ramp. Out of the box it does not know `text-body`,
+ * `text-title` or `text-display`, takes them for text colours and drops them
+ * next to `text-foreground`: every Text then rendered at the platform default
+ * size, the "same small font everywhere" look (docs/solved-problems.md).
+ */
+const twMerge = extendTailwindMerge({
+  extend: { classGroups: { 'font-size': [{ text: Object.keys(tokens.fontSize) }] } },
+});
 
 /**
  * cn joins class names and lets later ones win over earlier conflicting ones

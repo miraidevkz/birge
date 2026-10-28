@@ -56,7 +56,7 @@ export function Screen({
   const header = (
     <View
       className={cn(
-        'min-h-touch flex-row items-center gap-3 px-4 py-2',
+        'min-h-touch flex-row items-center gap-3 px-5 pb-2 pt-3',
         title && !form ? 'justify-between' : 'justify-end',
       )}
     >
@@ -77,7 +77,7 @@ export function Screen({
     >
       <ScrollView
         className="flex-1"
-        contentContainerClassName="flex-grow justify-center gap-4 px-4 py-6"
+        contentContainerClassName="flex-grow justify-center gap-5 px-5 py-6"
         keyboardShouldPersistTaps="handled"
       >
         {title ? <Heading level={1}>{title}</Heading> : null}
@@ -88,11 +88,11 @@ export function Screen({
   );
 
   const defaultContent = scroll ? (
-    <ScrollView className="flex-1" contentContainerClassName="gap-4 px-4 pb-6" keyboardShouldPersistTaps="handled">
+    <ScrollView className="flex-1" contentContainerClassName="gap-5 px-5 pb-8" keyboardShouldPersistTaps="handled">
       {children}
     </ScrollView>
   ) : (
-    <View className="flex-1 gap-4 px-4">{children}</View>
+    <View className="flex-1 gap-5 px-5">{children}</View>
   );
 
   const frame = (
@@ -102,20 +102,23 @@ export function Screen({
       style={{ paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }}
       testID={testID}
     >
-      {header}
-      {form ? (
-        formBody
-      ) : (
-        <>
-          {defaultContent}
-          {footer ? (
-            <View className="gap-2 border-t border-separator px-4 pt-3" style={{ paddingBottom: bottomPad }}>
-              {footer}
-            </View>
-          ) : null}
-        </>
-      )}
-      {form ? <View style={{ height: bottomPad }} /> : null}
+      {/* One centred readable column on tablets and the web (ADR-0025). */}
+      <View className="w-full max-w-content flex-1 self-center">
+        {header}
+        {form ? (
+          formBody
+        ) : (
+          <>
+            {defaultContent}
+            {footer ? (
+              <View className="gap-2 border-t border-separator px-5 pt-3" style={{ paddingBottom: bottomPad }}>
+                {footer}
+              </View>
+            ) : null}
+          </>
+        )}
+        {form ? <View style={{ height: bottomPad }} /> : null}
+      </View>
     </View>
   );
   return crisis ? <NoMotion>{frame}</NoMotion> : frame;

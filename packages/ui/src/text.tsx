@@ -6,8 +6,9 @@ const variants = {
   body: 'font-sans text-body',
   caption: 'font-sans text-caption',
   label: 'font-sans-semibold text-label',
-  title: 'font-sans-bold text-title',
-  display: 'font-sans-bold text-display',
+  // Headings use the rounded Nunito (ADR-0025); reading text stays Noto Sans.
+  title: 'font-heading text-title',
+  display: 'font-display text-display',
 } as const;
 
 const tones = {

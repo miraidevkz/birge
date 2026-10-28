@@ -10,6 +10,7 @@
   "dependencies": {
     "@birge/i18n": "0.1.0",
     "@expo-google-fonts/noto-sans": "0.4.2",
+    "@expo-google-fonts/nunito": "0.4.2",
     "clsx": "2.1.1",
     "tailwind-merge": "2.6.1"
   },

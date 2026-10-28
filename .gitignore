@@ -19,6 +19,7 @@ node_modules/
 .expo/
 web-build/
 apps/*/dist/
+apps/*/dist-stack/
 expo-env.d.ts
 *.tsbuildinfo
 

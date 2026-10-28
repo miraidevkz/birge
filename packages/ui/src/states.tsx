@@ -36,10 +36,31 @@ export interface EmptyStateProps {
   action?: { label: string; onPress: () => void };
 }
 
+/**
+ * Mark is the soft decorative motif of empty states (ADR-0025): two sage rings
+ * on a sand circle, the "together" of the name. Decorative only: hidden from
+ * screen readers, and nothing about the app's subject.
+ */
+function Mark() {
+  return (
+    <View
+      className="h-20 w-20 items-center justify-center rounded-full bg-accent"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <View className="flex-row">
+        <View className="h-8 w-8 rounded-full border-4 border-primary" />
+        <View className="-ml-3 h-8 w-8 rounded-full border-4 border-primary/60" />
+      </View>
+    </View>
+  );
+}
+
 /** EmptyState is shown when data loaded and has no items. */
 export function EmptyState({ title, description, action }: EmptyStateProps) {
   return (
-    <View className="items-center gap-2 py-8">
+    <View className="items-center gap-3 px-4 py-10">
+      <Mark />
       <Heading className="text-center">{title}</Heading>
       {description ? (
         <Text tone="muted" className="text-center">

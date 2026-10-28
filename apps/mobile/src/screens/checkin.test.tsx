@@ -109,7 +109,11 @@ describe('CheckinScreen', () => {
     });
     await storage.set('birge.session', 'session-token');
     await renderCheckin();
-    await fireEvent.press(await screen.findByRole('button', { name: 'Start check-in' }));
+    await screen.findByRole('button', { name: 'Start check-in' });
+    // Start stays disabled until the questionnaire has loaded; a press before
+    // that is ignored, which made this test fail about one run in three.
+    await waitFor(() => expect(startDisabled()).toBe(false));
+    await fireEvent.press(screen.getByRole('button', { name: 'Start check-in' }));
     expect(await screen.findByText(/Little interest or pleasure/)).toBeTruthy();
     await fireEvent.press(screen.getByRole('button', { name: 'Not at all' }));
     expect(await screen.findByTestId('checkin-result')).toBeTruthy();

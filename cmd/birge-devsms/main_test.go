@@ -139,6 +139,10 @@ func TestDemoCodesOnlyForTheDemoRange(t *testing.T) {
 	if code, body := get("+77000000012"); code != http.StatusOK || !strings.Contains(body, `"482913"`) {
 		t.Fatalf("demo number: %d %s", code, body)
 	}
+	// Served once: a later sign-in never sees the used code.
+	if code, _ := get("+77000000012"); code != http.StatusNotFound {
+		t.Fatalf("code served twice: %d", code)
+	}
 	// Demo numbers are synthetic: never sent to Telegram.
 	if len(fg.calls) != 0 {
 		t.Fatalf("gateway called for a demo number")
@@ -152,6 +156,7 @@ func TestDemoCodesOnlyForTheDemoRange(t *testing.T) {
 		t.Fatalf("bad phone: %d", code)
 	}
 	// Codes expire.
+	post(t, h, `{"recipient":"+77000000012","body":"Birge: 482914"}`)
 	now = now.Add(demoTTL + time.Second)
 	if code, _ := get("+77000000012"); code != http.StatusNotFound {
 		t.Fatalf("expired code readable: %d", code)

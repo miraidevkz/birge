@@ -11,5 +11,8 @@
     "heading": "Latest",
     "emptyTitle": "Nothing new",
     "emptyDescription": "Messages and reminders will appear here."
-  }
+  },
+  "greeting": "Hello, {{name}}",
+  "greetingNoName": "Hello",
+  "howAreYou": "How are you today? We are here with you."
 }

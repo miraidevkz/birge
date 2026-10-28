@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
+import { cn } from './cn';
 import { tokens, type ColorName } from './theme';
 
 // WCAG 2.2 relative luminance and contrast ratio.
@@ -36,6 +37,7 @@ const textPairs: [ColorName, ColorName][] = [
   ['successFg', 'successBg'],
   ['warningFg', 'warningBg'],
   ['dangerFg', 'dangerBg'],
+  ['accentForeground', 'accent'],
 ];
 
 // Input outlines against their surfaces (non-text contrast: 3:1).
@@ -71,5 +73,15 @@ describe('motion tokens', () => {
       expect(ms).toBeGreaterThanOrEqual(150);
       expect(ms).toBeLessThanOrEqual(250);
     }
+  });
+});
+
+describe('cn', () => {
+  it('keeps a type-ramp size next to a text colour', () => {
+    for (const size of ['caption', 'body', 'label', 'title', 'display']) {
+      expect(cn(`text-${size}`, 'text-foreground').split(' ')).toEqual([`text-${size}`, 'text-foreground']);
+    }
+    // A later size still wins over an earlier one.
+    expect(cn('text-body', 'text-title')).toBe('text-title');
   });
 });
