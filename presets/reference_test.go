@@ -1,6 +1,9 @@
 package presets_test
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -132,5 +135,50 @@ func TestReferenceKZContent(t *testing.T) {
 	}
 	if !slices.Equal(kz.NeedCodes(), demo.NeedCodes()) {
 		t.Errorf("kz needs %v, want the DEMO list %v", kz.NeedCodes(), demo.NeedCodes())
+	}
+}
+
+// TestReferenceLabelsInClientLocales checks that every reference code has a
+// label in the client locale files: the API returns codes only, and a code
+// without a label is shown raw in the apps.
+func TestReferenceLabelsInClientLocales(t *testing.T) {
+	for _, lang := range presets.ReferenceLangs {
+		raw, err := os.ReadFile(filepath.Join("..", "packages", "i18n", "src", "locales", lang, "reference.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var labels map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &labels); err != nil {
+			t.Fatal(err)
+		}
+		section := func(kind string) map[string]string {
+			var m map[string]string
+			if err := json.Unmarshal(labels[kind], &m); err != nil {
+				t.Fatalf("%s %s: %v", lang, kind, err)
+			}
+			return m
+		}
+		cities, districts, needs := section("city"), section("district"), section("need")
+		for _, name := range presets.ReferenceSets {
+			ref, err := presets.LoadReference(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, c := range ref.Cities {
+				if cities[c.Code] == "" {
+					t.Errorf("%s: no label for city %s", lang, c.Code)
+				}
+				for _, d := range c.Districts {
+					if districts[d.Code] == "" {
+						t.Errorf("%s: no label for district %s", lang, d.Code)
+					}
+				}
+			}
+			for _, n := range ref.Needs {
+				if needs[n.Code] == "" {
+					t.Errorf("%s: no label for need %s", lang, n.Code)
+				}
+			}
+		}
 	}
 }
