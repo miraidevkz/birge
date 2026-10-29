@@ -79,7 +79,7 @@ One UTF-8 file per language and category, `<kk|ru|en>.<category>.txt`; one entry
 - The queue never shows names or phones; phones are never returned by the roster API (api; tests).
 - Notes and on-duty phones are stored sealed only (service; schema comments).
 - Shifts and escalations are never deleted (no delete query exists).
-- Account deletion keeps the escalation shell (AGENTS.md N6): the row stays for staff accountability with its IDs (`id`, `member_id`, `taken_by`), source, status, timestamps and outcome; the personal fields are cleared: `note` (sealed with her key, which is shredded anyway) and `district_id`. An open or taken escalation stays in the queue as it was and its backup timer keeps running, so deletion never silences the crisis path; contact reveal then finds no member. Closing it with a note after her key is shredded closes without the note and logs `EscalationNoteDroppedMemberDeleted` (escalation ID only; `TestCloseDropsNoteWhenMemberKeyShredded`). An escalation opened for her later (a late chat crisis retry) still opens, without a district, because membership no longer knows her. One audit entry `safety.member_deleted` (actor system). Duty shifts belong to staff, not members, and are untouched.
+- Account deletion keeps the escalation shell (AGENTS.md non-negotiable 6): the row stays for staff accountability with its IDs (`id`, `member_id`, `taken_by`), source, status, timestamps and outcome; the personal fields are cleared: `note` (sealed with her key, which is shredded anyway) and `district_id`. An open or taken escalation stays in the queue as it was and its backup timer keeps running, so deletion never silences the crisis path; contact reveal then finds no member. Closing it with a note after her key is shredded closes without the note and logs `EscalationNoteDroppedMemberDeleted` (escalation ID only; `TestCloseDropsNoteWhenMemberKeyShredded`). An escalation opened for her later (a late chat crisis retry) still opens, without a district, because membership no longer knows her. One audit entry `safety.member_deleted` (actor system). Duty shifts belong to staff, not members, and are untouched.
 - Logs: IDs, roles and event names only; never message text, names, phones or notes (service; `newEnv` test cleanup checks).
 - `crisis.Detect` does no I/O and allocates no shared state; DEMO-set recall must stay 100% (`TestDemoLexiconEvalSet`).
 
@@ -95,13 +95,11 @@ One UTF-8 file per language and category, `<kk|ru|en>.<category>.txt`; one entry
 ## Tests
 
 - Crisis: `crisis/crisis_test.go` — normalisation, loader errors, fuzzy and compact matching, the evaluation set `evals/datasets/crisis/*.tsv` against the DEMO lexicon (100% recall required, false-positive rate logged), benchmark.
-- Unit: `service/service_test.go` with fakes from `safetytest/` — idempotency, rollback on failure, roles, take/reveal/close rules, sealing, timer behaviour, roster, role resolution, pagination, no personal data in logs.
+- Unit: `service/service_test.go` and `service/deletion_test.go` with fakes from `safetytest/` — idempotency, rollback on failure, roles, take/reveal/close rules, sealing, timer behaviour, roster, role resolution, pagination, no personal data in logs.
 - HTTP: `api/handler_test.go` — status codes, `Cache-Control: no-store`, no member data in queue or roster responses.
 - Integration: `adapter/integration_test.go` with `testinfra.Postgres` — 20 concurrent opens give one escalation, one event pair and one timer; atomicity under injected failures; take cancels the timer and the worker fires only the untaken one; audit rows; constraints.
 
 ## Open questions
 
-- `Escalation.districtId` is required in the contract but unknown when membership has no district or is unavailable; the API then returns the nil UUID. The contract should make it optional.
 - Staff SMS language is one setting (`StaffLang`); shifts have no language column.
-- notify re-resolves external recipients at send time as `trusted_contact_id` (`model.ResolvedRecipient.AsRecipient`); staff-shift recipients need their own form there, or the SMS timer cannot re-resolve them.
 - Nobody can reassign an escalation taken by someone who then becomes unavailable; reassignment needs a rule and an audited operation.

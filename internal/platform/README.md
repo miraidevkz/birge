@@ -5,7 +5,8 @@ Shared infrastructure used by bounded contexts. Contexts must not import each ot
 | Package | One-liner | ADR |
 |---|---|---|
 | `audit` | Append-only writes to `platform.audit_log` in the caller's transaction; `RecordOnce` / `RecordMemberDeleted` for idempotent work (account deletion, actor `SystemActorID` with role `system`). | — |
-| `auth` | Request-scoped principal (`IdentityID`, staff flag, roles) set by the session and staffauth middleware. | [0008](../../docs/adr/0008-identity.md) |
+| `apivalidate` | Validates every `/v1` request against the OpenAPI contract before a handler runs. | [0005](../../docs/adr/0005-contracts-first.md) |
+| `auth` | Request-scoped principal (`IdentityID`, `MemberID`, staff flag, roles, MFA) set by the session, member-resolution and staffauth middleware. | [0008](../../docs/adr/0008-identity.md) |
 | `bearer` | Bearer header parsing and the bounded token-hash LRU shared by `session` and `staffauth`. | [0008](../../docs/adr/0008-identity.md) |
 | `clock` | Injectable clock so domain code never calls `time.Now` directly. | — |
 | `config` | Process env loader (`BIRGE_HTTP_ADDR`, app versions, crisis phones). | [0018](../../docs/adr/0018-client-compatibility.md) |

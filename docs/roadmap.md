@@ -22,6 +22,8 @@ Backend:
 - [ ] Record the concrete staff role (moderator, psychologist, …) in membership and chat audit rows; today they say `staff`.
 - [ ] A re-wrap job for the keys of members who stay inactive after a key rotation, so the old key can be retired without waiting for them. Today a key is re-wrapped when its member is next active.
 - [ ] A role matrix for staff and a deny-by-default test generated from the contract.
+- [ ] Chat reports the direct room it opens for an accepted tea match back to circle, so `Match.roomId` is filled as the contract promises (a contract change first; today the member finds the room in her chat list).
+- [ ] The monitoring alert when the next 24 hours of psychologist duty are not covered ([ADR-0023](adr/0023-crisis-path.md)); until then staff check the roster by hand.
 - [ ] An isolation item in the weekly check-in, so the isolation metric has data. This is a product and psychologist decision first.
 
 Quality and security:

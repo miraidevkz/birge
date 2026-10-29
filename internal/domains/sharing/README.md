@@ -71,7 +71,7 @@ Ports used by this context: `MemberInfo`, `Blocks`, `ObjectStore` (`internal/pla
 - Contact requests are unique per listing+requester (unique index + service).
 - No titles, descriptions or photo bytes in events, notifications or logs (service; tests).
 - Nothing is deleted in normal operation: listings close, contact requests change status. Photo original objects are deleted from object storage after processing (ADR-0015). The only delete queries belong to account deletion.
-- Account deletion (AGENTS.md N6): her listings with every contact request on them, her contact requests on other listings and her photo uploads are deleted, and the timers of her listings are cancelled, in one transaction; the object keys those rows held go into the `sharing.DeleteObjects` timer created in the same transaction, because object I/O is a side effect outside it (docs/solved-problems.md). Nothing is tombstoned: a listing is her own offer, and a direct chat opened from it is kept by chat. One audit entry `sharing.member_deleted` (actor system).
+- Account deletion (AGENTS.md non-negotiable 6): her listings with every contact request on them, her contact requests on other listings and her photo uploads are deleted, and the timers of her listings are cancelled, in one transaction; the object keys those rows held go into the `sharing.DeleteObjects` timer created in the same transaction, because object I/O is a side effect outside it (docs/solved-problems.md). Nothing is tombstoned: a listing is her own offer, and a direct chat opened from it is kept by chat. One audit entry `sharing.member_deleted` (actor system).
 
 ## Failure modes
 

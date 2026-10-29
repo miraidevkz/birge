@@ -69,7 +69,7 @@ Ports used by this context (wired in `internal/wiring`): `Sealer` (platform enve
 - PHQ-4 0–12, PSS-4 0–16 after reverse scoring (model).
 - Reminder next occurrence computed with `time.LoadLocation` in the deployment zone; no in-process cron (ADR-0020).
 - Cohort aggregates expose count, mean and median only; per-member scores never leave the service package (model `BuildCohortAggregates`; ADR-0024).
-- Account deletion (AGENTS.md N6): her schedule and every check-in are deleted and her pending `wellbeing.Reminder` timer is cancelled, in one transaction. Nothing is tombstoned: no other record refers to a check-in (the safety escalation it may have opened keeps only IDs). One audit entry `wellbeing.member_deleted` (actor system).
+- Account deletion (AGENTS.md non-negotiable 6): her schedule and every check-in are deleted and her pending `wellbeing.Reminder` timer is cancelled, in one transaction. Nothing is tombstoned: no other record refers to a check-in (the safety escalation it may have opened keeps only IDs). One audit entry `wellbeing.member_deleted` (actor system).
 
 ## Failure modes
 

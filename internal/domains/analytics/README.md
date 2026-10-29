@@ -1,6 +1,6 @@
 # analytics
 
-The pilot metrics of `docs/requirements/mvp.md` § 9 (stress, isolation, activity and retention, Tea funnel, SOS, escalations, rights) and their CSV export (§ 10), as aggregates only (ADR-0024). Analytics stores one fact per consumed domain event, names people only by pseudonym (`HMAC-SHA256(analytics key, member_id)`), and suppresses every cell built from fewer than `k` members. Stress and isolation come from the wellbeing cohort aggregates through a port; analytics never reads another context's tables.
+The pilot metrics of `docs/requirements/mvp.md` § 9 (stress, isolation, activity and retention, Tea funnel, SOS, escalations, rights) and their CSV export (§ 6), as aggregates only (ADR-0024). Analytics stores one fact per consumed domain event, names people only by pseudonym (`HMAC-SHA256(analytics key, member_id)`), and suppresses every cell built from fewer than `k` members. Stress and isolation come from the wellbeing cohort aggregates through a port; analytics never reads another context's tables.
 
 ## Owns
 
@@ -83,7 +83,7 @@ None. Analytics consumes `wellbeing` cohort aggregates through `port.Cohorts`, i
 - Every cell from fewer than `k` members carries only `suppressed: true`; one function applies it (`model.Suppress`, unit tests at k−1, k and k=1).
 - A cell built from no member is suppressed even with `k = 1`.
 - Reports: admin + MFA, period ≤ 12 months, audit entry in the same transaction (service tests, integration test).
-- Account deletion (AGENTS.md N6): her facts (her rights answers among them), the actor-less closed/taken/rated facts of her SOS, escalations and assistant answers, in one transaction with her pseudonym recorded in `erased_actors` and one audit entry `analytics.member_deleted`. Her SOS, escalation and answer subjects go to `erased_subjects`. Both tables keep the pseudonyms as long as the EVENTS stream keeps an event, so that her events still in the stream are dropped (deletion e2e test). A closing, taking or rating that arrives late for an object analytics never stored (its opening was late too and dropped) is stored without an actor, joins nothing and is never counted.
+- Account deletion (AGENTS.md non-negotiable 6): her facts (her rights answers among them), the actor-less closed/taken/rated facts of her SOS, escalations and assistant answers, in one transaction with her pseudonym recorded in `erased_actors` and one audit entry `analytics.member_deleted`. Her SOS, escalation and answer subjects go to `erased_subjects`. Both tables keep the pseudonyms as long as the EVENTS stream keeps an event, so that her events still in the stream are dropped (deletion e2e test). A closing, taking or rating that arrives late for an object analytics never stored (its opening was late too and dropped) is stored without an actor, joins nothing and is never counted.
 - Storing a fact and erasing a member never interleave: both take `pg_advisory_xact_lock` on the pseudonym (the fact's actor, else its subject; deletion takes her actor, then her subjects in order) before the erased check and before the deletes; the facts of one event are inserted in `model.LockOrder` (`TestErasureSerializedWithFactInsert`).
 - Retention: facts 24 months; weekly roll-ups without actors are kept.
 

@@ -1,4 +1,4 @@
-// Package service implements the emergency use cases (docs/requirements/mvp.ru.md
+// Package service implements the emergency use cases (docs/requirements/mvp.md
 // § 4.6): raising, sharing and closing an SOS, the district SOS feed and its
 // "I can help" responses, and the emergency plan (child card and up to three
 // trusted contacts) with sending it to the confirmed contacts. A confirmed

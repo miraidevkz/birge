@@ -1,6 +1,6 @@
 # circle
 
-Tea matching («Чай») and pairwise "met in person" («знакомы лично») acquaintances for Moms nearby. A verified member opens a tea request with format and preferences; an hourly job pairs open requests by score; both accept → a private chat will open (chat listens to `circle.MatchAccepted`); after three days both confirm they met → an acquaintance used by emergency trusted contacts and N5. Serves `docs/requirements/mvp.md` § 3 and § 4.4.
+Tea matching («Чай») and pairwise "met in person" («знакомы лично») acquaintances for Moms nearby. A verified member opens a tea request with format and preferences; an hourly job pairs open requests by score; both accept → a private chat will open (chat listens to `circle.MatchAccepted`); after three days both confirm they met → an acquaintance used by emergency trusted contacts and by the childcare rule (AGENTS.md non-negotiable 5). Serves `docs/requirements/mvp.md` § 3 and § 4.4.
 
 ## Owns
 
@@ -48,7 +48,7 @@ Operations of tag `circle` in `contracts/openapi/birge.yaml`. All are member-onl
 |---|---|
 | `Service.Met(ctx, a, b) (bool, error)` | Symmetric "met in person" for the pair (`true` only after both confirmed). For emergency's `Acquaintances` port. |
 | `Service.ListAcquaintances(ctx, principal)` | Caller's acquaintances with first names (HTTP). |
-| `Service.SetRoomID(ctx, matchID, roomID)` | Stores the private room id once. **TODO:** wire from chat after it handles `circle.MatchAccepted`. |
+| `Service.SetRoomID(ctx, matchID, roomID)` | Stores the private room id once. **Not called yet:** chat opens the direct room on `circle.MatchAccepted` but does not report its id back, so `room_id` stays null and `Match.roomId` is never present ([roadmap](../../../docs/roadmap.md)). The member finds the room in her chat list. |
 | `Service.HandleMatchRun` / `HandleRequestExpire` / `HandleAskMet` | Timer handlers; used by `adapter.TimerHandlers`. |
 
 Ports used by this context (wired in `internal/wiring`): `MemberInfo` (membership: verification, district, language, children birth years/needs, first name), `Blocks` (membership `IsBlocked`, both directions), `Store` (PostgreSQL adapter). `Service.Met` backs emergency's `Acquaintances` port for member trusted contacts.
@@ -74,14 +74,14 @@ Ports used by this context (wired in `internal/wiring`): `MemberInfo` (membershi
 - Members stored canonically (`member_a < member_b`) on matches and acquaintances (table checks).
 - No names, districts, ages or needs in logs or events — IDs and event names only (service; tests).
 - Nothing is deleted in normal operation: requests cancel/expire, matches change status. The only delete queries belong to account deletion.
-- Account deletion (AGENTS.md N6): her acquaintances (both directions) and every tea request no match references are deleted. Her matches stay as tombstones, with the two requests they reference (foreign keys): the other member's history keeps the pair, and her name, read from membership at request time, is no longer found (shown as deleted). A `proposed` match ends as `expired` (she can no longer answer), a still-open matched request is `cancelled`; the `RequestExpire` and `AskMet` timers of her requests and matches are cancelled, all in one transaction. One audit entry `circle.member_deleted` (actor system).
+- Account deletion (AGENTS.md non-negotiable 6): her acquaintances (both directions) and every tea request no match references are deleted. Her matches stay as tombstones, with the two requests they reference (foreign keys): the other member's history keeps the pair, and her name, read from membership at request time, is no longer found (shown as deleted). A `proposed` match ends as `expired` (she can no longer answer), a still-open matched request is `cancelled`; the `RequestExpire` and `AskMet` timers of her requests and matches are cancelled, all in one transaction. One audit entry `circle.member_deleted` (actor system).
 
 ## Failure modes
 
 - Database down: every operation fails with 500; nothing is half-written; timer worker retries with backoff (ADR-0020).
 - Broker down: events wait in the outbox; relay publishes later (ADR-0007). Match notifications are delayed until notify receives `DeliveryRequested`.
 - Membership down (`MemberInfo`/`Blocks`): create, list cards, matching and acquaintances fail (fail closed).
-- Chat not wired: `MatchAccepted` is published; `room_id` stays null until `SetRoomID` is called.
+- `room_id` stays null: chat opens the direct room but nothing calls `SetRoomID` yet (see Service API).
 
 ## Tests
 

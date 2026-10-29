@@ -1,6 +1,6 @@
 # emergency
 
-SOS and the emergency plan («SOS», «План ЧС»): a member raises an SOS that goes at once to the moderators and to her confirmed trusted contacts, may share it (verified members only, never «Не с кем оставить ребёнка») to her district feed where verified neighbours press «Могу помочь», and keeps a plan of a sealed child card and up to three trusted contacts she can send it to. External contacts (no account) open the plan and the SOS through one-time links in their SMS. Serves `docs/requirements/mvp.ru.md` § 4.6, § 3 (who may do what) and § 7 (`sos_requests`, `child_cards`, `trusted_contacts`). «Мне очень плохо» is not here: it is safety's `requestHumanHelp` with source `sos` (ADR-0023).
+SOS and the emergency plan («SOS», «План ЧС»): a member raises an SOS that goes at once to the moderators and to her confirmed trusted contacts, may share it (verified members only, never «Не с кем оставить ребёнка») to her district feed where verified neighbours press «Могу помочь», and keeps a plan of a sealed child card and up to three trusted contacts she can send it to. External contacts (no account) open the plan and the SOS through one-time links in their SMS. Serves `docs/requirements/mvp.md` § 4.6, § 3 (who may do what) and § 7 (`sos_requests`, `child_cards`, `trusted_contacts`). «Мне очень плохо» is not here: it is safety's `requestHumanHelp` with source `sos` (ADR-0023).
 
 ## Owns
 
@@ -24,7 +24,7 @@ Operations of tag `emergency` in `contracts/openapi/birge.yaml`. All except `vie
 |---|---|
 | `POST /me/sos` | Text 1..300 characters, not blank. Idempotent per member and `Idempotency-Key` (a replay returns the stored SOS, alerts nobody again and does not count). At most 3 per rolling hour, counted in the database under a per-member advisory lock → 429. One transaction: insert, `emergency.SosRaised`, critical alert to `staff_role=moderator`, a critical alert per confirmed contact, `emergency.SosAutoClose` timer. Invited contacts are never alerted. |
 | `GET /me/sos` | Newest 20 with response counts; texts opened for the author. |
-| `POST /me/sos/{id}/share` | Author only. Childcare → 409 always (N5); closed → 409; not verified → 403; no district → 409. Sharing again returns it unchanged. Publishes `emergency.SosShared`. |
+| `POST /me/sos/{id}/share` | Author only. Childcare → 409 always (non-negotiable 5); closed → 409; not verified → 403; no district → 409. Sharing again returns it unchanged. Publishes `emergency.SosShared`. |
 | `POST /me/sos/{id}/close` | Author only; cancels the timer, publishes `emergency.SosClosed` once; idempotent. |
 | `GET /sos/feed` | Verified only (403). Open, shared, unexpired SOS of the caller's district, never childcare, never her own, never of a member blocked either way; 50 per page, keyset cursor; a page can be shorter than 50 after block filtering while `nextCursor` is set. No district → empty page. Texts are opened under the author's key; an unopenable item (shredded author) is skipped. |
 | `POST /sos/{id}/respond` | Verified only (403). Only an SOS visible in the caller's feed, else 404 (also for childcare, closed, own, blocked). Idempotent per responder; the first response notifies the author (`member_id`, class `normal`, template `emergency.sos_responded`, params `{sos_id}`). |
@@ -80,7 +80,7 @@ Operations of tag `emergency` in `contracts/openapi/birge.yaml`. All except `vie
 | `Service.HandlePlanLinkPurge(ctx, tx, linkID)` | Timer handler; used by `adapter.TimerHandlers`. |
 | `Service.HandleSosLinkPurge(ctx, tx, linkID)` | Timer handler; used by `adapter.TimerHandlers`. |
 
-Ports used by this context (wired later): `Sealer` (platform crypto), `MemberInfo` (membership: verification, district, display name, language), `Blocks` (membership `IsBlocked`, both directions), `Acquaintances` (circle `Met`), `Store`/`Auditor` (PostgreSQL adapter).
+Ports used by this context (wired in `internal/wiring`): `Sealer` (platform crypto), `MemberInfo` (membership: verification, district, display name, language), `Blocks` (membership `IsBlocked`, both directions), `Acquaintances` (circle `Met`), `Store`/`Auditor` (PostgreSQL adapter).
 
 ## Configuration
 
@@ -109,7 +109,7 @@ Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS 
 - External plan links: the token exists only in the SMS (minted at send time, never in an event, the outbox, notify or a log); the database has only its keyed hash. Unknown, expired and revoked tokens are one `ErrNotFound` after the same single lookup (`TestExternalPlanFailuresLookAlike`). Resend, contact removal and a newer link revoke (`TestExternalPlanLinkLifecycle`, `TestExternalPlanLinkRevokedOnContactRemoval`, `TestExternalPlanLinksPostgres`, `wiring.TestExternalPlanLinkEndToEnd`, which also proves the operation is the only anonymous emergency route and greps the logs for the token).
 - External SOS links: the same token rules as plan links (only in the SMS; keyed hash with its own prefix, so plan and SOS tokens never cross: `TestPlanAndSosTokensNeverCross`). One lookup decides and re-checks the contact and the SOS, so a closed SOS, a removed contact and an unknown, revoked or expired token are one `ErrNotFound` (`TestExternalSosFailuresLookAlike`, `TestExternalSosLinkLifecycle`, `TestExternalSosLinkEndsWithAutoClose`, `TestExternalSosLinkEndsOnContactRemoval`, `TestExternalSosLinksPostgres`, `wiring.TestExternalSosLinkEndToEnd`). The SOS SMS never waits for its link (notify's critical fallback).
 - Nothing is deleted in normal operation: SOS are closed, contacts removed with `removed_at`. The only delete queries belong to account deletion and to the retention purge of expired plan and SOS links.
-- Account deletion (AGENTS.md N6): her SOS requests with every response to them, her own responses to other members' requests, her child card, her trusted contacts, the entries in which she is another owner's member contact, her plan sends and her plan and SOS links are deleted; the auto-close timers of her requests and the purge timers of her links are cancelled, all in one transaction. Nothing is tombstoned: the other owner's contact list simply loses her, and a direct chat opened from an accepted response is kept by chat. One audit entry `emergency.member_deleted` (actor system); earlier audit entries about her (shared-plan views, trusted and staff SOS reads and actions; IDs only) stay (append-only).
+- Account deletion (AGENTS.md non-negotiable 6): her SOS requests with every response to them, her own responses to other members' requests, her child card, her trusted contacts, the entries in which she is another owner's member contact, her plan sends and her plan and SOS links are deleted; the auto-close timers of her requests and the purge timers of her links are cancelled, all in one transaction. Nothing is tombstoned: the other owner's contact list simply loses her, and a direct chat opened from an accepted response is kept by chat. One audit entry `emergency.member_deleted` (actor system); earlier audit entries about her (shared-plan views, trusted and staff SOS reads and actions; IDs only) stay (append-only).
 
 ## Failure modes
 
@@ -128,6 +128,7 @@ Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS 
 - HTTP: `api/handler_test.go`, `api/trusted_staff_test.go` — status codes (401, 403, 404, 409, 429), `Cache-Control: no-store`, no full phone in responses, the anonymous external view and its single 404 body.
 - Integration: `adapter/staff_trusted_integration_test.go` — trusted read, respond and decline; staff queue paging, seen, close with timer, event and audit rows, the new checks. `wiring/staff_sos_e2e_test.go` — `/v1/staff/sos` behind staffauth through the real HTTP stack.
 - Integration: `adapter/integration_test.go` with `testinfra.Postgres` — atomic raise with injected failures and the real envelope (no plaintext in tables or outbox; payloads match the `notify.DeliveryRequested` contract), concurrent rate limit and replays, childcare refused by service, store and table check, feed SQL filter, respond idempotency, auto-close timer worker, concurrent contact limit, shared-plan audit rows, schema constraints.
+- Also: `service/sos_links_test.go` (external SOS links) and `adapter/links_integration_test.go` (`TestExternalPlanLinksPostgres`, `TestExternalSosLinksPostgres`).
 
 ## Open questions
 
@@ -135,7 +136,7 @@ Fixed by the requirements (constants in `model`): 300 characters per SOS, 3 SOS 
 - The dev SMS sender logs only the notification id, so in the compose stack the link cannot be read anywhere (by design).
 - The SOS link page is `/sos-link`, not `/sos`: `/sos` is the mother's own SOS screen (signed in or out), and a page that changed with the URL fragment would put an anonymous page and the mother's crisis entry behind one route.
 - An external contact sees the SOS but cannot answer it in the system (she has no account); the page asks her to get in touch the way she usually does.
-- Contact alerts on raise use class `critical` (member contacts get the SMS fallback); the brief fixed the class only for the moderator alert.
+- Contact alerts on raise use class `critical` (member contacts get the SMS fallback); requirements § 4.6 fixes the class only for the moderator alert.
 - There is no endpoint for an invited member to list her invitations: she learns the `contact_id` from the invitation notification and reads it with `getTrustedInvitation`.
 - A moderator's close is stored as `close_reason = 'author'` with `closed_by` set, because widening the reason check to `staff` is a constraint swap the migration gate treats as destructive. If a separate reason is wanted, it needs a `-- birge:destructive-approved` migration.
 - A staff close does not notify the author; the contract does not ask for it.

@@ -1,6 +1,6 @@
 # assistant
 
-The AI assistant of Talk («Поговорить», `docs/requirements/mvp.md` § 4.3) and "Ask in my own words" in My rights (§ 4.7): one fixed pipeline per message (§ 5; ADR-0017, ADR-0023, the `crisis-path` skill) — consent and daily limit, level-1 crisis lexicon, anonymization, retrieval, the model, level-2 crisis flag, persistence of anonymized text only. The crisis response and the escalation never depend on the model (N1); only anonymized text and only with the `ai_crossborder` consent leaves the jurisdiction (N2, ADR-0013).
+The AI assistant of Talk («Поговорить», `docs/requirements/mvp.md` § 4.3) and "Ask in my own words" in My rights (§ 4.7): one fixed pipeline per message (§ 5; ADR-0017, ADR-0023, the `crisis-path` skill) — consent and daily limit, level-1 crisis lexicon, anonymization, retrieval, the model, level-2 crisis flag, persistence of anonymized text only. The crisis response and the escalation never depend on the model (non-negotiable 1); only anonymized text and only with the `ai_crossborder` consent leaves the jurisdiction (N2, ADR-0013).
 
 ## Owns
 
@@ -84,7 +84,7 @@ Environment variables: `BIRGE_LLM_MODEL`, `BIRGE_LLM_API_KEY_FILE`, `BIRGE_LLM_B
 - One `Idempotency-Key` = one effect: one model call, one stored exchange, one escalation, one `assistant.QuestionAnswered` (unique index + replay; tested in service and integration tests; `TestQuestionAnsweredExactlyOnce`).
 - The crisis response never depends on `assistant.QuestionAnswered`: the escalation and the reply exist before the event is written, and its failure neither fails the crisis turn nor stops it being stored (`TestCrisisResponseWhenQuestionAnsweredFails`, `TestCrisisTurnKeptWhenQuestionAnsweredInsertFailsPostgres`).
 - Fragments and member text reach the model as JSON inside `<knowledge_fragments>` / `<member_message>`; '<' and '>' are escaped, so data cannot close its tag (`anthropic_test.go`).
-- Account deletion (AGENTS.md N6): every turn of her dialogue is deleted at once, without waiting for the 90-day retention; nothing is tombstoned (the dialogue is hers alone; an escalation it opened is kept by safety as a shell). The crisis path is not touched. One audit entry `assistant.member_deleted` (actor system).
+- Account deletion (AGENTS.md non-negotiable 6): every turn of her dialogue is deleted at once, without waiting for the 90-day retention; nothing is tombstoned (the dialogue is hers alone; an escalation it opened is kept by safety as a shell). The crisis path is not touched. One audit entry `assistant.member_deleted` (actor system).
 
 ## Failure modes
 
@@ -100,5 +100,5 @@ Environment variables: `BIRGE_LLM_MODEL`, `BIRGE_LLM_API_KEY_FILE`, `BIRGE_LLM_B
 
 - Unit: `anonymize/anonymize_test.go` (cases + `TestAnonymizationEvalSet` over `evals/datasets/anonymization/{kk,ru,en}.tsv`: zero phone/IIN/e-mail survivors and every must-not-contain removed), `model/model_test.go`, `service/service_test.go` (pipeline order with fakes, consent, limit, L1, L2, degraded, invalid JSON, sources, replay, history, rating, retention), `api/handler_test.go`.
 - Adapter: `adapter/integration_test.go` with `testinfra.Postgres` (exchange, replay, limit, rating outbox payload, `assistant.QuestionAnswered` payloads checked against `contracts/events/assistant.QuestionAnswered.v1.json`, savepoint on a failed event insert, retention purge through `timers.Worker`); `adapter/anthropic/anthropic_test.go` against an `httptest` server emulating the Messages API (no network, no key).
-- Evaluation sets: `make eval` (`cmd/birge-eval`, ADR-0017) runs `evals/datasets/{crisis,anonymization,llm-down}/` through this service with in-memory fakes: crisis cases with a provider that always fails (crisis response and escalation, model never called), anonymization cases with a recording provider (no must-not-contain token, digits run or e-mail in any request, history included), llm-down cases in every provider failure mode (crisis response, or the degraded reply and never an error). All cases are **draft** (agent-written, not approved; see each README). The behaviour set is not built yet.
+- Evaluation sets: `make eval` (`cmd/birge-eval`, ADR-0017) runs `evals/datasets/{crisis,anonymization,llm-down}/` through this service with in-memory fakes: crisis cases with a provider that always fails (crisis response and escalation, model never called), anonymization cases with a recording provider (no must-not-contain token, digits run or e-mail in any request, history included), llm-down cases in every provider failure mode (crisis response, or the degraded reply and never an error). All cases are **drafts**, not yet reviewed by the project psychologist (see each README). The behaviour set is not built yet.
 - Fakes: `assistanttest/`.

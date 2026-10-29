@@ -7,7 +7,7 @@
 //   - Met: whether two members both confirmed they met (symmetric);
 //   - ListAcquaintances: the member's confirmed acquaintances.
 //
-// Chat will call SetRoomID after it opens the private room for a mutual
+// SetRoomID is meant to be called once chat reports the private room it opened for a mutual
 // accept (TODO: wire the MatchAccepted consumer).
 //
 // # Atomicity

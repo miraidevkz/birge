@@ -1,6 +1,6 @@
 # platform/ratelimit
 
-Fixed-window rate limits and one-time claims that hold across replicas, so that two or more API (or worker) replicas behind the ingress behave like one (roadmap: more than one API replica; ADR-0011). Used by every limit in the backend:
+Fixed-window rate limits and one-time claims that hold across replicas, so that two or more API (or worker) replicas behind the ingress behave like one ([ADR-0011](../../../docs/adr/0011-kubernetes-first.md)). Used by every limit in the backend:
 
 | Limit | Limiter name (key prefix) | Where | On a store error |
 |---|---|---|---|
@@ -17,7 +17,7 @@ The worker can run as several replicas (JetStream consumers and `SKIP LOCKED` ti
 
 | Table (schema `platform`) | Purpose | Personal data |
 |---|---|---|
-| `rate_counters` | one row per key and fixed window: `hits`, `expires_at` | none: `key` is `HMAC-SHA-256(BIRGE_HASH_KEY_FILE, "<limiter>\|<key>")` truncated to 128 bits; the key may be an IP or a phone number, the table never holds either |
+| `rate_counters` | one row per key and fixed window: `hits`, `expires_at` | none: `key` is `HMAC-SHA-256(BIRGE_HASH_KEY_FILE, "birge.ratelimit.v1\|<limiter>\|<key>")` truncated to 128 bits; the key may be an IP or a phone number, the table never holds either |
 | `one_time_claims` | one row per claimed key until `expires_at` (PoW challenges) | none, hashed the same way |
 
 ## Design

@@ -38,7 +38,7 @@ None.
 | `Service.ApplyModerationDecided` | Applies `moderation.Decided` for specialist and review. |
 | `Service.SpecialistSummary` / `ReviewSummary` | ContentSource text without contacts. |
 
-Ports used by this context (wired later): `MemberInfo` (verification + first name), `Store` (PostgreSQL adapter).
+Ports used by this context (wired in `internal/wiring`): `MemberInfo` (verification + first name), `Store` (PostgreSQL adapter).
 
 ## Configuration
 
@@ -56,7 +56,7 @@ None beyond platform defaults.
 - Review author names are first name only (service `firstName` on `MemberInfo.DisplayName`).
 - No names or review text in events or logs (service; tests).
 - Nothing is deleted in normal operation: status changes only. The only delete queries belong to account deletion.
-- Account deletion (AGENTS.md N6): her reviews are deleted. They are her own text and no other member's record hangs on them; a tombstone would need a nullable `content`, and it would keep a rating nobody can stand behind. Specialist cards she suggested describe the specialist, not her: active cards and cards other members reviewed stay as tombstones (`added_by` kept, and her name no longer resolves); her pending or rejected suggestions that nobody reviewed are deleted. A moderation item about a deleted object keeps only IDs and codes, and a later `moderation.Decided` for it is a no-op (not found). One transaction; one audit entry `directory.member_deleted` (actor system).
+- Account deletion (AGENTS.md non-negotiable 6): her reviews are deleted. They are her own text and no other member's record hangs on them; a tombstone would need a nullable `content`, and it would keep a rating nobody can stand behind. Specialist cards she suggested describe the specialist, not her: active cards and cards other members reviewed stay as tombstones (`added_by` kept, and her name no longer resolves); her pending or rejected suggestions that nobody reviewed are deleted. A moderation item about a deleted object keeps only IDs and codes, and a later `moderation.Decided` for it is a no-op (not found). One transaction; one audit entry `directory.member_deleted` (actor system).
 
 ## Failure modes
 
@@ -69,3 +69,4 @@ None beyond platform defaults.
 - Unit: `service/service_test.go` — suggest rules, one review per member, ratings, first-name-only authors, moderation dedup; logs and events checked for fake content.
 - Integration: `adapter/integration_test.go` with `testinfra.Postgres` — upsert review, ratings, search.
 - Fakes: `directorytest/`.
+- Also: `model/model_test.go`, `service/rules_test.go`, `api/handler_http_test.go`, `adapter/lifecycle_test.go`.

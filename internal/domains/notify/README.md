@@ -20,7 +20,7 @@ Operations of tag `notify` in `contracts/openapi/birge.yaml`:
 | `POST /me/inbox/{id}/read` | Own notifications only. Idempotent. For `class=critical`, also sets `acknowledged_at` and cancels `notify.CriticalSMS`. |
 | `PUT/DELETE /me/devices/{id}` | Own devices only. Upsert on PUT; DELETE idempotent. Push tokens never logged. |
 
-Delivery is not HTTP: JetStream consumer `notify.DeliveryRequested` → `service.HandleDeliveryRequested`, then platform timers call push/SMS handlers after commit.
+Delivery is not HTTP: JetStream durable `notify-delivery-requested` (processed-events name `notify.DeliveryRequested`) → `service.HandleDeliveryRequested`, then platform timers call push/SMS handlers after commit.
 
 ## Events
 
@@ -94,8 +94,8 @@ Push payload: `notification_id` and the neutral `Title` (from `Config.PushTitles
 - Guard counters are shared by every worker replica (`BIRGE_RATE_LIMIT_STORE=postgres`): N workers keep one per-number limit, one global limit and one daily budget per guard. The store keeps only a keyed hash of the number. A counter store error refuses an ordinary SMS (`guard.ErrUnavailable`, delivery `skipped`) and never a critical one (`SMSGuardStoreError` logged, sent) (guard; `sms/guard/guard_test.go`).
 - Logs and events: IDs and event names only — never text, phones or push tokens (service + ports).
 - Marking critical read acknowledges and cancels CriticalSMS (service).
-- A critical SMS whose text has `{link}` is never skipped or delayed for the link (crisis path, AGENTS.md N1): a failed, missing or slow (> 5 s) link sends the `<template>.no_link` text at once (service; `service/links_test.go` `TestCriticalSMSFallsBackWithoutLink`, `TestCriticalMemberSMSUsesTextWithoutLink`).
-- Account deletion (AGENTS.md N6): her devices, her inbox (`recipient_kind=member`, ref = her) and every notification whose `params` hold her ID (a plan she sent carries `owner_id`) are deleted with their deliveries; their pending push and SMS timers are cancelled in the same transaction. Nothing is tombstoned: a notification is a message to one recipient, no other record depends on it. One audit entry `notify.member_deleted` (actor system).
+- A critical SMS whose text has `{link}` is never skipped or delayed for the link (crisis path, AGENTS.md non-negotiable 1): a failed, missing or slow (> 5 s) link sends the `<template>.no_link` text at once (service; `service/links_test.go` `TestCriticalSMSFallsBackWithoutLink`, `TestCriticalMemberSMSUsesTextWithoutLink`).
+- Account deletion (AGENTS.md non-negotiable 6): her devices, her inbox (`recipient_kind=member`, ref = her) and every notification whose `params` hold her ID (a plan she sent carries `owner_id`) are deleted with their deliveries; their pending push and SMS timers are cancelled in the same transaction. Nothing is tombstoned: a notification is a message to one recipient, no other record depends on it. One audit entry `notify.member_deleted` (actor system).
 
 ## Failure modes
 
@@ -112,7 +112,7 @@ Push payload: `notification_id` and the neutral `Title` (from `Config.PushTitles
 
 ## Tests
 
-- Unit: `service/ladder_test.go`, `service/pagination_test.go`, `service/provider_errors_test.go`, `service/signin_test.go` (guard refusals, separate budget, no store, no code or phone in logs), `service/links_test.go` (`{link}` minted at send time, skip and retry for ordinary SMS, the no-link fallback for critical SMS, no link in logs), `sms/guard/guard_test.go`, `api/handler` tests via notifytest fakes — ladder, idempotency, guard, cursor, provider error mapping.
+- Unit: `service/ladder_test.go`, `service/pagination_test.go`, `service/provider_errors_test.go`, `service/signin_test.go` (guard refusals, separate budget, no store, no code or phone in logs), `service/links_test.go` (`{link}` minted at send time, skip and retry for ordinary SMS, the no-link fallback for critical SMS, no link in logs), `sms/guard/guard_test.go`; service tests use the `notifytest` fakes — ladder, idempotency, guard, cursor, provider error mapping.
 - Providers: `adapter/push` (httptest FCM with token endpoint and renewal; HTTP/2 TLS httptest APNs; error mapping; bad key files; service end to end with a log grep) and `adapter/smsgw` (httptest SMSC: form, error codes, service end to end with a log grep).
 - Integration: `adapter/integration_test.go` — PostgreSQL + NATS consumer path with `testinfra`; `DeleteRejectedDevice` keeps a re-registered token.
 - Fakes: `notifytest/` (in-memory store, fake push/SMS).

@@ -189,7 +189,7 @@ sequenceDiagram
   Note over Chat2: reject hides message; block_author suspends; legal_hold preserves
 ```
 
-Held messages (`chat.MessageHeld`) enter the same queue as kind `chat_message`. The admin UI today exposes approve / reject with a reason; `blockAuthor` and `legalHold` are on the API (`ModerationDecision`) and legal hold also has `PUT/DELETE /v1/staff/chat/messages/{id}/legal-hold`. Role matrix and remaining staff screens are still listed as later work on the roadmap.
+Held messages (`chat.MessageHeld`) enter the same queue as kind `chat_message`. In the admin a moderator approves or rejects with a reason and can also suspend the author (`blockAuthor`) or put the content under legal hold (`legalHold`, both on `ModerationDecision`); a single chat message also has `PUT/DELETE /v1/staff/chat/messages/{id}/legal-hold`. The staff role matrix is still open ([roadmap](roadmap.md)).
 
 ---
 

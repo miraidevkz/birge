@@ -43,7 +43,7 @@ Handlers are mounted in `birge api` (member + staff through staffauth). Seeding 
 
 | Kind | Scheduled when | Handler does | Idempotency |
 |---|---|---|---|
-| `knowledge.ReviewDue` | publish; due = `expires_at − 1 month` | Sets `review_due_at` so `GET /staff/knowledge/review-due` lists the version. **Follow-up:** staff push/SMS to reviewers once staff devices exist (`notify.DeliveryRequested` with a matching staff_role form for lawyer); do not route rights to `moderator` or reuse psychologist for rights. | cancelled when the version is retired; subject/dedup = version id |
+| `knowledge.ReviewDue` | publish; due = `expires_at − 1 month` | Sets `review_due_at` so `GET /staff/knowledge/review-due` lists the version. **Follow-up:** an SMS to reviewers. notify already sends staff SMS by role, but has no `lawyer` role yet; do not route rights to `moderator` or reuse psychologist for rights. | cancelled when the version is retired; subject/dedup = version id |
 | `knowledge.Expire` | publish; due = `expires_at` | Emits `knowledge.ArticleExpired`; row stays `published` (member availability comes from `expires_at`) | cancelled when retired; subject/dedup = version id |
 
 ## Service API for other contexts
@@ -62,6 +62,7 @@ Handlers are mounted in `birge api` (member + staff through staffauth). Seeding 
 |---|---|---|
 | `service.Settings.RightsTTL` | ≈ 6 months | Review period for rights after publish |
 | `service.Settings.SelfhelpTTL` | ≈ 12 months | Review period for self-help after publish |
+| `BIRGE_TEI_URL`, `BIRGE_QDRANT_URL` | unset | Retrieval (package `retrieval`): embeddings and the vector index. Unset → no retrieval, the assistant answers without articles. All retrieval variables: [development.md § Configuration](../../../docs/development.md#configuration) |
 
 ## Invariants
 
@@ -78,6 +79,7 @@ Handlers are mounted in `birge api` (member + staff through staffauth). Seeding 
 
 - Database down: every operation fails with 500; nothing half-written.
 - Broker down: events wait in the outbox.
+- TEI or Qdrant down or unset: retrieval falls back to no results (`retrieval/noretrieval.go`); publishing still works; after an outage run `birge kb-reindex` to rebuild the index.
 - Staff reviewer push/SMS on `ReviewDue` is not sent yet (documented follow-up above; queue is available in admin).
 
 ## Tests
@@ -85,6 +87,7 @@ Handlers are mounted in `birge api` (member + staff through staffauth). Seeding 
 - Unit: `service/service_test.go` and `service/review_due_test.go` with `knowledgetest` fakes — author cannot publish, wrong role, one published + needs_sync, timers, review-due mark/roles/order, expiry event, member visibility, source URL, reject, idempotent draft.
 - Unit: `export/export_test.go` — DEMO-shaped golden file, idempotent rerun, path traversal refused, drafts not exported, front-matter escaping.
 - Integration: `adapter/integration_test.go` with `testinfra.Postgres` — publish workflow and outbox/audit/timers, expire worker, member visibility, DEMO seed once, DEMO export.
+- Also: `model/model_test.go`, `service/failure_test.go`, `api/handler_test.go`, and the retrieval package: `retrieval/chunk_test.go`, `retrieval/tei_qdrant_test.go`.
 
 ## DEMO seed
 
