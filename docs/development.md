@@ -309,8 +309,15 @@ go run ./cmd/birge-eval -sets crisis -lexicon /path/to/lexicon -out -   # anothe
 | `secrets` | `make secrets` | gitleaks finds a secret anywhere in history |
 | `go` | `make go-check` | any check of [Everyday commands](#everyday-commands), a coverage drop, an eval miss or a drop against main's eval report |
 | `checks` | `make contract-diff`, `make workflow-lint`, `make vuln` | a breaking contract change, a workflow error, a reachable known vulnerability |
-| `image` | `make image`, `make sbom`; on main also `make image-sign` | the image does not build or the SBOM cannot be generated; signing fails with the key present |
+| `image` | release tags `v*` and manual runs only: `make image`, `make sbom`; on a tag also push and `make image-sign` | the image does not build or the SBOM cannot be generated; signing fails with the key present |
 | `helm` | `make helm-lint` | a chart under `deploy/helm` fails `helm lint --strict` (passes while there is none) |
+
+When CI runs (runner minutes are limited on a private repository):
+
+- Pushes to `main` and pull requests run every job except `image`. Changes that touch only `docs/`, `.claude/`, Markdown in the repository root or a `README.md` skip CI; knowledge base and testdata Markdown do not. Run `make check` locally before pushing such a change anyway if it touches anything a test reads.
+- A newer push to the same branch or pull request cancels the run in progress.
+- **Releases** use semver tags: `git tag -a v0.1.0 -m "v0.1.0" && git push origin v0.1.0`. A tag runs every job, `image` included, and pushes the signed image as `ghcr.io/<owner>/<repo>:v0.1.0` and `:sha-<commit>`. A tag is never moved or deleted once pushed; a fix is a new patch version.
+- `workflow_dispatch` runs everything by hand (the image is built but not pushed).
 
 - **govulncheck** (`make vuln`): reports only vulnerabilities the code can reach (symbol level), in dependencies and the standard library. A finding is fixed by upgrading the module or Go; it is never suppressed in CI. It reads `https://vuln.go.dev`; `make vuln VULN_DB=file:///path/to/mirror` uses an offline mirror.
 - **Contract diff** (`make contract-diff`, [ADR-0018](adr/0018-client-compatibility.md)): oasdiff compares every snapshot in `contracts/openapi/released/` with `contracts/openapi/birge.yaml` and fails on any error-level breaking change (removed operation, new required request field, removed response field, narrowed type, ...). Before that it proves itself on the fixtures in `tools/ci/testdata/contract-diff/` (every `breaking-*.yaml` must fail against `base.yaml`, every `compatible-*.yaml` must pass) and loads `birge.yaml` against itself, so a tool upgrade that stops catching breaks, or a spec the tool cannot read, fails before it matters. Release: copy `birge.yaml` to `released/<app-version>.yaml` when an app version ships; delete a snapshot when the version leaves the support window. Never pass oasdiff's `--open` flag: it uploads the specs to oasdiff.com.
