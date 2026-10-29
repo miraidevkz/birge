@@ -1,0 +1,37 @@
+name: docs
+
+# ci.yml skips changes that touch only documentation (runner minutes).
+# This small workflow covers exactly those paths, so a docs-only change
+# still gets its links and heading anchors checked (make docs-check, about
+# a minute). Code changes run the same test inside ci.yml's go job.
+
+on:
+  push:
+    branches: [main]
+    paths: &docs
+      - "docs/**"
+      - ".claude/**"
+      - "*.md"
+      - "**/README.md"
+  pull_request:
+    paths: *docs
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  links:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: make docs-check

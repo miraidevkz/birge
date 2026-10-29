@@ -27,7 +27,18 @@ Security problems are reported privately; see [`SECURITY.md`](SECURITY.md).
 
 ## Translations and content
 
-UI strings live in locale files (`kk`, `ru`). Knowledge-base content is edited and reviewed in the staff admin, not in pull requests ([ADR-0022](docs/adr/0022-knowledge-base-workflow.md)).
+UI strings live in locale files (`kk`, `ru`, `en`) and follow [`docs/content-style.md`](docs/content-style.md). Knowledge-base content is edited and reviewed in the staff admin, not in pull requests ([ADR-0022](docs/adr/0022-knowledge-base-workflow.md)).
+
+## Writing documentation
+
+Birge will be maintained by people who did not build it, so a change is not done until its documentation is. The [documentation map](docs/README.md) shows where each kind of page lives.
+
+- **Update the doc in the same commit as the behaviour.** A changed endpoint, event, setting or rule updates the context README, the ADR (or a new one) and [`docs/development.md`](docs/development.md) where they describe it.
+- **Lead with the point.** The first sentence of a page or section says what it is for or what the answer is; detail follows.
+- **Write for a newcomer.** Short sentences, active voice, plain words. Define a project word once in the [glossary](docs/glossary.md) instead of explaining it on every page. No build history ("in the next wave", "the brief said"): say what is true now and why.
+- **One fact, one place.** Link to the page that owns a fact rather than copying it; copies drift.
+- **Comments say why.** Code comments explain the reason, the constraint or the failure behaviour, never what the next line does.
+- `make docs-check` verifies every relative link and heading anchor; it also runs in CI, including for documentation-only changes.
 
 ## License
 

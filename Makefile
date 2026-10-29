@@ -19,13 +19,18 @@ GO_PKGS = $(shell $(GO) list -f '{{.Dir}}' ./... | grep -v /node_modules/)
 # API area -> generated file; one oapi-codegen config per area in contracts/codegen/.
 API_AREAS := meta:internal/platform/meta/api.gen.go membership:internal/domains/membership/api/api.gen.go privacy:internal/domains/privacy/api/api.gen.go notify:internal/domains/notify/api/api.gen.go safety:internal/domains/safety/api/api.gen.go wellbeing:internal/domains/wellbeing/api/api.gen.go emergency:internal/domains/emergency/api/api.gen.go assistant:internal/domains/assistant/api/api.gen.go knowledge:internal/domains/knowledge/api/api.gen.go circle:internal/domains/circle/api/api.gen.go chat:internal/domains/chat/api/api.gen.go sharing:internal/domains/sharing/api/api.gen.go directory:internal/domains/directory/api/api.gen.go moderation:internal/domains/moderation/api/api.gen.go analytics:internal/domains/analytics/api/api.gen.go staff:internal/platform/staffdir/api/api.gen.go
 
-.PHONY: check helm-check secrets lint api-gen api-check psqldef migration db-check go-check go-fmt-check go-vet go-test go-build eval sqlc sqlc-check kb-export app-check \
+.PHONY: check docs-check helm-check secrets lint api-gen api-check psqldef migration db-check go-check go-fmt-check go-vet go-test go-build eval sqlc sqlc-check kb-export app-check \
 	vuln contract-diff coverage-check coverage-floor workflow-lint image sbom image-sign helm-lint
 
 check: secrets go-check
 
 secrets:
 	docker run --rm -v "$(CURDIR):/repo:ro" $(GITLEAKS_IMAGE) git /repo --redact --no-banner
+
+# Relative links and heading anchors in every Markdown file (also part of
+# go-test). Its own target so the docs workflow can run it alone.
+docs-check:
+	$(GO) test ./internal/docstest/
 
 go-check: go-fmt-check sqlc-check api-check db-check lint go-vet go-test coverage-check go-build eval
 

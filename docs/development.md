@@ -25,6 +25,7 @@ No Docker is needed for development or tests (only `make secrets`, `make image`,
 | `make -s migration name=<snake_case>` | print the migration that brings the database to `db/schema/*.sql` |
 | `make db-check` | verify migrations: safety gate, apply to a fresh database, compare with the schema |
 | `make lint` | golangci-lint with the project config |
+| `make docs-check` | every relative link and heading anchor in the Markdown files resolves (also part of the race tests) |
 | `make coverage-check` | race tests, then per-context coverage against `coverage-floor.txt` (see [Coverage ratchet](#coverage-ratchet)) |
 | `make vuln`, `make contract-diff`, `make workflow-lint` | known vulnerabilities, breaking changes against released contracts, workflow lint (see [CI stages](#ci-stages)) |
 | `make image`, `make sbom` | build the `birge` release image (Dockerfile target `release`, distroless, `birge` only) and its SPDX SBOM (Docker) |
@@ -311,6 +312,8 @@ go run ./cmd/birge-eval -sets crisis -lexicon /path/to/lexicon -out -   # anothe
 | `checks` | `make contract-diff`, `make workflow-lint`, `make vuln` | a breaking contract change, a workflow error, a reachable known vulnerability |
 | `image` | release tags `v*` and manual runs only: `make image`, `make sbom`; on a tag also push and `make image-sign` | the image does not build or the SBOM cannot be generated; signing fails with the key present |
 | `helm` | `make helm-lint` | a chart under `deploy/helm` fails `helm lint --strict` (passes while there is none) |
+
+The `docs` workflow (`.github/workflows/docs.yml`) runs only `make docs-check`, and only for documentation-only changes that `ci.yml` skips.
 
 When CI runs (runner minutes are limited on a private repository):
 
