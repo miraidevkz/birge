@@ -54,7 +54,8 @@ module.exports = {
     extend: {
       minHeight: { touch: `${tokens.touchTarget}px` },
       minWidth: { touch: `${tokens.touchTarget}px` },
-      maxWidth: { content: `${tokens.contentWidth}px` },
+      maxWidth: { content: `${tokens.contentWidth}px`, 'content-wide': `${tokens.contentWidthWide}px` },
+      maxHeight: { sheet: `${tokens.sheetListHeight}px` },
     },
   },
   plugins: [

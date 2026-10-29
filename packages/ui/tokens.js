@@ -115,7 +115,16 @@ const breakpoints = { tablet: 600, desktop: 1024 };
 const railWidth = 240;
 
 /** Widest content column in px: on tablets and the web the screen stays one readable column. */
-const contentWidth = 640;
+const contentWidth = 720;
+
+/**
+ * Widest content column of a work console (the staff admin): tables of
+ * queues and filters read better wide, and staff use desktops.
+ */
+const contentWidthWide = 1120;
+
+/** Tallest scrolling list inside a Sheet in px, so its title and close button stay on screen. */
+const sheetListHeight = 420;
 
 /** Minimum touch target in px (WCAG 2.5.8 asks 24, platform guidelines 44-48). */
 const touchTarget = 48;
@@ -142,6 +151,8 @@ module.exports = {
   breakpoints,
   railWidth,
   contentWidth,
+  contentWidthWide,
+  sheetListHeight,
   touchTarget,
   motion,
   illustration,

@@ -15,5 +15,9 @@
   "back": "Back",
   "list": {
     "more": "Show more"
+  },
+  "select": {
+    "search": "Search",
+    "nothing": "Nothing found. Try another word."
   }
 }

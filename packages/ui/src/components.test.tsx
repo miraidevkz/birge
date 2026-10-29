@@ -12,6 +12,7 @@ import { ListItem } from './list-item';
 import { MessageBubble } from './message-bubble';
 import { Photo } from './photo';
 import { Screen } from './screen';
+import { SelectField } from './select-field';
 import { SosProvider } from './sos';
 import { Text } from './text';
 import { PhoneField } from './phone-field';
@@ -186,6 +187,59 @@ describe('List', () => {
     expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
     await render_({ data: ['a'] });
     expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+  });
+});
+
+describe('SelectField', () => {
+  const sections = [
+    {
+      title: 'Almaty',
+      options: [
+        { value: 'a1', label: 'Bostandyk' },
+        { value: 'a2', label: 'Medeu' },
+      ],
+    },
+    { title: 'Aktau', options: [{ value: 'k1', label: 'Aktau (whole city)' }] },
+  ];
+
+  it('shows the choice with its group and picks another from the sheet', async () => {
+    const onChange = jest.fn();
+    await render(
+      <SelectField
+        label="District"
+        placeholder="Choose"
+        sections={sections}
+        value="a1"
+        onChange={onChange}
+        testID="d"
+      />,
+    );
+    expect(screen.getByText('Bostandyk, Almaty')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('d'));
+    await fireEvent.press(screen.getByTestId('d-k1'));
+    expect(onChange).toHaveBeenCalledWith('k1');
+  });
+
+  it('filters by option or by group title', async () => {
+    await render(
+      <SelectField
+        label="District"
+        placeholder="Choose"
+        sections={sections}
+        value={undefined}
+        onChange={jest.fn()}
+        searchable
+        testID="d"
+      />,
+    );
+    expect(screen.getByText('Choose')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('d'));
+    await fireEvent.changeText(screen.getByTestId('d-search'), 'medeu');
+    expect(screen.queryByTestId('d-a1')).toBeNull();
+    expect(screen.getByTestId('d-a2')).toBeTruthy();
+    await fireEvent.changeText(screen.getByTestId('d-search'), 'almaty');
+    expect(screen.getByTestId('d-a1')).toBeTruthy();
+    expect(screen.queryByTestId('d-k1')).toBeNull();
   });
 });
 

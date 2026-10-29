@@ -3,6 +3,7 @@
 // status and district ID, never a name, and nothing here logs.
 import { unwrap, type Schemas } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
+import type { SelectSection } from '@birge/ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
@@ -58,9 +59,21 @@ export function useDistricts() {
       ),
     [query.data, t],
   );
+  // The same districts grouped under their city, for the district picker.
+  const sections = useMemo<SelectSection[]>(
+    () =>
+      (query.data ?? []).map((city) => ({
+        title: t(`city.${city.code}`, { defaultValue: city.code }),
+        options: city.districts.map((d) => ({
+          value: d.id,
+          label: t(`district.${d.code}`, { defaultValue: d.code }),
+        })),
+      })),
+    [query.data, t],
+  );
   const nameOf = useMemo(() => {
     const names = new Map(options.map((o) => [o.id, o.label]));
     return (id: string | undefined) => (id ? names.get(id) : undefined);
   }, [options]);
-  return { options, nameOf };
+  return { options, sections, nameOf };
 }

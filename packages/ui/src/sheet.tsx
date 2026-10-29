@@ -44,7 +44,8 @@ export function Sheet({ visible, onClose, title, children, testID }: SheetProps)
         <Animated.View entering={duration ? SlideInDown.duration(duration) : undefined}>
           <View
             accessibilityViewIsModal
-            className="gap-4 rounded-t-lg bg-card px-4 pt-4"
+            // On wide windows the panel keeps the content column's width.
+            className="w-full max-w-content gap-4 self-center rounded-t-lg bg-card px-4 pt-4"
             style={{ paddingBottom: Math.max(insets.bottom, tokens.spacing[4]) }}
             testID={testID}
           >

@@ -77,6 +77,7 @@ describe('AboutMeScreen', () => {
   it('shows districts and needs with their labels', async () => {
     serve();
     await renderAbout();
+    await fireEvent.press(await screen.findByTestId('about-district-select'));
     expect(await screen.findByText('Demo district A')).toBeTruthy();
     expect(await screen.findByText('Autism')).toBeTruthy();
     expect(screen.getByText('Your children will appear here once you add them.')).toBeTruthy();
@@ -85,7 +86,8 @@ describe('AboutMeScreen', () => {
   it('saves the district she picks', async () => {
     serve();
     await renderAbout();
-    await fireEvent.press(await screen.findByTestId('about-district-demo_district_a'));
+    await fireEvent.press(await screen.findByTestId('about-district-select'));
+    await fireEvent.press(await screen.findByTestId(`about-district-select-${DISTRICT}`));
     await waitFor(() =>
       expect(
         calls.some((c) => c.method === 'PATCH' && (c.body as { districtId?: string })?.districtId === DISTRICT),

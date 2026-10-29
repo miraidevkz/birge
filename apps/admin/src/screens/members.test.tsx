@@ -126,6 +126,7 @@ describe('MembersScreen', () => {
   it('filters by district', async () => {
     mockFetch.mockImplementation(router([districtsRoute, membersRoute(page)]));
     await renderScreen();
+    await fireEvent.press(await screen.findByTestId('members-district'));
     await fireEvent.press(await screen.findByTestId(`members-district-${DISTRICT_A}`));
     await waitFor(() => expect(calls().some((r) => r.url.includes(`districtId=${DISTRICT_A}`))).toBe(true));
   });

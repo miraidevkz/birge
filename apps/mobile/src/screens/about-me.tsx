@@ -13,6 +13,7 @@ import {
   ListItem,
   LoadingState,
   Screen,
+  SelectField,
   Text,
   TextField,
 } from '@birge/ui';
@@ -113,24 +114,19 @@ export function AboutMeSections({ member }: { member: Member }) {
       <Card testID="about-district">
         <Heading>{t('district.heading')}</Heading>
         {districts.data && districts.data.length > 0 ? (
-          districts.data.map((city) => (
-            <Card key={city.id}>
-              <Text variant="label" tone="muted">
-                {cityLabel(city.code)}
-              </Text>
-              {city.districts.map((d) => (
-                <CheckItem
-                  key={d.id}
-                  radio
-                  title={districtLabel(d.code)}
-                  checked={member.districtId === d.id}
-                  disabled={saveDistrict.isPending}
-                  onChange={() => saveDistrict.mutate(d.id)}
-                  testID={`about-district-${d.code}`}
-                />
-              ))}
-            </Card>
-          ))
+          <SelectField
+            label={t('district.label')}
+            placeholder={t('district.placeholder')}
+            sections={districts.data.map((city) => ({
+              title: cityLabel(city.code),
+              options: city.districts.map((d) => ({ value: d.id, label: districtLabel(d.code) })),
+            }))}
+            value={member.districtId ?? undefined}
+            onChange={(id) => saveDistrict.mutate(id)}
+            disabled={saveDistrict.isPending}
+            searchable
+            testID="about-district-select"
+          />
         ) : (
           <Text tone="muted">{districts.isLoading ? t('ui:loading') : t('district.none')}</Text>
         )}

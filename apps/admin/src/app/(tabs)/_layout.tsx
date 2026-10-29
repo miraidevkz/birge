@@ -1,7 +1,7 @@
 // Tabs for signed-in staff. There is nothing to hydrate from storage: a missing
 // in-memory token always redirects to sign-in (including after reload).
 import { useTranslation } from '@birge/i18n';
-import { tokens, useThemeColors } from '@birge/ui';
+import { useTabBarOptions } from '@birge/ui';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Redirect, Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
@@ -19,7 +19,8 @@ function icon(name: IconName) {
 
 export default function TabsLayout() {
   const { t } = useTranslation('admin');
-  const colors = useThemeColors();
+  // The same bar as the member app: a side rail with labels on desktops.
+  const tabBarOptions = useTabBarOptions();
   const { hydrated, signedIn, mfaRequired, profile } = useSession();
   // A tab whose API does not serve any of the roles is hidden (the server still
   // returns 403); the escalations index redirects away instead.
@@ -27,16 +28,7 @@ export default function TabsLayout() {
   if (!hydrated) return null;
   if (!signedIn || mfaRequired) return <Redirect href="/sign-in" />;
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        animation: 'none',
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.separator },
-        tabBarLabelStyle: { fontFamily: tokens.fontFamily.semibold },
-      }}
-    >
+    <Tabs screenOptions={tabBarOptions}>
       <Tabs.Screen
         name="index"
         options={{ title: t('tabs.escalations'), tabBarIcon: icon('alert-circle-outline'), href: href('escalations') }}

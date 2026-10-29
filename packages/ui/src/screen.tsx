@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,20 @@ import { SosButton } from './sos';
 import { Heading } from './text';
 import { tokens } from './theme';
 import { useTranslation } from '@birge/i18n';
+
+/** ScreenWidth is how wide a screen's content column may grow on wide windows. */
+export type ScreenWidth = 'content' | 'wide';
+
+const ScreenWidthContext = createContext<ScreenWidth>('content');
+
+/**
+ * ScreenWidthProvider sets the column width for every Screen below it: an app
+ * picks it once at its root. "content" is one readable column (the member
+ * app); "wide" is for a work console (the staff admin on desktops).
+ */
+export function ScreenWidthProvider({ width, children }: { width: ScreenWidth; children: ReactNode }) {
+  return <ScreenWidthContext.Provider value={width}>{children}</ScreenWidthContext.Provider>;
+}
 
 /** ScreenProps: the frame of every screen. */
 export interface ScreenProps {
@@ -61,6 +75,7 @@ export function Screen({
   testID,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
+  const width = useContext(ScreenWidthContext);
   const crisis = variant === 'crisis';
   const form = layout === 'form';
   const bottomPad = Math.max(insets.bottom, tokens.spacing[3]);
@@ -148,7 +163,7 @@ export function Screen({
       testID={testID}
     >
       {/* One centred readable column on tablets and the web (ADR-0025). */}
-      <View className="w-full max-w-content flex-1 self-center">
+      <View className={cn('w-full flex-1 self-center', width === 'wide' ? 'max-w-content-wide' : 'max-w-content')}>
         {header}
         {form ? (
           formBody

@@ -10,7 +10,7 @@
 // is not verified or is suspended; a 501 means the server does not serve it yet.
 import { ApiError, unwrap } from '@birge/api';
 import { useTranslation } from '@birge/i18n';
-import { Banner, Button, Card, ChoiceGroup, ConfirmSheet, List, Screen, Text } from '@birge/ui';
+import { Banner, Button, Card, ChoiceGroup, ConfirmSheet, List, Screen, SelectField, Text } from '@birge/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -137,14 +137,16 @@ export function MembersScreen() {
               testID="members-status"
             />
             {districts.options.length > 0 && !notAvailable ? (
-              <ChoiceGroup
+              <SelectField
                 label={t('members.district.label')}
-                options={[
-                  { value: ALL, label: t('members.district.all') },
-                  ...districts.options.map((d) => ({ value: d.id, label: d.label })),
+                sections={[
+                  { title: '', options: [{ value: ALL, label: t('members.district.all') }] },
+                  ...districts.sections,
                 ]}
                 value={districtId}
                 onChange={setDistrictId}
+                placeholder={t('members.district.all')}
+                searchable
                 testID="members-district"
               />
             ) : null}

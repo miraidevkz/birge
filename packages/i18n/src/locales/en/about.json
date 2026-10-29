@@ -4,7 +4,9 @@
   "district": {
     "heading": "My district",
     "none": "The list of districts will appear soon.",
-    "saved": "District saved."
+    "saved": "District saved.",
+    "label": "City and district",
+    "placeholder": "Choose your district"
   },
   "children": {
     "heading": "My children",
