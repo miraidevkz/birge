@@ -25,12 +25,15 @@ Caring for a child with special needs often leaves the parent exhausted and isol
 
 ## Documentation
 
+The [documentation map](docs/README.md) lists every page by reader. The most used:
+
+- [Glossary](docs/glossary.md) — the words the project uses
 - [Overview](docs/overview.md) — who uses Birge, features, non-negotiables, component diagram
 - [Scenarios](docs/scenarios.md) — end-to-end flows with sequence diagrams (sign-in, check-in, SOS, assistant, moderation, deletion, knowledge)
 - [Staff handbook](docs/handbook/staff.md) — duty, escalations, moderation and knowledge review in `apps/admin`
 - [Architecture](docs/architecture.md)
 - [Development guide](docs/development.md)
-- [Architecture decision records](docs/adr/)
+- [Architecture decision records](docs/adr/README.md)
 - [MVP requirements](docs/requirements/mvp.md)
 - [Roadmap](docs/roadmap.md)
 - [Threat model](docs/threat-model.md)
