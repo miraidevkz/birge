@@ -1,5 +1,7 @@
 # directory
 
+**In short:** A list of specialists (speech therapists, psychologists, special-education teachers and others) that mothers recommend and review for each other.
+
 Specialists and reviews («Специалисты»): search by profession, district and need; cards show the average rating and the three latest reviews (first-name-only authors). Verified members suggest specialists and put reviews; both go through moderation. Serves `docs/requirements/mvp.md` § 4.5.
 
 ## Owns

@@ -1,5 +1,7 @@
 # knowledge
 
+**In short:** The articles the assistant answers from: rights articles by lawyers and self-help by psychologists, each reviewed before it is published and again before it expires.
+
 Reviewed knowledge base for «Мои права» and self-help: topics, versioned articles (kk / ru / en), draft → review → publish with role checks, expiry timers, review-due queue, repository export and DEMO seed. Serves `docs/requirements/mvp.md` § 4.7 and § 5 (Knowledge base); ADR-0010 (retrieval indexes only current published versions), ADR-0020 (timers), ADR-0022 (workflow).
 
 ## Owns

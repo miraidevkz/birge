@@ -1,5 +1,7 @@
 # sharing
 
+**In short:** Mothers give away, swap or ask for things (clothes, toys, equipment) in their district; contact happens only when the author agrees.
+
 Item listings («Поделиться»): give / swap / need with optional item photos, a district feed, and contact requests that open a private chat only with the author's consent. Serves `docs/requirements/mvp.md` § 4.5. Photos are item-only (ADR-0019); the server re-encodes them and strips metadata (ADR-0015).
 
 ## Owns

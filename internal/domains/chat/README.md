@@ -1,5 +1,7 @@
 # chat
 
+**In short:** The chat rooms: one per district, one per topic, and private rooms that open when two people agree to talk. Messages are moderated on the server and never end-to-end encrypted, so harmful content can be stopped.
+
 In-app chats (ADR-0016, `docs/requirements/mvp.md` § 4.4 «Chats»): district rooms and topic rooms (by special-needs type) that verified members join and leave themselves, and private rooms opened after a mutual tea match, after the mother accepted an SOS responder, or after a listing author accepted a contact request. Every message passes the safety crisis lexicon before it can be seen; filters and newcomer holds feed moderation; blocks hide members from each other both ways (ADR-0019). Text only. Delivery is a WebSocket while the app is open and a content-free push otherwise.
 
 ## Owns

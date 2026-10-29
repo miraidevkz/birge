@@ -1,5 +1,7 @@
 # assistant
 
+**In short:** The AI conversation partner. Every message first passes the crisis check, then anonymization, and only then may reach the model; when the model is down, the crisis path still works.
+
 The AI assistant of Talk («Поговорить», `docs/requirements/mvp.md` § 4.3) and "Ask in my own words" in My rights (§ 4.7): one fixed pipeline per message (§ 5; ADR-0017, ADR-0023, the `crisis-path` skill) — consent and daily limit, level-1 crisis lexicon, anonymization, retrieval, the model, level-2 crisis flag, persistence of anonymized text only. The crisis response and the escalation never depend on the model (non-negotiable 1); only anonymized text and only with the `ai_crossborder` consent leaves the jurisdiction (N2, ADR-0013).
 
 ## Owns

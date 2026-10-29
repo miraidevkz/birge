@@ -1,5 +1,7 @@
 # notify
 
+**In short:** Delivers messages to people: an inbox in the app, plus push and SMS that never carry the content itself. Critical alerts fall back from push to SMS.
+
 In-app inbox (source of truth), content-free push and SMS delivery, and the critical-notification escalation ladder. Consumes `notify.DeliveryRequested` so other contexts can reach members and trusted contacts without holding channel details (`docs/architecture.md` notify row; residency ADR-0013).
 
 ## Owns

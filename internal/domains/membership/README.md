@@ -1,5 +1,7 @@
 # membership
 
+**In short:** Who a member is: her profile, children, district, verification by a moderator, blocks between members and suspension by staff.
+
 Members, children, verification requests, blocks (ADR-0019), staff suspension and reference data (cities, districts, needs). Serves onboarding and profile in `docs/requirements/mvp.md` § 4.1. Sign-in is handled by `authgw/` in front of Kratos (ADR-0008 addendum).
 
 ## Owns

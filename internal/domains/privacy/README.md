@@ -1,5 +1,7 @@
 # privacy
 
+**In short:** Consents and "delete my data". Deleting an account erases her data in every context and destroys her encryption key.
+
 Versioned consents and account deletion via crypto-shredding (ADR-0009). Serves consents and Delete my data («Удалить мои данные») in `docs/requirements/mvp.md`: consents at onboarding § 4.1, deletion § 7, versioned consents § 8, acceptance § 10.
 
 ## Owns

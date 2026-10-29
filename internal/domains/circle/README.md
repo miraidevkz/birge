@@ -1,5 +1,7 @@
 # circle
 
+**In short:** Helps a mother find another mother nearby for tea or a call, and records when two of them have met in person, which later decides who may be a trusted contact.
+
 Tea matching («Чай») and pairwise "met in person" («знакомы лично») acquaintances for Moms nearby. A verified member opens a tea request with format and preferences; an hourly job pairs open requests by score; both accept → a private chat will open (chat listens to `circle.MatchAccepted`); after three days both confirm they met → an acquaintance used by emergency trusted contacts and by the childcare rule (AGENTS.md non-negotiable 5). Serves `docs/requirements/mvp.md` § 3 and § 4.4.
 
 ## Owns

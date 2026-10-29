@@ -1,5 +1,7 @@
 # moderation
 
+**In short:** One queue where moderators decide on reported or held content and on verification requests; each decision is carried out by the context that owns the content.
+
 The staff moderation queue (`docs/requirements/mvp.md` § 6): listings, specialists, reviews, chat reports, held chat messages and verification requests wait here for a moderator's decision. Moderation owns the queue and the decisions, never the content: the owning context shows the content through a `ContentSource` port when the queue is read, and applies the decision when it consumes `moderation.Decided`. ADR-0016 (chat moderation), ADR-0019 (blocks, legal hold).
 
 ## Owns

@@ -1,5 +1,7 @@
 # emergency
 
+**In short:** What happens on a bad day: the SOS button for practical help and the emergency plan with the child card and trusted contacts.
+
 SOS and the emergency plan («SOS», «План ЧС»): a member raises an SOS that goes at once to the moderators and to her confirmed trusted contacts, may share it (verified members only, never «Не с кем оставить ребёнка») to her district feed where verified neighbours press «Могу помочь», and keeps a plan of a sealed child card and up to three trusted contacts she can send it to. External contacts (no account) open the plan and the SOS through one-time links in their SMS. Serves `docs/requirements/mvp.md` § 4.6, § 3 (who may do what) and § 7 (`sos_requests`, `child_cards`, `trusted_contacts`). «Мне очень плохо» is not here: it is safety's `requestHumanHelp` with source `sos` (ADR-0023).
 
 ## Owns

@@ -1,5 +1,7 @@
 # analytics
 
+**In short:** Counts how the pilot is going (stress, activity, Tea, SOS, escalations) without ever naming a person, and gives the programme team a CSV.
+
 The pilot metrics of `docs/requirements/mvp.md` § 9 (stress, isolation, activity and retention, Tea funnel, SOS, escalations, rights) and their CSV export (§ 6), as aggregates only (ADR-0024). Analytics stores one fact per consumed domain event, names people only by pseudonym (`HMAC-SHA256(analytics key, member_id)`), and suppresses every cell built from fewer than `k` members. Stress and isolation come from the wellbeing cohort aggregates through a port; analytics never reads another context's tables.
 
 ## Owns

@@ -1,6 +1,8 @@
 # <context>
 
-One paragraph: what this bounded context is for and which requirement it serves (`docs/requirements/mvp.md` § …).
+**In short:** one or two plain sentences for someone new to the project: what this context does for a mother or for staff. No jargon, no file names.
+
+One paragraph: what this bounded context is for in technical terms and which requirement it serves (`docs/requirements/mvp.md` § …).
 
 ## Owns
 
