@@ -11,6 +11,8 @@ export interface AppConfig {
   staffIssuer: string;
   /** staffClientId is the public OIDC client id for PKCE. */
   staffClientId: string;
+  /** basePath is the path the admin is served under ('' at the root). */
+  basePath: string;
   appVersion: string;
   platform: AppPlatform;
 }
@@ -27,6 +29,12 @@ function nonEmpty(name: string, value: unknown): string {
   return value.trim();
 }
 
+function basePath(value: unknown): string {
+  if (value === undefined || value === '') return '';
+  if (typeof value !== 'string' || !/^\/[a-z0-9/-]*$/.test(value)) throw new Error('config: basePath must be a path');
+  return value.replace(/\/+$/, '');
+}
+
 /** parseConfig validates the embedded configuration. */
 export function parseConfig(
   extra: Record<string, unknown> | undefined,
@@ -38,6 +46,7 @@ export function parseConfig(
     apiUrl: url('apiUrl', extra?.apiUrl),
     staffIssuer: url('staffIssuer', extra?.staffIssuer),
     staffClientId: nonEmpty('staffClientId', extra?.staffClientId),
+    basePath: basePath(extra?.basePath),
     appVersion: version && /^\d+\.\d+\.\d+$/.test(version) ? version : '0.0.0',
     platform,
   };

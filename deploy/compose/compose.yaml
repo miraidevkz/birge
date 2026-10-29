@@ -36,7 +36,9 @@ x-birge-env: &birge-env
   BIRGE_STAFF_INTROSPECTION_URL: http://hydra:4445/admin/oauth2/introspect
   BIRGE_STAFF_CLIENT_ID: birge-api
   BIRGE_STAFF_CLIENT_SECRET_FILE: /secrets/hydra-introspect
-  BIRGE_STAFF_ISSUER: http://localhost:4444/
+  # The admin's issuer: Hydra's local port, or the public origin when the
+  # stack is published (./up.sh sets it from BIRGE_PUBLIC_URL).
+  BIRGE_STAFF_ISSUER: ${BIRGE_STAFF_ISSUER:-http://localhost:4444/}
   BIRGE_STAFF_AUDIENCE: birge-admin
   BIRGE_STAFF_ROLES_CLAIM: ext.roles
   BIRGE_STAFF_ROLE_MAP: psychologist=psychologist,moderator=moderator,lawyer=lawyer,admin=admin
@@ -195,11 +197,15 @@ services:
         exec hydra serve all --dev
     environment:
       DSN: postgres://hydra@postgres:5432/hydra?sslmode=disable
-      URLS_SELF_ISSUER: http://localhost:4444/
-      URLS_LOGIN: http://localhost:3000/login
-      URLS_CONSENT: http://localhost:3000/consent
+      URLS_SELF_ISSUER: ${BIRGE_STAFF_ISSUER:-http://localhost:4444/}
+      URLS_LOGIN: ${BIRGE_STAFF_LOGIN_URL:-http://localhost:3000}/login
+      URLS_CONSENT: ${BIRGE_STAFF_LOGIN_URL:-http://localhost:3000}/consent
+      # --dev sets SameSite=None without Secure, which browsers drop, and the
+      # login fails with "No CSRF value"; every hop is a top-level redirect,
+      # so Lax is enough.
+      SERVE_COOKIES_SAME_SITE_MODE: Lax
       SERVE_PUBLIC_CORS_ENABLED: "true"
-      SERVE_PUBLIC_CORS_ALLOWED_ORIGINS: http://localhost:8082
+      SERVE_PUBLIC_CORS_ALLOWED_ORIGINS: http://localhost:8081
       TTL_ACCESS_TOKEN: 1h
     volumes:
       - secrets:/secrets:ro
@@ -211,13 +217,18 @@ services:
 
   # Registers the admin app (public client, PKCE) from hydra/admin-client.json
   # on every start, so edits to the file apply; it holds no secret or data.
+  # @PUBLIC_URL@ in the redirect URIs becomes the published origin (or the
+  # local one).
   hydra-clients:
     image: oryd/hydra:v26.2.0
     entrypoint: ["sh", "-c"]
     command:
       - >-
         { hydra delete oauth2-client birge-admin -e http://hydra:4445 >/dev/null 2>&1 || true; } &&
-        hydra import oauth2-client /etc/config/hydra/admin-client.json -e http://hydra:4445
+        sed "s|@PUBLIC_URL@|$$PUBLIC_URL|g" /etc/config/hydra/admin-client.json >/tmp/admin-client.json &&
+        hydra import oauth2-client /tmp/admin-client.json -e http://hydra:4445
+    environment:
+      PUBLIC_URL: ${BIRGE_PUBLIC_URL:-http://localhost:8081}
     volumes:
       - ./hydra:/etc/config/hydra:ro
     depends_on:
@@ -257,7 +268,7 @@ services:
       - ${HOME}/.config/birge:/run/devsms:ro
 
   # The exported web apps (./up.sh web builds both): the member app on
-  # 127.0.0.1:8081 and the staff admin on 127.0.0.1:8082. Browsers
+  # 127.0.0.1:8081 and the staff admin at /admin on the same origin. Browsers
   # need a secure context for the sign-in proof-of-work (WebCrypto), and
   # localhost is one: from another machine use `ssh -L 8081:localhost:8081`.
   # Recreated after every export: the export replaces the directory. The
@@ -267,13 +278,17 @@ services:
   web:
     image: caddy:2.10.2-alpine
     profiles: [web]
+    # User and bcrypt hash of the staff gate (see the Caddyfile); ./up.sh web
+    # creates the file, it never enters the tree.
+    env_file:
+      - path: ${HOME}/.config/birge/admin-auth.env
+        required: false
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ${BIRGE_WEB_DIR:-${HOME}/.local/share/birge-web}/mobile:/srv:ro
       - ${BIRGE_WEB_DIR:-${HOME}/.local/share/birge-web}/admin:/srv-admin:ro
     ports:
       - "127.0.0.1:8081:8081"
-      - "127.0.0.1:8082:8082"
     depends_on:
       api: { condition: service_started }
 

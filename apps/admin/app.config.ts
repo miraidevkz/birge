@@ -5,6 +5,10 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 const env = process.env;
 
+// The admin is served under this path, next to the member app on the same
+// origin, so the stack needs one public host. Also the OIDC redirect path.
+const basePath = '/admin';
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Birge Admin',
@@ -27,10 +31,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     name: 'Birge Admin',
     shortName: 'Admin',
   },
+  experiments: {
+    baseUrl: basePath,
+  },
   plugins: ['expo-router', 'expo-localization', 'expo-font', 'expo-web-browser'],
   extra: {
     apiUrl: env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8080/v1',
     staffIssuer: env.EXPO_PUBLIC_STAFF_ISSUER ?? 'http://localhost:4444/',
     staffClientId: env.EXPO_PUBLIC_STAFF_CLIENT_ID ?? 'birge-admin',
+    basePath,
   },
 });

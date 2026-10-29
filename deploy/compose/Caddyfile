@@ -1,6 +1,18 @@
 # Development web client on one origin with the API, so the browser needs no
-# CORS: /v1 and /auth go to the birge api, everything else is the exported
-# Expo web app (apps/mobile/dist, a single-page app).
+# CORS: /v1 and /auth go to the birge api, /admin is the staff admin
+# (apps/admin/dist), the OIDC paths are the development Hydra, everything else
+# is the exported member app (apps/mobile/dist, a single-page app).
+#
+# The admin and the development login app sign anyone in as any staff role,
+# so both sit behind HTTP basic auth: user and bcrypt hash come from
+# ~/.config/birge/admin-auth.env on the host (./up.sh web creates it with a
+# random password and prints the password once).
+(staff_gate) {
+	basic_auth {
+		{$BIRGE_ADMIN_AUTH_USER} {$BIRGE_ADMIN_AUTH_HASH}
+	}
+}
+
 :8081 {
 	# Demo sign-in codes of the synthetic demo numbers only (cmd/birge-devsms
 	# answers 404 for every other number and when no demo prefix is set).
@@ -12,6 +24,37 @@
 	}
 	handle /auth/* {
 		reverse_proxy api:8080
+	}
+	# The admin build under /admin (its Expo base URL). /admin itself is the
+	# OIDC redirect URI: served in place, since a redirect to /admin/ would
+	# drop the authorization code in the query.
+	handle /admin {
+		import staff_gate
+		root * /srv-admin
+		rewrite * /index.html
+		file_server
+	}
+	handle_path /admin/* {
+		import staff_gate
+		root * /srv-admin
+		try_files {path} /index.html
+		file_server
+	}
+	# Hydra's public endpoints, for a stack published at one origin (the issuer
+	# is then that origin). Tokens are useless without a sign-in, and the
+	# sign-in page is behind the gate.
+	@hydra path /.well-known/openid-configuration /.well-known/jwks.json /oauth2/* /userinfo
+	handle @hydra {
+		# A browser that passed the gate sends its Basic credentials to the
+		# whole origin, and Hydra would read them as a client secret of the
+		# public admin client (401 at the token endpoint). Bearer stays.
+		@gate_credentials header Authorization "Basic *"
+		request_header @gate_credentials -Authorization
+		reverse_proxy hydra:4444
+	}
+	handle_path /staff-login/* {
+		import staff_gate
+		reverse_proxy devlogin:3000
 	}
 	# The external emergency plan page: never cached, and no Referer leaves it
 	# (the token itself is in the fragment and cleared by the page).
@@ -26,19 +69,6 @@
 	}
 	handle {
 		root * /srv
-		try_files {path} /index.html
-		file_server
-	}
-}
-
-# The staff admin (apps/admin/dist) on its own origin; it signs in at the
-# development Hydra (http://localhost:4444/) and calls the API here.
-:8082 {
-	handle /v1/* {
-		reverse_proxy api:8080
-	}
-	handle {
-		root * /srv-admin
 		try_files {path} /index.html
 		file_server
 	}

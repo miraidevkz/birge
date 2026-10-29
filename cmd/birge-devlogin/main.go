@@ -4,7 +4,9 @@
 // per staff role and signs in whichever is picked, without a password.
 //
 // Development only. It authenticates nobody: anyone who reaches it becomes
-// any staff role. The compose stack publishes it on 127.0.0.1 only, and the
+// any staff role. The compose stack publishes it on 127.0.0.1 only (a stack
+// published through a tunnel serves it at /staff-login/ behind the web
+// server's password, which is why the form posts to a relative path), and the
 // tokens it produces carry amr "dev" instead of a real second factor, which
 // only the development API configuration (BIRGE_STAFF_MFA_AMR=dev) accepts.
 // A production deployment uses Hydra with Kratos (WebAuthn) or another OIDC
@@ -71,7 +73,7 @@ button{display:block;width:100%;margin:.5rem 0;padding:.8rem;font:inherit;cursor
 p.warn{background:#fff3cd;color:#664d03;padding:.6rem;border-radius:.4rem}</style></head>
 <body><h1>Staff sign-in</h1>
 <p class="warn">Development identity provider: no password, no second factor. Never deploy it.</p>
-<form method="post" action="/login"><input type="hidden" name="challenge" value="{{.Challenge}}">
+<form method="post" action="login"><input type="hidden" name="challenge" value="{{.Challenge}}">
 {{range .Accounts}}<button name="role" value="{{.Role}}">{{.Label}}</button>{{end}}
 </form></body></html>`))
 
@@ -161,7 +163,9 @@ func (s *server) consent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown role in login context", http.StatusBadRequest)
 		return
 	}
-	claims := map[string]any{"roles": []string{a.Role}, "amr": []string{"dev"}}
+	// "name" lands under "ext" too, where staffauth reads the display name, so
+	// the audit log shows "Psychologist (demo)" instead of the shared ID prefix.
+	claims := map[string]any{"roles": []string{a.Role}, "amr": []string{"dev"}, "name": a.Label + " (demo)"}
 	body := map[string]any{
 		"grant_scope":                 req.RequestedScope,
 		"grant_access_token_audience": req.RequestedAudience,

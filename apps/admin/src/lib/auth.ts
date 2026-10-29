@@ -122,7 +122,9 @@ async function loadUserinfo(discovery: DiscoveryDocument, accessToken: string): 
  */
 export async function signInWithOidc(): Promise<AuthSnapshot> {
   const discovery = await fetchDiscoveryAsync(config.staffIssuer);
-  const redirectUri = makeRedirectUri();
+  // On web makeRedirectUri() is the bare origin, which is the member app;
+  // the redirect has to come back to the admin's own path.
+  const redirectUri = makeRedirectUri({ path: config.basePath.replace(/^\//, '') });
   const request = new AuthRequest({
     clientId: config.staffClientId,
     scopes: ['openid', 'offline_access'],

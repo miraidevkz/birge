@@ -311,6 +311,9 @@ func TestConsent(t *testing.T) {
 	if len(amr) != 1 || amr[0] != "dev" {
 		t.Errorf("session.access_token.amr = %v", at["amr"])
 	}
+	if at["name"] != "Psychologist (demo)" {
+		t.Errorf("session.access_token.name = %v", at["name"])
+	}
 }
 
 func TestHydraErrors(t *testing.T) {
