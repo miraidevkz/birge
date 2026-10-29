@@ -68,3 +68,4 @@ Rules for writing code, each learned from a real bug. Check new code and reviews
 
 - **Merge only on the check's exit code.** A pipeline that filters output with `grep` hides a failing test; read `$?` of `make go-check` before merging. (403701b fixed what this let through.)
 - **Task branches never contain migrations.** Agents edit their schema file; the tech lead generates the migration on the rebased branch, runs `make go-check` there and only then fast-forwards `main`, so `main` never holds a schema without its migration. (dc3bffd review; 94c04d3 fixed a merge that went first.)
+- **Synthetic secrets carry `gitleaks:allow`.** `make secrets` scans the whole history, so a test token or UUID that looks like a key fails CI forever once committed. Mark such a line with a `gitleaks:allow` comment in the same commit; reviewed findings already in history are listed by fingerprint in `.gitleaksignore`. (The first GitHub run failed on nine such values.)

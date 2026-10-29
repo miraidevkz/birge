@@ -1,0 +1,18 @@
+# Reviewed gitleaks false positives in history (make secrets scans every commit).
+# Each line is a finding fingerprint: <commit>:<file>:<rule>:<line>. All are
+# synthetic test values or documentation examples, not credentials.
+# New synthetic values: add a `gitleaks:allow` comment on the line instead of
+# a fingerprint here, so the reason stays next to the value.
+
+# UUIDs used as message and idempotency IDs in tests.
+ed1c0ad36f9cf51456884b14253db38cfa40e608:internal/platform/telemetry/allowlist_test.go:generic-api-key:119
+0cf0879158e322129e9ec5778c6df36d948f0cfa:internal/platform/apivalidate/body_test.go:generic-api-key:33
+# Synthetic tokens and secrets in tests.
+6ec66a8c0fc54e6ae6ac6af5da1d03e965c941e6:apps/mobile/src/screens/external-sos.test.tsx:generic-api-key:33
+0b3a6e9c04ecda3a9319d9c92cd40f5c95270a0b:apps/mobile/src/screens/external-plan.test.tsx:generic-api-key:33
+26facd178b78f51a9c12d4a09d5e2a91ad687c12:internal/domains/membership/authgw/courier_test.go:generic-api-key:16
+9358ce081adbacc726a4c8000d6b20717a559037:internal/platform/staffauth/accounts_test.go:generic-api-key:101
+152919a4c3f803d32fb09f301a4178cd6f7e4bcc:internal/platform/staffauth/staffauth_test.go:generic-api-key:318
+# "DON'T" examples in the vendored golang-security skill.
+5a3055aa1cdc3742419e6b539dec10fa99abe809:.claude/skills/golang-security/references/secrets.md:generic-api-key:31
+5a3055aa1cdc3742419e6b539dec10fa99abe809:.claude/skills/golang-security/references/secrets.md:generic-api-key:37
