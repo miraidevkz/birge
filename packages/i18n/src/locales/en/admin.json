@@ -507,6 +507,7 @@
     "title": "Pilot metrics",
     "intro": "Totals for the pilot over a period, never about one person. Each view and download is recorded in the audit log.",
     "kNote": "Numbers built from fewer than {{k}} members are hidden to protect privacy.",
+    "kNoteEmpty": "Empty weeks and months are hidden: k = 1, demo mode.",
     "period": {
       "label": "Period",
       "last4w": "Last 4 weeks",
@@ -528,6 +529,8 @@
     "forbiddenDescription": "Pilot metrics are open to the admins of this deployment.",
     "suppressed": "Fewer than {{k}} members — hidden to protect privacy",
     "suppressedShort": "Fewer than {{k}} — hidden",
+    "suppressedEmpty": "No data for this period",
+    "suppressedShortEmpty": "No data",
     "members": "From {{members}} members",
     "value": {
       "percent": "{{value}}%",

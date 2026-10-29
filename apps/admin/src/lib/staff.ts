@@ -72,10 +72,49 @@ export function isAdmin(roles: readonly string[] | undefined): boolean {
   return roles?.includes('admin') ?? false;
 }
 
+/** AdminTab names a tab whose API the server limits to some staff roles. */
+export type AdminTab =
+  'escalations' | 'sos' | 'moderation' | 'members' | 'rooms' | 'duty' | 'knowledge' | 'audit' | 'metrics';
+
+// The roles each tab's API serves, mirroring the server's checks, so a role
+// never gets a tab that only answers 403. The server still decides; keep this
+// in step when a service changes its roles.
+const tabRoles: Record<AdminTab, readonly string[]> = {
+  escalations: ['psychologist', 'moderator'],
+  sos: ['moderator', 'admin'],
+  moderation: ['moderator', 'admin'],
+  members: ['moderator', 'admin'],
+  rooms: ['moderator', 'admin'],
+  duty: ['psychologist', 'moderator', 'admin'],
+  knowledge: ['psychologist', 'lawyer', 'admin'],
+  audit: ['admin'],
+  metrics: ['admin'],
+};
+
+// Tab bar order, which is also the order firstTabHref picks from.
+const tabOrder: readonly AdminTab[] = [
+  'escalations',
+  'sos',
+  'moderation',
+  'members',
+  'rooms',
+  'duty',
+  'knowledge',
+  'audit',
+  'metrics',
+];
+
+/** canSeeTab reports whether any signed-in role is served by the tab's API (the tab bar only). */
+export function canSeeTab(tab: AdminTab, roles: readonly string[] | undefined): boolean {
+  return roles?.some((r) => tabRoles[tab].includes(r)) ?? false;
+}
+
 /**
- * canSeeSos reports whether the signed-in roles include moderator or admin,
- * the roles the SOS queue serves (the tab bar only; the server decides).
+ * firstTabHref is where a role lands when the first tab (escalations) is not
+ * for it: the first tab it can see, else the profile.
  */
-export function canSeeSos(roles: readonly string[] | undefined): boolean {
-  return roles?.some((r) => r === 'moderator' || r === 'admin') ?? false;
+export function firstTabHref(roles: readonly string[] | undefined): '/' | `/${AdminTab}` | '/profile' {
+  const tab = tabOrder.find((t) => canSeeTab(t, roles));
+  if (tab === undefined) return '/profile';
+  return tab === 'escalations' ? '/' : `/${tab}`;
 }

@@ -177,7 +177,7 @@ function MetricsBody({ data }: { data: Metrics }) {
   return (
     <>
       <Text tone="muted" testID="metrics-k">
-        {t('metrics.kNote', { k })}
+        {k <= 1 ? t('metrics.kNoteEmpty') : t('metrics.kNote', { k })}
       </Text>
 
       <Section id="activity">
@@ -248,7 +248,7 @@ function MetricRow(props: { id: string; label: string; cell: MetricCell; format:
   const { t } = useTranslation('admin');
   const n = cellNumber(cell, format);
   if (n === undefined) {
-    const marker = t('metrics.suppressed', { k });
+    const marker = k <= 1 ? t('metrics.suppressedEmpty') : t('metrics.suppressed', { k });
     return <ListItem title={label} subtitle={marker} testID={`metrics-row-${id}`} />;
   }
   let value = String(n);
@@ -284,7 +284,12 @@ function Series({ id, label, buckets, k }: { id: string; label: string; buckets:
       key: b.bucket,
       label: bucket,
       value: n,
-      valueLabel: n === undefined ? t('metrics.suppressedShort', { k }) : String(n),
+      valueLabel:
+        n === undefined
+          ? k <= 1
+            ? t('metrics.suppressedShortEmpty')
+            : t('metrics.suppressedShort', { k })
+          : String(n),
     };
   });
   return <BarSeries label={label} items={items} testID={`metrics-${id}`} />;
@@ -299,7 +304,13 @@ function Score({ id, label, score, k }: { id: string; label: string; score: Scor
   const { t } = useTranslation('admin');
   const hidden = cellNumber(score.mean, 'score') === undefined && cellNumber(score.median, 'score') === undefined;
   if (hidden) {
-    return <ListItem title={label} subtitle={t('metrics.suppressed', { k })} testID={`metrics-row-${id}`} />;
+    return (
+      <ListItem
+        title={label}
+        subtitle={k <= 1 ? t('metrics.suppressedEmpty') : t('metrics.suppressed', { k })}
+        testID={`metrics-row-${id}`}
+      />
+    );
   }
   const members: MetricCell =
     score.mean.members === undefined ? { suppressed: true } : { suppressed: false, value: score.mean.members };

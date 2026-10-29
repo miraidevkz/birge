@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react';
 
 import { api } from '@/lib/api';
 import { knowledgeProblemKey } from '@/lib/knowledge-problem';
+import { formatDateTime } from '@/lib/time';
 
 type StaffArticle = Schemas['StaffArticle'];
 type KnowledgeKind = Schemas['KnowledgeKind'];
@@ -157,7 +158,7 @@ export function KnowledgeArticlesScreen() {
             <Text tone="muted">{t(`knowledge.articles.kind.${item.kind}`)}</Text>
             <Text tone="muted">{t(`knowledge.articles.status.${item.status}`)}</Text>
             <Text tone="muted">{t('knowledge.articles.lang', { lang: item.lang })}</Text>
-            <Text tone="muted">{t('knowledge.articles.updatedAt', { time: item.updatedAt })}</Text>
+            <Text tone="muted">{t('knowledge.articles.updatedAt', { time: formatDateTime(item.updatedAt) })}</Text>
             {item.status === 'draft' ? (
               <Button
                 title={t('knowledge.articles.edit')}

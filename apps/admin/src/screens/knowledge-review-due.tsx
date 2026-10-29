@@ -8,6 +8,7 @@ import { router } from 'expo-router';
 
 import { api } from '@/lib/api';
 import { knowledgeProblemKey } from '@/lib/knowledge-problem';
+import { formatDateTime } from '@/lib/time';
 
 type StaffArticle = Schemas['StaffArticle'];
 
@@ -49,7 +50,7 @@ export function KnowledgeReviewDueScreen() {
             <Text tone="muted">{t(`knowledge.articles.kind.${item.kind}`)}</Text>
             <Text tone="muted">{t('knowledge.reviewDue.lang', { lang: item.lang })}</Text>
             {item.expiresAt ? (
-              <Text tone="muted">{t('knowledge.reviewDue.expiresAt', { time: item.expiresAt })}</Text>
+              <Text tone="muted">{t('knowledge.reviewDue.expiresAt', { time: formatDateTime(item.expiresAt) })}</Text>
             ) : null}
             <Button
               title={t('knowledge.reviewDue.openEditor')}

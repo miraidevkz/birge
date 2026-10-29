@@ -177,7 +177,12 @@ describe('MetricsScreen', () => {
     expect(
       await screen.findByText('A period can be at most 12 months long. Choose a later start or an earlier end.'),
     ).toBeTruthy();
-    expect(metricsCalls().some((u) => u.searchParams.get('to') === '2026-10-29')).toBe(false);
+    // Matched with `from` too: the default preset ends today, which may be 2026-10-29.
+    expect(
+      metricsCalls().some(
+        (u) => u.searchParams.get('from') === '2025-10-28' && u.searchParams.get('to') === '2026-10-29',
+      ),
+    ).toBe(false);
     expect(screen.getByTestId('metrics-download')).toBeDisabled();
 
     await fireEvent.changeText(screen.getByTestId('metrics-to'), '2026-10-28');

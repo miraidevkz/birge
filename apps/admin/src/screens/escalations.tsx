@@ -9,6 +9,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 
 import { api } from '@/lib/api';
+import { formatDateTime } from '@/lib/time';
 
 type Escalation = Schemas['Escalation'];
 type EscalationContact = Schemas['EscalationContact'];
@@ -124,7 +125,7 @@ export function EscalationsScreen() {
           return (
             <Card testID={`escalation-${item.id}`}>
               <Text variant="label">{t(`escalations.source.${item.source}`)}</Text>
-              <Text tone="muted">{t('escalations.openedAt', { time: item.openedAt })}</Text>
+              <Text tone="muted">{t('escalations.openedAt', { time: formatDateTime(item.openedAt) })}</Text>
               {item.takenByMe ? <Text tone="muted">{t('escalations.takenByMe')}</Text> : null}
               {contact ? (
                 <>
