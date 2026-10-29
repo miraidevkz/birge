@@ -1,6 +1,6 @@
 # Threat model
 
-Status: wave 0 baseline · Method: STRIDE per trust boundary and critical flow · Review: on every ADR that changes a boundary, and before each release.
+Status: baseline, reviewed for release v0.1.0 (2026-10-29) · Method: STRIDE per trust boundary and critical flow · Review: on every ADR that changes a boundary, and before each release.
 
 ## Assets
 
@@ -49,7 +49,7 @@ Status: wave 0 baseline · Method: STRIDE per trust boundary and critical flow �
 | S: SMS pumping / mass sign-up | number-range allowlist, PoW captcha, per-number/IP/device limits, daily budget breaker, conversion monitoring | ADR-0008, gaps |
 | T: tampered requests, IDOR | authorization in the service layer on every object, UUIDs, deny by default, contract validation | AGENTS.md |
 | R: member denies an action (SOS, listing) | server-side event log with pseudonymous actor | ADR-0021 |
-| I: data on a shared or inspected phone | neutral push/SMS, optional PIN, quick exit, optional decoy mode, no sensitive data in notifications or app switcher | decisions T8 |
+| I: data on a shared or inspected phone | neutral push/SMS, optional PIN, quick exit, optional decoy mode, no sensitive data in notifications or app switcher | [ADR-0004](adr/0004-react-native-clients.md), [ADR-0013](adr/0013-data-residency.md) |
 | I: location leak from photos | EXIF stripped on client and server; only item photos allowed | ADR-0015, ADR-0019 |
 | I: contact leak between members | contacts never shown; direct chat after mutual consent; blocks mean mutual invisibility | ADR-0016, ADR-0019 |
 | D: crisis/SOS unreachable | offline queue with retries, crisis endpoints exempt from forced update, separate rate limits | ADR-0018 |
@@ -82,7 +82,7 @@ Status: wave 0 baseline · Method: STRIDE per trust boundary and critical flow �
 | T: prompt injection (user text, KB content) | KB only from reviewed versions; model output is data; fixed crisis response; JSON output validated; injection cases in evals | ADR-0017, ADR-0022 |
 | T: harmful or wrong advice | rules in the system prompt, grounding only on retrieved sources, judge + psychologist sign-off | ADR-0017 |
 | D: LLM outage | L1 lexicon and crisis response independent of the LLM | crisis-path skill |
-| I: content in push/SMS | content-free notifications; one-time links | decisions T7 |
+| I: content in push/SMS | content-free notifications; one-time links | [ADR-0013](adr/0013-data-residency.md), [ADR-0023](adr/0023-crisis-path.md) |
 
 ### 5. Supply chain
 
@@ -109,4 +109,4 @@ Status: wave 0 baseline · Method: STRIDE per trust boundary and critical flow �
 
 ## ASVS mapping
 
-Level 2 for the whole system; level 3 for authentication, session management, cryptography, data protection and the crisis path. The ASVS checklist is part of wave 4 acceptance; each ADR lists the controls it implements.
+Level 2 for the whole system; level 3 for authentication, session management, cryptography, data protection and the crisis path. The ASVS checklist is part of pilot acceptance ([roadmap](roadmap.md)); each ADR lists the controls it implements.

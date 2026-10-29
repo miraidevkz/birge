@@ -169,8 +169,8 @@ jobs:
           make image-sign IMAGE_REF="$ref"
           echo "::notice::Signed $ref"
 
-  # Helm charts land with w37 (deploy/helm). Until then the job passes
-  # without installing anything; afterwards it lints every chart.
+  # Lints every chart under deploy/helm; passes without installing Helm
+  # when there is none (a fork that removed the charts).
   helm:
     runs-on: ubuntu-24.04
     steps:

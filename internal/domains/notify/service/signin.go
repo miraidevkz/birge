@@ -29,7 +29,7 @@ func SignInCodeText(code string) string { return "Birge: " + code }
 // touches the store, the outbox or a timer: a sign-in code is a credential,
 // and anything that persists it (an event payload, notification params, a
 // timer argument) keeps a secret at rest in the outbox, the event stream and
-// notify's tables (the lesson of the plan link, w27). The code lives only in
+// notify's tables (the same rule as the emergency plan link token). The code lives only in
 // this call's memory and in the request to the provider. Kratos owns retries:
 // an error here becomes a non-2xx answer and Kratos sends the message again
 // later, so no Birge-side retry is needed.

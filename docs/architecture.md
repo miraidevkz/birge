@@ -1,6 +1,6 @@
 # Architecture
 
-Status: draft, wave 0. Decisions are recorded in [`adr/`](adr/); requirements are in [`requirements/mvp.md`](requirements/mvp.md).
+How Birge is built and why, as of release v0.1.0 (2026-10-29). Decisions are recorded in [`adr/`](adr/); requirements are in [`requirements/mvp.md`](requirements/mvp.md).
 
 For people who run or maintain Birge without living in the code: [overview.md](overview.md) (who uses what, component diagram), [scenarios.md](scenarios.md) (end-to-end flows), [handbook/staff.md](handbook/staff.md) (staff admin). Remaining work: [roadmap.md](roadmap.md).
 
@@ -11,7 +11,7 @@ For people who run or maintain Birge without living in the code: [overview.md](o
 3. **Personal data stays in the deployment's jurisdiction.** Only anonymized text leaves it, and only with explicit consent (the LLM call).
 4. **Secure by default.** OWASP ASVS level 2 everywhere, level 3 for the crisis path, personal data and authentication.
 5. **FOSS only.** OSI-licensed dependencies; no open-core features or SaaS on the critical path ([ADR-0012](adr/0012-foss-only-dependencies.md)).
-6. **Small, explicit modules.** Each module can be built and tested in isolation by one person or one agent from its contract.
+6. **Small, explicit modules.** One person can build and test a module on its own, from its contract.
 
 ## Shape: modular monolith by bounded contexts
 
@@ -46,7 +46,7 @@ clients (React Native)            backend (Go, one binary)                  infr
 | `sharing` | listings, anonymous relay threads | supporting |
 | `directory` | specialists, reviews | supporting |
 | `membership` | members, roles, verification, children, channel identities | generic |
-| `privacy` | consents, account deletion, audit log, retention | generic |
+| `privacy` | consents, account deletion, retention | generic |
 | `notify` | inbox, push, SMS routing, escalation ladders | generic |
 | `analytics` | pseudonymized events, aggregates | generic |
 
@@ -70,10 +70,14 @@ Sequence diagrams and endpoint names for these flows: [scenarios.md](scenarios.m
 ## Repository layout (monorepo)
 
 ```
-cmd/birge/            # main: api, worker, migrate subcommands
+cmd/
+  birge/              # the server: api, worker, migrate, keygen, kb-reindex, kb-export
+  birge-eval/         # offline AI evaluation (make eval)
+  birge-*/            # development and CI helpers (dev login, dev SMS relay, coverage, db tool)
 internal/
   domains/<context>/  # one directory per bounded context
-  platform/           # db, crypto, events/outbox, timers, config, i18n keys, telemetry
+  platform/           # db, crypto, outbox, timers, audit log, staff auth, rate limits, telemetry
+  wiring/             # configuration and assembly of the binary
 contracts/
   openapi/            # HTTP API (source of truth; server and TS client are generated)
   events/             # JSON Schemas for domain events
@@ -84,13 +88,13 @@ db/
 apps/
   mobile/             # mom app (Expo / React Native): iOS, Android, web
   admin/              # staff admin (Expo / react-native-web), separate bundle
-packages/             # shared TS: api-client, i18n, ui
-knowledge/{kk,ru,en}/ # published knowledge base, exported from the admin (ADR-0022)
-evals/datasets/       # AI regression sets (crisis, anonymization, behavior, false-positive)
+packages/             # shared TypeScript: api (generated client), i18n, ui
+presets/              # demo and country data: crisis lexicon, questionnaire, reference data
+evals/datasets/       # AI regression sets: crisis, anonymization, llm-down
 deploy/
   helm/               # primary deployment target (Kubernetes / k3s)
   compose/            # alternative for development and small installs
-docs/                 # architecture, ADRs, requirements, threat model
+docs/                 # architecture, ADRs, requirements, threat model, handbook
 ```
 
 ## Technology
@@ -125,17 +129,4 @@ One deployment serves one country. Everything country-specific is configuration 
 
 ## CI
 
-CI workflows are thin wrappers around `make` targets, so the same checks run locally and can move to another CI (for example Forgejo Actions) without rewriting.
-
-| Stage | Checks |
-|---|---|
-| Always | gitleaks (secrets), editorconfig |
-| Go | gofmt, sqlc diff, golangci-lint (incl. depguard, gosec), go vet, `go test -race` with integration tests and the boundary test, govulncheck |
-| Contracts | OpenAPI lint, breaking-change diff against `main` and every released contract in the support window, generated code is up to date |
-| Database | migration lint, destructive-operation gate, apply on an ephemeral PostgreSQL, sqlc diff |
-| AI | deterministic eval sets; LLM eval sets when prompts, model config, knowledge base or pipeline change |
-| Clients | tsc, eslint, unit tests |
-| Images | build, SBOM, vulnerability scan, signing |
-| Deploy | helm lint, manifest schema validation |
-
-Jobs run only for the paths a change touches. Third-party actions are pinned to commit SHAs.
+CI workflows are thin wrappers around `make` targets, so the same checks run locally and can move to another CI (for example Forgejo Actions) without rewriting. Every push and pull request runs secret scanning, the Go checks (format, generated code, migrations, lint, tests with coverage, the offline AI evaluation), the contract diff, vulnerability scanning, workflow lint and Helm lint; a release tag also builds and signs the image. Changes to documentation only skip CI. Third-party actions are pinned to commit SHAs. The jobs, their targets and when they fail: [development.md § CI stages](development.md#ci-stages).

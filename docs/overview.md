@@ -9,12 +9,13 @@ This page is for people who will run or maintain Birge without having built it. 
 | Role | App | How they sign in | What they do |
 | --- | --- | --- | --- |
 | Member (mother / caregiver) | Mom app (`apps/mobile`) | Phone number + SMS code (Ory Kratos behind the auth gateway) | Check-ins, AI assistant, peers, SOS, emergency plan, rights articles, chat |
+| Mentor (experienced member) | Mom app | Same as members; staff grant the role | Everything a member does, plus hiding and restoring messages and 1-hour mutes in the group rooms staff assign her to |
 | Psychologist | Staff admin (`apps/admin`, VPN in production) | OIDC via Ory Hydra (MFA required) | Duty shifts, escalation queue, self-help knowledge review |
 | Moderator | Staff admin | Same OIDC + MFA | Escalation queue (with psychologists), moderation queue, verification, duty shifts |
 | Lawyer | Staff admin | Same OIDC + MFA | Rights (legal) knowledge authoring and publish |
 | Admin | Staff admin | Same OIDC + MFA | Duty roster edits, topics of either kind, lift suspensions, all of the above where roles allow |
 
-Roles come from the IdP claim map (`psychologist`, `moderator`, `lawyer`, `admin`). Unknown claims grant nothing.
+Staff roles come from the IdP claim map (`psychologist`, `moderator`, `lawyer`, `admin`); unknown claims grant nothing. The mentor role is stored in membership and granted by a moderator or admin.
 
 ## Main features
 
@@ -25,7 +26,9 @@ Roles come from the IdP claim map (`psychologist`, `moderator`, `lawyer`, `admin
 - **Rights and self-help** — reviewed articles; lawyers publish rights, psychologists publish self-help; expiry and review-due.
 - **Account deletion** — member requests deletion; every context that stores her data erases it; her encryption key is shredded within about 24 hours.
 
-Still open (see [roadmap.md](roadmap.md)): push and SMS providers, the Kratos courier hook, analytics with CSV export, the link for external trusted contacts, staff lists of members and rooms (contracts merged, servers answer 501 until done), Helm production charts and some admin screens.
+- **Pilot metrics** — anonymized aggregates with a minimum group size, CSV export for the programme team.
+
+What the pilot still needs (production server, security audit, content review, store builds) is in [roadmap.md](roadmap.md).
 
 ## Non-negotiables (plain words)
 

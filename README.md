@@ -1,8 +1,8 @@
 # Birge
 
-**Birge** («Бірге», Kazakh for "together") is an open-source platform of peer support and mental-health help for mothers and other caregivers of children with special educational needs. It starts in Kazakhstan, in Kazakh and Russian.
+**Birge** («Бірге», Kazakh for "together") is an open-source platform of peer support and mental-health help for mothers and other caregivers of children with special educational needs. It starts in Kazakhstan, in Kazakh, Russian and English.
 
-> Status: pre-alpha. Core backend domains and the staff admin exist; see [docs/overview.md](docs/overview.md) and [docs/roadmap.md](docs/roadmap.md) for what is still open.
+> Status: pre-alpha, release v0.1.0. The backend, the mom app and the staff admin work end to end on a demo stack; the pilot still needs a production server, a security audit and reviewed content. See [docs/overview.md](docs/overview.md) and [docs/roadmap.md](docs/roadmap.md) for what is still open.
 
 ## The problem
 
@@ -11,7 +11,7 @@ Caring for a child with special needs often leaves the parent exhausted and isol
 ## What it does (MVP)
 
 - **Check-ins:** a two-minute weekly well-being check (PHQ-4, PSS-4) with a trend chart and short audio practices.
-- **AI assistant:** a supportive conversation in Kazakh and Russian, grounded only in a knowledge base reviewed by a psychologist and a lawyer. It does not diagnose or prescribe. A crisis protocol hands the person to a human, even when the AI is unavailable.
+- **AI assistant:** a supportive conversation in Kazakh, Russian and English, grounded only in a knowledge base reviewed by a psychologist and a lawyer. It does not diagnose or prescribe. A crisis protocol hands the person to a human, even when the AI is unavailable.
 - **Mothers nearby:** matching with another mother from the same district for tea or a call; contacts are shared only with mutual consent.
 - **SOS:** an urgent request to moderators and trusted contacts, an emergency plan with a child card, and a district SOS feed.
 - **Sharing:** listings to give or swap items, and a directory of specialists with reviews.
